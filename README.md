@@ -399,12 +399,28 @@ The `fetch_data.py` tool will print manual instructions for these entries.
 
 ## CI
 
-The GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push/PR and weekly:
+The GitHub Actions workflow (`.github/workflows/ci.yml`) runs two tiers on every push/PR and weekly:
 
-1. Validates all template YAML structure
-2. Checks that templates parse correctly against the pinned legoESM
+### Tier 1: Structural validation (always runs, no legoESM access needed)
+1. Validates all template YAML structure (`--skip-imports`)
+2. Validates data catalog completeness
+3. Checks that all template `requires` reference valid catalog entries
+4. Checks for reproducibility tags
+
+### Tier 2: Full validation against legoESM (requires PAT)
+1. Checks out the pinned legoESM version
+2. Installs legoESM and validates templates against it
 3. Runs a smoke test with one template
-4. On weekly schedule, checks if legoESM has been updated
+
+### Setting up the PAT
+
+Since legoESM is a private repository, Tier 2 and the scheduled sync-check require a **Personal Access Token** with read access to `gentine/legoESM`:
+
+1. Go to GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens
+2. Create a token with **Contents: Read** permission for `gentine/legoESM`
+3. Add it as a repository secret named `LEGOESM_ACCESS_TOKEN` in `lesommer/legoESM-ocean-runners` → Settings → Secrets → Actions
+
+If the `LEGOESM_ACCESS_TOKEN` secret is not set, Tier 2 will be skipped and the sync-check will not be able to query the legoESM remote.
 
 ## License
 

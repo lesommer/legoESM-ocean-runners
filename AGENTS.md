@@ -198,6 +198,21 @@ These tag files are intended to be archived alongside experiment output in a sep
 | Tests | `tests/test_templates.py` |
 | CI workflow | `.github/workflows/ci.yml` |
 
+## 8.5 CI Setup (Private legoESM Access)
+
+CI is split into two tiers:
+
+- **Tier 1** (always runs): YAML structure validation, catalog checks, requires references — no legoESM access needed
+- **Tier 2** (requires PAT): Full validation against legoESM, smoke test — only runs when the `LEGOESM_ACCESS_TOKEN` secret is set
+
+Since legoESM is a private repository, you must set up a **fine-grained Personal Access Token** for Tier 2:
+
+1. GitHub → Settings → Developer settings → Fine-grained tokens → New token
+2. Give it **Contents: Read** permission on `gentine/legoESM`
+3. Add the token as repository secret `LEGOESM_ACCESS_TOKEN` in `lesommer/legoESM-ocean-runners` → Settings → Secrets → Actions
+
+If the secret is missing, Tier 2 is skipped. The scheduled `sync-check` job also needs the token to query the legoESM remote.
+
 ## 9. Common Workflows
 
 ### "I want to run baroclinic_gyre on my laptop"
