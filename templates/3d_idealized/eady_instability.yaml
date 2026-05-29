@@ -1,0 +1,53 @@
+# Eady instability (baroclinic instability on an f-plane)
+# Classic baroclinic instability test with uniform stratification.
+#
+# Maps to: legoesm.ocean.experiments.eady_uniform
+# Grid:    latlon
+# Mode:    3d_ocean
+
+experiment:
+  name: eady_instability
+  mode: 3d_ocean
+  description: "Eady baroclinic instability test"
+
+grid:
+  type: latlon
+  resolution: 64x128
+  nlev: 50
+
+ocean:
+  case: eady_uniform
+  A_h: 1.0e2
+  K_h: 1.0e2
+  eos: linear
+  eos_linear:
+    rho_ref: 1026.0
+    alpha_T: 2.0e-4
+    T_reference: 4.0
+
+domain:
+  lat_south: -50.0
+  lat_north: -30.0
+  lon_west: 0.0
+  lon_east: 18.0
+  H_max: 3000.0
+
+physics:
+  vertical_mixing:
+    scheme: constant
+    constant:
+      A_v: 1.0e-3
+      K_v: 1.0e-5
+  surface_forcing:
+    scheme: none
+  bottom_drag:
+    scheme: linear
+    r: 1.1e-3
+
+time:
+  duration_days: 84
+  dt_seconds: 1800
+
+output:
+  diag_interval_hours: 12
+  checkpoint_interval_days: 10

@@ -216,3 +216,28 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# =============================================================================
+# legoESM-ocean-runners specific
+# =============================================================================
+
+# Experiment output directories (archived separately)
+experiments/*/
+!experiments/.gitkeep
+
+# Machine configs with secrets (only commit the template)
+machines/*.yaml
+!machines/_template.yaml
+
+# Output data
+output/
+*.zarr/
+*.nc
+*.npz
+
+# JAX cache
+~/.jax/
+
+# Local overrides
+local_*.yaml
+*.local

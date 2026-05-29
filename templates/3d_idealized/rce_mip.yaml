@@ -1,0 +1,37 @@
+# RCE-MIP (Radiative-Convective Equilibrium)
+# Radiative-convective equilibrium for atmosphere convection validation.
+# Used as an atmosphere-only companion to ocean column tests.
+#
+# Maps to: ExperimentConfig
+# Grid:    cubed_sphere
+# Mode:    atmosphere_only
+
+experiment:
+  name: rce_mip
+  mode: atmosphere_only
+  description: "RCE-MIP: radiative-convective equilibrium"
+
+grid:
+  type: cubed_sphere
+  resolution: 48
+  n_levels: 40
+  vertical_coord: hybrid
+  p_top_Pa: 200.0
+
+atmosphere:
+  dynamics: hydrostatic
+  discretization: cdgrid
+  time_integrator: ssp_rk3
+  dt_seconds: 600
+
+radiation: rrtmgp
+convection: sbm
+microphysics: kessler
+clouds: xu_randall
+
+time:
+  duration_days: 90
+
+output:
+  format: zarr
+  path: "output/rce_mip/"

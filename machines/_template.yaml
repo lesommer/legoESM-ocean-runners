@@ -1,0 +1,31 @@
+# Machine configuration template.
+# Copy this file and rename it (e.g. perlmutter.yaml, jeanzay.yaml).
+# Place machine-specific settings here; they are never committed if they
+# contain secrets (add your machine file to .gitignore).
+
+# ---------- Scheduler ----------
+scheduler: null            # null | slurm | pbs | lsf
+scheduler_partition: ""
+scheduler_account: ""
+scheduler_walltime: "01:00:00"
+scheduler_nodes: 1
+scheduler_tasks_per_node: 1
+
+# ---------- Devices ----------
+devices: "auto"            # auto | cpu | gpu | tpu
+n_devices: "auto"         # auto or integer
+precision: "mixed"         # fp32 | fp64 | mixed
+
+# ---------- Paths ----------
+# Adjust these to your machine's filesystem layout.
+data_dir: ""               # Root directory for forcing files (ERA5, OMIP, etc.)
+legoesm_dir: ""            # Path to legoESM checkout (if not auto-detected)
+output_root: "./output"    # Root for experiment output
+
+# ---------- Environment ----------
+# Commands to set up the environment before running.
+# Example for a conda-based setup:
+# env_setup:
+#   - "module load python/3.12"
+#   - "conda activate legoesm"
+env_setup: []

@@ -1,0 +1,38 @@
+# Inertia-gravity wave test (2D shallow water)
+# Tests wave propagation on an f-plane or beta-plane.
+#
+# Maps to: legoesm.ocean.experiments.inertia_gravity_wave
+# Grid:    latlon or cubed_sphere, 1 vertical level
+# Mode:    barotropic_ocean
+
+experiment:
+  name: inertia_gravity_wave
+  mode: barotropic_ocean
+  description: "Inertia-gravity wave propagation test"
+
+grid:
+  type: latlon
+  resolution: 64x128
+  nlev: 1
+
+ocean:
+  case: inertia_gravity_wave
+  A_h: 1.0e4
+  eos: linear
+  eos_linear:
+    rho_ref: 1025.0
+
+domain:
+  H_max: 4500.0
+  land_lat_threshold: 90.0
+
+surface_forcing:
+  scheme: none
+
+time:
+  duration_days: 10
+  dt_seconds: 300
+
+output:
+  diag_interval_hours: 6
+  checkpoint_interval_days: 5

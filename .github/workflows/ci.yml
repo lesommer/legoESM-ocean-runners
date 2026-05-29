@@ -1,0 +1,96 @@
+name: Validate Templates
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'templates/**'
+      - 'runners/**'
+      - 'scripts/**'
+      - 'legoESM_version.txt'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'  # Weekly Monday 06:00 UTC
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pyyaml
+
+      - name: Read pinned legoESM version
+        id: legoesm
+        run: |
+          REF=$(grep '^ref:' legoESM_version.txt | cut -d: -f2 | tr -d ' ')
+          COMMIT=$(grep '^commit:' legoESM_version.txt | cut -d: -f2 | tr -d ' ')
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout legoESM
+        uses: actions/checkout@v4
+        with:
+          repository: gentine/legoESM
+          ref: ${{ steps.legoesm.outputs.ref }}
+          path: legoESM
+          fetch-depth: 0
+
+      - name: Verify legoESM commit
+        run: |
+          ACTUAL=$(cd legoESM && git rev-parse HEAD)
+          EXPECTED=${{ steps.legoesm.outputs.commit }}
+          echo "Expected: $EXPECTED"
+          echo "Actual:   $ACTUAL"
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "WARNING: Commit mismatch. Using HEAD of ref."
+          fi
+
+      - name: Apply patches (if any)
+        run: bash scripts/apply_patches.sh --check || true
+
+      - name: Validate template YAML structure
+        run: python scripts/validate_templates.py --skip-imports --verbose
+
+      - name: Install legoESM + JAX
+        run: |
+          pip install -e legoESM/
+          pip install jax jaxlib
+        continue-on-error: true
+
+      - name: Validate templates against legoESM (full)
+        if: success()
+        run: python scripts/validate_templates.py --legoesm-dir legoESM --verbose
+        continue-on-error: true
+
+      - name: Run smoke test (one template)
+        if: success()
+        run: |
+          python scripts/init_experiment.py 1d/ocean_scm --name ci_smoke_test
+        continue-on-error: true
+
+  sync-check:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for legoESM updates
+        run: |
+          PINNED=$(grep '^commit:' legoESM_version.txt | cut -d: -f2 | tr -d ' ')
+          LATEST=$(git ls-remote https://github.com/gentine/legoESM.git refs/heads/main | cut -f1)
+          echo "Pinned:  $PINNED"
+          echo "Latest:  $LATEST"
+          if [ "$PINNED" != "$LATEST" ]; then
+            echo "::warning::legoESM has been updated. Run scripts/sync_legoesm.sh and validate templates."
+          fi

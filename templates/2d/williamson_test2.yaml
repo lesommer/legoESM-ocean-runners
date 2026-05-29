@@ -1,0 +1,46 @@
+# Williamson Test Case 2 (steady-state zonal flow)
+# Shallow water on the sphere — exact steady solution.
+#
+# Maps to: legoesm.atmosphere test (uses ExperimentConfig)
+# Grid:    cubed_sphere, 1 level
+# Mode:    atmosphere_only
+
+experiment:
+  name: williamson_test2
+  mode: atmosphere_only
+  description: "Williamson Test Case 2: steady-state zonal flow"
+
+model:
+  name: "Williamson Test 2"
+  type: atmosphere_only
+
+grid:
+  type: cubed_sphere
+  resolution: 48
+  n_levels: 1
+  vertical_coord: none
+
+atmosphere:
+  equations: shallow_water
+  advection: centered
+  time_integrator: ssp_rk3
+  dt_seconds: 600
+  hyperdiffusion_coeff: 0.0
+
+conservation:
+  fix_mass: true
+  fix_energy: true
+
+time:
+  duration_days: 5
+  duration_hours: 120
+
+output:
+  format: zarr
+  path: "output/williamson_test2/"
+  diag_interval_hours: 6
+
+hardware:
+  precision:
+    dynamics: float32
+  devices: auto

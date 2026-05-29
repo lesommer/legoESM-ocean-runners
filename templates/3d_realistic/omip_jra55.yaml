@@ -1,0 +1,76 @@
+# OMIP (Ocean Model Intercomparison Project)
+# Global ocean forced by JRA55-do atmospheric reanalysis.
+# The primary production ocean configuration.
+#
+# Maps to: legoesm run_omip.py configuration
+# Grid:    latlon (ORCA-like), cubed_sphere, or mpas
+# Mode:    3d_ocean_realistic
+
+experiment:
+  name: omip_jra55
+  mode: 3d_ocean_realistic
+  description: "OMIP: global ocean forced by JRA55-do reanalysis"
+  reference: "Griffies et al., 2016, OMIP contribution to CMIP6"
+
+grid:
+  type: latlon
+  resolution: 360x720
+  nlev: 75
+
+ocean:
+  A_h: 5.0e4
+  A_h_lat_scaling: true
+  B_h: 1.0e11
+  B_h_lat_scaling: true
+  C_smag: 0.06
+  C_leith: 0.04
+  bottom_drag_r: 1.1e-3
+  tracer_advection: dst3
+  gm_redi:
+    kappa_GM: 1000.0
+    kappa_Redi: 500.0
+    S_max: 0.01
+    slope_scheme: triads
+    visbeck:
+      enabled: true
+  barotropic_solver: explicit_substep
+  n_barotropic_substeps: 30
+  bebt: 0.2
+  implicit_vertical_mixing: true
+  freshwater_closure: virtual_salt_flux
+  S_ref: 35.0
+  eos: wright
+
+bathymetry:
+  source: realistic   # uses ETOPO or custom
+  H_max: 5500.0
+  smoothing_passes: 3
+  enforce_straits: true
+
+physics:
+  vertical_mixing:
+    scheme: kpp
+    kpp:
+      Ri_crit: 0.3
+      Cv: 1.6
+      K_conv: 1.0
+      K_bg: 1.0e-5
+  surface_forcing:
+    scheme: bulk_formulas
+    bulk_formulas:
+      C_D: 1.5e-3
+      C_H: 1.5e-3
+    source: jra55_do
+  bottom_drag:
+    scheme: linear
+    r: 1.1e-3
+  shortwave_penetration:
+    water_type: "II"
+
+time:
+  duration_days: 3650   # 10-year run
+  dt_seconds: 3600
+
+output:
+  diag_interval_hours: 24
+  checkpoint_interval_days: 365

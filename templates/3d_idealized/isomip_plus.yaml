@@ -1,0 +1,47 @@
+# ISOMIP+ (Ice Shelf Ocean Model Intercomparison Project Plus)
+# Tests ice-ocean interaction under an ice shelf.
+#
+# Maps to: legoesm.ocean.experiments.isomip_plus
+# Grid:    latlon
+# Mode:    3d_ocean
+
+experiment:
+  name: isomip_plus
+  mode: 3d_ocean
+  description: "ISOMIP+: ice shelf-ocean interaction"
+
+grid:
+  type: latlon
+  resolution: 64x128
+  nlev: 70
+
+ocean:
+  case: isomip_plus
+  A_h: 1.0e-2
+  eos: linear
+  eos_linear:
+    rho_ref: 1028.0
+    alpha_T: 3.7e-5
+
+domain:
+  H_max: 800.0
+
+physics:
+  vertical_mixing:
+    scheme: constant
+    constant:
+      A_v: 1.0e-2
+      K_v: 1.0e-4
+  surface_forcing:
+    scheme: none
+  bottom_drag:
+    scheme: quadratic
+    C_d: 2.5e-3
+
+time:
+  duration_days: 30
+  dt_seconds: 120
+
+output:
+  diag_interval_hours: 6
+  checkpoint_interval_days: 10

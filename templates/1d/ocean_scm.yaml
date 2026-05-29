@@ -1,0 +1,43 @@
+# Ocean single-column model (1D vertical mixing test)
+# Tests vertical physics (KPP, Richardson mixing) in isolation.
+#
+# Maps to: legoesm.ocean.experiments.rest_state
+# Grid:    nlev vertical levels, single column
+# Mode:    ocean_scm
+
+experiment:
+  name: ocean_scm
+  mode: ocean_scm
+  description: "Single-column ocean: rest state with vertical mixing"
+
+grid:
+  type: scm
+  nlev: 50
+  H_max: 5500.0
+  dz_surface: 10.0
+  dz_deep: 200.0
+
+ocean:
+  case: rest_state
+  eos: wright
+
+physics:
+  vertical_mixing:
+    scheme: kpp
+
+surface_forcing:
+  scheme: none
+
+initial_conditions:
+  T_water_init_C: 20.0
+  T_deep: 2.0
+  scale_depth: 1000.0
+  S_uniform: 35.0
+
+time:
+  duration_days: 30
+  dt_seconds: 1800
+
+output:
+  diag_interval_hours: 24
+  checkpoint_interval_days: 10

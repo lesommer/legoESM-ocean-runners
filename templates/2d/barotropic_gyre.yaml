@@ -1,0 +1,48 @@
+# Barotropic wind-driven gyre (2D, single layer)
+# Classic Stommel/Munk gyre on a beta-plane.
+#
+# Maps to: legoesm.ocean.experiments.barotropic_gyre or barotropic_double_gyre
+# Grid:    latlon or cubed_sphere, 1 vertical level
+# Mode:    barotropic_ocean
+
+experiment:
+  name: barotropic_gyre
+  mode: barotropic_ocean
+  description: "Wind-driven barotropic gyre on a beta-plane"
+
+grid:
+  type: latlon
+  resolution: 64x128
+  nlev: 1
+
+ocean:
+  case: barotropic_gyre
+  A_h: 5.0e4
+  bottom_drag_r: 1.1e-3
+  eos: linear
+  eos_linear:
+    rho_ref: 1025.0
+    alpha_T: 0.0
+    beta_S: 0.0
+
+domain:
+  lon_west: 0.0
+  lon_east: 60.0
+  lat_south: 15.0
+  lat_north: 75.0
+  H_max: 4500.0
+  land_lat_threshold: 80.0
+
+surface_forcing:
+  scheme: prescribed
+  tau_x: 0.1
+  wind_profile: "double_gyre_sin2"
+  wind_buffer_deg: 5.0
+
+time:
+  duration_days: 365
+  dt_seconds: 600
+
+output:
+  diag_interval_hours: 24
+  checkpoint_interval_days: 30

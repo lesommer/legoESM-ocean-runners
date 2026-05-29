@@ -1,0 +1,49 @@
+# AMIP (Atmospheric Model Intercomparison Project)
+# Atmosphere-only forced by observed SST and sea-ice concentration.
+# Included for coupled run validation — not an ocean experiment per se,
+# but needed as the atmospheric component of a coupled ESM.
+#
+# Maps to: ExperimentConfig from legoesm.forcing.experiments
+# Grid:    cubed_sphere
+# Mode:    atmosphere_only
+
+experiment:
+  name: amip
+  mode: atmosphere_only
+  description: "AMIP: atmosphere forced by observed SST/SIC"
+  template: amip
+
+grid:
+  type: cubed_sphere
+  resolution: 48
+  n_levels: 40
+  vertical_coord: hybrid
+  p_top_Pa: 200.0
+
+atmosphere:
+  dynamics: hydrostatic
+  discretization: cdgrid
+  time_integrator: ssp_rk3
+  dt_seconds: 600
+
+forcing:
+  dataset: hadisst
+
+radiation:
+  scheme: rrtmgp
+  diurnal_cycle: true
+
+convection: sbm
+turbulence: holtslag_boville
+clouds: xu_randall
+microphysics: kessler
+
+time:
+  duration_days: 365
+  start_year: 1979
+  end_year: 2014
+
+output:
+  format: zarr
+  path: "output/amip/"
+  monthly_means: true

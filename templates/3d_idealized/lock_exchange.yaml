@@ -1,0 +1,53 @@
+# Lock exchange (density-driven overflow)
+# DAM-style lock exchange: dense water collapse under gravity.
+# Tests tracer advection and stratification maintenance.
+#
+# Maps to: legoesm.ocean.experiments.lock_exchange
+# Grid:    latlon
+# Mode:    3d_ocean
+
+experiment:
+  name: lock_exchange
+  mode: 3d_ocean
+  description: "Lock exchange: dam-break density current test"
+
+grid:
+  type: latlon
+  resolution: 64x64
+  nlev: 20
+
+ocean:
+  case: lock_exchange
+  A_h: 1.0e-2
+  K_h: 1.0e-4
+  eos: linear
+  eos_linear:
+    rho_ref: 1025.0
+    alpha_T: 2.0e-4
+    T_reference: 15.0
+
+domain:
+  H_max: 20.0
+  land_lat_threshold: 90.0
+
+initial_conditions:
+  T_cold: 5.0
+  T_warm: 30.0
+  S_uniform: 35.0
+  front_longitude: 0.0
+
+physics:
+  vertical_mixing:
+    scheme: constant
+  surface_forcing:
+    scheme: none
+  bottom_drag:
+    scheme: none
+
+time:
+  duration_days: 1
+  dt_seconds: 60
+
+output:
+  diag_interval_hours: 1
+  checkpoint_interval_days: 1

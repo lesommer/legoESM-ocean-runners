@@ -1,0 +1,59 @@
+# ACC channel (Antarctic Circumpolar Current)
+# Re-entrant channel with zonal wind forcing and topographic ridge.
+# Tests western boundary current, zonal jet, and overturning.
+#
+# Maps to: legoesm.ocean.experiments.acc_channel
+# Grid:    latlon
+# Mode:    3d_ocean
+
+experiment:
+  name: acc_channel
+  mode: 3d_ocean
+  description: "ACC channel with topographic ridge"
+
+grid:
+  type: latlon
+  resolution: 64x128
+  nlev: 40
+
+ocean:
+  case: acc_channel
+  A_h: 5.0e4
+  bottom_drag_r: 1.1e-3
+  tracer_advection: tvd
+  eos: linear
+  eos_linear:
+    rho_ref: 1026.0
+    alpha_T: 2.0e-4
+    T_reference: 4.0
+
+domain:
+  lat_south: -50.0
+  lat_north: -30.0
+  lon_west: 0.0
+  lon_east: 18.0
+  H_max: 3000.0
+  ridge_height: 1000.0
+  ridge_sigma_km: 150.0
+
+physics:
+  vertical_mixing:
+    scheme: constant
+    constant:
+      A_v: 1.0e-3
+      K_v: 1.0e-4
+  surface_forcing:
+    scheme: prescribed
+    tau0: 0.1
+    wind_profile: "acc"
+  bottom_drag:
+    scheme: linear
+    r: 1.1e-3
+
+time:
+  duration_days: 365
+  dt_seconds: 1800
+
+output:
+  diag_interval_hours: 24
+  checkpoint_interval_days: 30

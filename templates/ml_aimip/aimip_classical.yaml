@@ -1,0 +1,37 @@
+# AIMIP: classical parameterization suite
+# Atmospheric Model Intercomparison Project with traditional physics.
+#
+# Maps to: legoesm AIMIP variant_classical
+# Grid:    cubed_sphere
+# Mode:    atmosphere_only_aimip
+
+experiment:
+  name: aimip_classical
+  mode: atmosphere_only_aimip
+  description: "AIMIP classical: Tiedtke + Louis + McFarlane + Xu-Randall"
+  template: amip
+
+grid:
+  type: cubed_sphere
+  resolution: 48
+  n_levels: 40
+
+atmosphere:
+  dynamics: hydrostatic
+  discretization: cdgrid
+  dt_seconds: 600
+
+convection: kuo
+turbulence: louis
+gravity_wave_drag: mcfarlane
+clouds: xu_randall
+microphysics: none
+
+time:
+  duration_days: 365
+  start_year: 1979
+  end_year: 2014
+
+output:
+  format: zarr
+  monthly_means: true

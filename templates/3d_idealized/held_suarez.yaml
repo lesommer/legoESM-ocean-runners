@@ -1,0 +1,42 @@
+# Held-Suarez (atmosphere-only, idealized forcing)
+# Reference atmosphere test for dynamics validation.
+# Included here for coupled ocean-atmosphere validation.
+#
+# Maps to: ExperimentConfig with held_suarez_forcing=true
+# Grid:    cubed_sphere or gaussian
+# Mode:    atmosphere_only
+
+experiment:
+  name: held_suarez
+  mode: atmosphere_only
+  description: "Held-Suarez idealized atmosphere test"
+
+grid:
+  type: cubed_sphere
+  resolution: 48
+  n_levels: 40
+  vertical_coord: hybrid
+  p_top_Pa: 200.0
+
+atmosphere:
+  dynamics: shallow_water
+  discretization: cdgrid
+  time_integrator: ssp_rk3
+  dt_seconds: 600
+
+forcing:
+  held_suarez_forcing: true
+
+radiation:
+  scheme: gray
+
+convection: none
+turbulence: none
+
+time:
+  duration_days: 1200
+  output_interval_days: 5
+
+output:
+  format: zarr
+  path: "output/held_suarez/"

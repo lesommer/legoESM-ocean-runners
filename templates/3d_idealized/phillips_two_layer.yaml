@@ -1,0 +1,50 @@
+# Phillips two-layer model
+# Quasi-geostrophic two-layer baroclinic instability.
+#
+# Maps to: legoesm.ocean.experiments.phillips_two_layer
+# Grid:    latlon
+# Mode:    3d_ocean
+
+experiment:
+  name: phillips_two_layer
+  mode: 3d_ocean
+  description: "Phillips two-layer baroclinic instability"
+
+grid:
+  type: latlon
+  resolution: 64x128
+  nlev: 2
+
+ocean:
+  case: phillips_two_layer
+  A_h: 1.0e3
+  K_h: 1.0e3
+  eos: linear
+  eos_linear:
+    rho_ref: 1025.0
+    alpha_T: 2.0e-4
+    T_reference: 10.0
+
+domain:
+  lat_south: 15.0
+  lat_north: 75.0
+  H_max: 4500.0
+
+physics:
+  vertical_mixing:
+    scheme: constant
+  surface_forcing:
+    scheme: prescribed
+    wind_profile: "sin2"
+    tau_x: 0.05
+  bottom_drag:
+    scheme: linear
+    r: 1.1e-3
+
+time:
+  duration_days: 200
+  dt_seconds: 3600
+
+output:
+  diag_interval_hours: 24
+  checkpoint_interval_days: 10

@@ -1,0 +1,64 @@
+# Global OMIP at multiple grid resolutions
+# Production OMIP configuration, parameterized for global ocean.
+#
+# Maps to: legoesm run_omip.py
+# Grid:    latlon (production resolution)
+# Mode:    3d_ocean_realistic
+
+experiment:
+  name: omip_global
+  mode: 3d_ocean_realistic
+  description: "Global OMIP at production resolution"
+
+grid:
+  type: latlon
+  resolution: 180x360
+  nlev: 75
+
+ocean:
+  A_h: 1.0e5
+  A_h_lat_scaling: true
+  A_h_floor: 500.0
+  B_h: 1.0e11
+  B_h_lat_scaling: true
+  C_smag: 0.06
+  C_leith: 0.04
+  bottom_drag_r: 1.1e-3
+  tracer_advection: dst3_multidim
+  gm_redi:
+    kappa_GM: 1000.0
+    kappa_Redi: 500.0
+    S_max: 0.01
+    slope_scheme: triads
+    visbeck:
+      enabled: true
+  barotropic_solver: implicit_cn
+  n_barotropic_substeps: 30
+  implicit_vertical_mixing: true
+  freshwater_closure: virtual_salt_flux
+  eos: wright
+
+bathymetry:
+  source: realistic
+  H_max: 5500.0
+  smoothing_passes: 3
+
+physics:
+  vertical_mixing:
+    scheme: kpp
+  surface_forcing:
+    scheme: bulk_formulas
+    source: jra55_do
+  bottom_drag:
+    scheme: linear
+    r: 1.1e-3
+  shortwave_penetration:
+    water_type: "II"
+
+time:
+  duration_days: 3650
+  dt_seconds: 3600
+
+output:
+  diag_interval_hours: 24
+  checkpoint_interval_days: 365

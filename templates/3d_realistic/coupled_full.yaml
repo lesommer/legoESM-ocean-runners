@@ -1,0 +1,45 @@
+# Fully coupled ESM (atmosphere + dynamic ocean + land + ice)
+# The full Earth system model configuration.
+#
+# Maps to: CoupledConfig.preset_full_coupled()
+# Grid:    cubed_sphere (atm) + latlon (ocean)
+# Mode:    coupled
+
+experiment:
+  name: coupled_full
+  mode: coupled
+  description: "Fully coupled ESM: atmosphere + dynamic ocean + land + ice"
+
+atmosphere:
+  dynamics: hydrostatic
+  discretization: cdgrid
+  dt_seconds: 600
+
+grid:
+  type: cubed_sphere
+  resolution: 48
+  n_levels: 40
+
+coupled:
+  preset: full_coupled
+  coupling_dt: 3600
+
+ocean:
+  mode: dynamic
+  grid_type: latlon
+  resolution: 64x128
+  nlev: 50
+
+land:
+  mode: multilayer
+
+ice:
+  mode: slab
+
+time:
+  duration_days: 365
+
+output:
+  format: zarr
+  path: "output/coupled_full/"
+  monthly_means: true

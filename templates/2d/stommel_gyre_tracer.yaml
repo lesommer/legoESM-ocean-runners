@@ -1,0 +1,43 @@
+# Stommel gyre with tracer transport (2D)
+# Barotropic gyre + passive tracer advection-diffusion.
+#
+# Maps to: legoesm.ocean.experiments.stommel_gyre_tracer
+# Grid:    latlon, 1 vertical level
+# Mode:    barotropic_ocean
+
+experiment:
+  name: stommel_gyre_tracer
+  mode: barotropic_ocean
+  description: "Stommel gyre with passive tracer transport"
+
+grid:
+  type: latlon
+  resolution: 64x128
+  nlev: 1
+
+ocean:
+  case: stommel_gyre_tracer
+  A_h: 5.0e4
+  K_h: 1000.0
+  bottom_drag_r: 1.1e-3
+  eos: linear
+
+domain:
+  lon_west: 0.0
+  lon_east: 60.0
+  lat_south: 15.0
+  lat_north: 75.0
+  H_max: 4500.0
+
+surface_forcing:
+  scheme: prescribed
+  tau_x: 0.1
+  wind_profile: "sin2"
+
+time:
+  duration_days: 365
+  dt_seconds: 600
+
+output:
+  diag_interval_hours: 24
+  checkpoint_interval_days: 30

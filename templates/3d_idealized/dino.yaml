@@ -1,0 +1,67 @@
+# DINO (Diabatic Ocean) idealized basin
+# Wind + thermohaline forcing in a semi-enclosed basin with ridges.
+# Comprehensive ocean physics test: GM/Redi, KPP, bottom drag.
+#
+# Maps to: legoesm.ocean.experiments.dino
+# Grid:    latlon
+# Mode:    3d_ocean
+
+experiment:
+  name: dino
+  mode: 3d_ocean
+  description: "DINO: Diabatic ocean circulation in an idealized basin"
+
+grid:
+  type: latlon
+  resolution: 64x128
+  nlev: 50
+
+ocean:
+  case: dino
+  A_h: 5.0e4
+  K_h: 0.0
+  bottom_drag_r: 1.1e-3
+  tracer_advection: tvd
+  gm_redi:
+    kappa_GM: 1000.0
+    kappa_Redi: 1000.0
+    S_max: 0.01
+    slope_scheme: triads
+  eos: wright
+
+domain:
+  lon_west_deg: -50.0
+  lon_east_deg: 0.0
+  lat_max_deg: 70.0
+  H_deep: 4500.0
+  H_shallow: 500.0
+
+physics:
+  vertical_mixing:
+    scheme: kpp
+    kpp:
+      Ri_crit: 0.3
+      Cv: 1.6
+      K_conv: 1.0
+      K_bg: 1.0e-5
+  surface_forcing:
+    scheme: prescribed
+    tau_0: 0.05
+    wind_profile: "double_gyre_sin2"
+  bottom_drag:
+    scheme: linear
+    r: 1.1e-3
+  shortwave_penetration:
+    water_type: "II"
+
+initial_conditions:
+  T_water_init_C: 20.0
+  S_uniform: 35.0
+
+time:
+  duration_days: 365
+  dt_seconds: 1800
+
+output:
+  diag_interval_hours: 24
+  checkpoint_interval_days: 30

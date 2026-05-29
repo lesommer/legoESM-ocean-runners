@@ -1,0 +1,57 @@
+# Global overturning circulation (idealized)
+# Idealized global ocean with restoring forcing to investigate MOC.
+#
+# Maps to: legoesm.ocean.experiments.global_overturning
+# Grid:    latlon or cubed_sphere
+# Mode:    3d_ocean
+
+experiment:
+  name: global_overturning
+  mode: 3d_ocean
+  description: "Global meridional overturning circulation"
+
+grid:
+  type: latlon
+  resolution: 64x128
+  nlev: 20
+
+ocean:
+  case: global_overturning
+  A_h: 1.0e4
+  K_h: 0.0
+  bottom_drag_r: 1.1e-3
+  tracer_advection: tvd
+  eos: wright
+
+domain:
+  H_max: 4000.0
+  land_lat_threshold: 75.0
+
+physics:
+  vertical_mixing:
+    scheme: constant
+    constant:
+      A_v: 1.0e-3
+      K_v: 1.0e-4
+  surface_forcing:
+    scheme: restoring
+    restoring:
+      tau_T: 2592000.0
+      tau_S: 2592000.0
+      T_star_eq: 25.0
+      T_star_pole: 0.0
+      S_star: 35.0
+
+initial_conditions:
+  T_water_init_C: 20.0
+  T_deep: 2.0
+  scale_depth: 1000.0
+  S_uniform: 35.0
+
+time:
+  duration_days: 3650
+  dt_seconds: 3600
+
+output:
+  diag_interval_hours: 24
+  checkpoint_interval_days: 365

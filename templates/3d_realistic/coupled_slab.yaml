@@ -1,0 +1,39 @@
+# Coupled slab ocean (atmosphere + slab ocean + slab land)
+# More realistic than aquaplanet: includes slab land surface.
+#
+# Maps to: CoupledConfig.preset_slab_simple()
+# Grid:    cubed_sphere (atmosphere) + slab ocean + slab land
+# Mode:    coupled
+
+experiment:
+  name: coupled_slab
+  mode: coupled
+  description: "Coupled: atmosphere + slab ocean + slab land"
+
+atmosphere:
+  dynamics: hydrostatic
+  discretization: cdgrid
+  dt_seconds: 600
+
+grid:
+  type: cubed_sphere
+  resolution: 48
+  n_levels: 40
+
+coupled:
+  preset: slab_simple
+  coupling_dt: 3600
+
+ocean:
+  mode: slab
+  h_mix: 50.0
+
+land:
+  mode: slab
+
+time:
+  duration_days: 365
+
+output:
+  format: zarr
+  path: "output/coupled_slab/"

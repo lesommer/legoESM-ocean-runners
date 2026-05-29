@@ -1,0 +1,47 @@
+# Overflow (dense water cascading down a slope)
+# Tests bottom boundary layer dynamics and downslope flow.
+#
+# Maps to: legoesm.ocean.experiments.overflow
+# Grid:    latlon
+# Mode:    3d_ocean
+
+experiment:
+  name: overflow
+  mode: 3d_ocean
+  description: "Dense water overflow down a continental slope"
+
+grid:
+  type: latlon
+  resolution: 64x64
+  nlev: 30
+
+ocean:
+  case: overflow
+  A_h: 1.0e-2
+  K_h: 1.0e-4
+  eos: linear
+  eos_linear:
+    rho_ref: 1025.0
+    alpha_T: 2.0e-4
+    T_reference: 10.0
+
+domain:
+  H_max: 2000.0
+  land_lat_threshold: 90.0
+
+physics:
+  vertical_mixing:
+    scheme: constant
+  surface_forcing:
+    scheme: none
+  bottom_drag:
+    scheme: quadratic
+    C_d: 2.5e-3
+
+time:
+  duration_days: 5
+  dt_seconds: 120
+
+output:
+  diag_interval_hours: 6
+  checkpoint_interval_days: 1

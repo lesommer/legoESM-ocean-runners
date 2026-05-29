@@ -1,0 +1,37 @@
+# Coupled aquaplanet (slab ocean + atmosphere)
+# Simplest coupled configuration: slab ocean on an aquaplanet.
+# No land, no ice, no carbon.
+#
+# Maps to: CoupledConfig.preset_aquaplanet()
+# Grid:    cubed_sphere (atmosphere) + slab ocean
+# Mode:    coupled
+
+experiment:
+  name: coupled_aquaplanet
+  mode: coupled
+  description: "Coupled aquaplanet: slab ocean + atmosphere"
+
+atmosphere:
+  dynamics: hydrostatic
+  discretization: cdgrid
+  dt_seconds: 600
+
+grid:
+  type: cubed_sphere
+  resolution: 48
+  n_levels: 40
+
+coupled:
+  preset: aquaplanet
+  coupling_dt: 3600
+
+ocean:
+  mode: slab
+  h_mix: 50.0
+
+time:
+  duration_days: 365
+
+output:
+  format: zarr
+  path: "output/coupled_aquaplanet/"

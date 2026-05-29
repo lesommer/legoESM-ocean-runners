@@ -1,0 +1,55 @@
+# Neverworld2 Lite (idealized Southern Ocean + basins)
+# Simplified global ocean geometry mimicking Neverworld2 benchmark.
+# Tests GM/Redi, western boundary currents, and Southern Ocean dynamics.
+#
+# Maps to: legoesm.ocean.experiments.neverworld2_lite
+# Grid:    latlon
+# Mode:    3d_ocean
+
+experiment:
+  name: neverworld2_lite
+  mode: 3d_ocean
+  description: "Neverworld2 Lite: idealized global ocean benchmark"
+
+grid:
+  type: latlon
+  resolution: 64x128
+  nlev: 50
+
+ocean:
+  case: neverworld2_lite
+  A_h: 5.0e4
+  C_smag: 0.06
+  C_leith: 0.04
+  bottom_drag_r: 1.1e-3
+  tracer_advection: tvd
+  gm_redi:
+    kappa_GM: 1000.0
+    kappa_Redi: 500.0
+    S_max: 0.01
+  eos: wright
+
+domain:
+  H_max: 4500.0
+
+physics:
+  vertical_mixing:
+    scheme: kpp
+    kpp:
+      Ri_crit: 0.3
+      Cv: 1.6
+      K_conv: 1.0
+  surface_forcing:
+    scheme: prescribed
+    wind_profile: "neverworld2"
+  bottom_drag:
+    scheme: linear
+    r: 1.1e-3
+
+time:
+  duration_days: 3650
+  dt_seconds: 1800
+
+output:
+  diag_interval_hours: 24
+  checkpoint_interval_days: 365

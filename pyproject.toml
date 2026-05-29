@@ -1,0 +1,42 @@
+[project]
+name = "legoesm-ocean-runners"
+version = "0.1.0"
+description = "Experiment templates, runners, and reproducibility tools for ocean simulations with legoESM"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Julien Le Sommer"},
+]
+
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.4",
+]
+full = [
+    "jax>=0.4.30",
+    "jaxlib>=0.4.30",
+]
+
+[project.scripts]
+lego-run = "runners.run_experiment:main"
+lego-ocean-matrix = "runners.run_ocean_test_matrix:main"
+lego-coupled = "runners.run_coupled:main"
+lego-init = "scripts.init_experiment:main"
+lego-tag = "scripts.generate_tag:main"
+lego-validate = "scripts.validate_templates:main"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
