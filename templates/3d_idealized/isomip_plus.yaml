@@ -10,6 +10,8 @@ experiment:
   mode: 3d_ocean
   description: "ISOMIP+: ice shelf-ocean interaction"
 
+requires: []
+
 grid:
   type: latlon
   resolution: 64x128

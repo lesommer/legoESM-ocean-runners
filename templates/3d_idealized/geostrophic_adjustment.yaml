@@ -10,6 +10,8 @@ experiment:
   mode: 3d_ocean
   description: "Geostrophic adjustment of an unbalanced density front"
 
+requires: []
+
 grid:
   type: latlon
   resolution: 64x64

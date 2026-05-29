@@ -11,6 +11,8 @@ experiment:
   mode: atmosphere_only
   description: "Held-Suarez idealized atmosphere test"
 
+requires: []
+
 grid:
   type: cubed_sphere
   resolution: 48

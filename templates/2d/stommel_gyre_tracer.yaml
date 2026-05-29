@@ -10,6 +10,8 @@ experiment:
   mode: barotropic_ocean
   description: "Stommel gyre with passive tracer transport"
 
+requires: []
+
 grid:
   type: latlon
   resolution: 64x128

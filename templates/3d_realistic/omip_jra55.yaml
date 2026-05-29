@@ -12,6 +12,13 @@ experiment:
   description: "OMIP: global ocean forced by JRA55-do reanalysis"
   reference: "Griffies et al., 2016, OMIP contribution to CMIP6"
 
+requires:
+  - etopo1_1deg
+  - woa18_annual_t
+  - woa18_annual_s
+  - jra55_do_ryf
+  - eorca1_mesh
+
 grid:
   type: latlon
   resolution: 360x720

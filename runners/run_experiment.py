@@ -22,6 +22,60 @@ TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 PATCHES_DIR = Path(__file__).resolve().parent.parent / "patches"
 VERSION_FILE = Path(__file__).resolve().parent.parent / "legoESM_version.txt"
 EXPERIMENTS_DIR = Path(__file__).resolve().parent.parent / "experiments"
+CATALOG_FILE = Path(__file__).resolve().parent.parent / "data_catalog.yaml"
+
+
+def load_catalog() -> dict:
+    """Load the data catalog YAML."""
+    with open(CATALOG_FILE) as f:
+        return yaml.safe_load(f)
+
+
+def resolve_data_root() -> Path:
+    """Find the data root directory.
+
+    Search order:
+    1. LEGOESM_DATA_DIR environment variable
+    2. ./data (relative to this repo)
+    """
+    env_dir = os.environ.get("LEGOESM_DATA_DIR")
+    if env_dir:
+        return Path(env_dir)
+    return Path(__file__).resolve().parent.parent / "data"
+
+
+def resolve_data_paths(requires: list[str], data_root: Path | None = None) -> dict[str, Path]:
+    """Resolve template requires IDs to absolute file paths.
+
+    Returns a dict mapping catalog ID -> absolute Path.
+    Raises FileNotFoundError if a required file is missing.
+    """
+    if data_root is None:
+        data_root = resolve_data_root()
+
+    catalog = load_catalog()
+    catalog_files = catalog.get("files", {})
+    paths = {}
+
+    for file_id in requires:
+        if file_id not in catalog_files:
+            raise KeyError(f"Data catalog entry not found: {file_id}")
+
+        entry = catalog_files[file_id]
+        path = data_root / entry["path"]
+
+        if entry.get("access") == "derived":
+            derived_root = path
+            if derived_root.is_dir():
+                paths[file_id] = derived_root
+            elif derived_root.exists():
+                paths[file_id] = derived_root
+            else:
+                paths[file_id] = derived_root
+        else:
+            paths[file_id] = path
+
+    return paths
 
 
 def load_version_info() -> dict[str, str]:
@@ -282,6 +336,18 @@ def generate_tag(
     if "dt_seconds" in time_cfg:
         lines.append(f"dt_seconds = {time_cfg['dt_seconds']}")
 
+    requires = config.get("requires", [])
+    if requires:
+        lines += [
+            "",
+            "[data]",
+            f"data_root = {str(resolve_data_root())}",
+            f"requires = {','.join(requires)}",
+        ]
+        data_paths = resolve_data_paths(requires)
+        for file_id, path in data_paths.items():
+            lines.append(f"{file_id} = {path}")
+
     lines += [
         "",
         "[machine]",
@@ -337,6 +403,16 @@ def _generate_run_script(config: dict, exp_dir: Path, machine: str | None = None
         "    # Parse machine YAML for env_setup commands",
         '    echo "Loading machine config: $LEGOESM_MACHINE_CONFIG"',
         "fi",
+        "",
+        "# Resolve data root",
+        f"DATA_ROOT=${{LEGOESM_DATA_DIR:-{resolve_data_root()}}}",
+        'export LEGOESM_DATA_DIR="$DATA_ROOT"',
+        "",
+        "# Check data availability before running",
+        'python scripts/fetch_data.py check "$CONFIG_TEMPLATE" --data-dir "$DATA_ROOT" || {',
+        '    echo "ERROR: Missing required data files. Run: python scripts/fetch_data.py fetch $CONFIG_TEMPLATE"',
+        '    exit 1',
+        '}',
         "",
         "# Resolve legoESM",
         f"LEGOESM_DIR={os.environ.get('LEGOESM_DIR', str(Path(__file__).resolve().parent.parent.parent / 'legoESM'))}",

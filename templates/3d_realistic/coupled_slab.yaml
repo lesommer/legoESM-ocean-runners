@@ -10,6 +10,13 @@ experiment:
   mode: coupled
   description: "Coupled: atmosphere + slab ocean + slab land"
 
+requires:
+  - rrtmgp_gas_lw
+  - rrtmgp_gas_sw
+  - rrtmgp_cloud_lw
+  - rrtmgp_cloud_sw
+  - etopo_topo_1deg
+
 atmosphere:
   dynamics: hydrostatic
   discretization: cdgrid

@@ -10,6 +10,8 @@ experiment:
   mode: ocean_scm
   description: "Single-column ocean: rest state with vertical mixing"
 
+requires: []
+
 grid:
   type: scm
   nlev: 50

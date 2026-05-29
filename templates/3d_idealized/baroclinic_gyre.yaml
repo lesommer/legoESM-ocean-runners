@@ -11,6 +11,8 @@ experiment:
   mode: 3d_ocean
   description: "Wind-driven baroclinic gyre with baroclinic instability"
 
+requires: []
+
 grid:
   type: latlon
   resolution: 64x128

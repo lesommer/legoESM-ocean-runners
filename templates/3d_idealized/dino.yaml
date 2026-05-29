@@ -11,6 +11,8 @@ experiment:
   mode: 3d_ocean
   description: "DINO: Diabatic ocean circulation in an idealized basin"
 
+requires: []
+
 grid:
   type: latlon
   resolution: 64x128

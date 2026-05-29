@@ -10,6 +10,8 @@ experiment:
   mode: 3d_ocean
   description: "Global meridional overturning circulation"
 
+requires: []
+
 grid:
   type: latlon
   resolution: 64x128

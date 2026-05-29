@@ -1,0 +1,347 @@
+# Data Catalog for legoESM-ocean-runners
+#
+# This file is the single source of truth for external data files needed by
+# experiment templates. Each entry describes a downloadable (or transferable)
+# data artifact with enough information to fetch, verify, and use it.
+#
+# Template YAML files reference these entries by ID in their `requires` field.
+# The scripts/fetch_data.py tool uses this catalog to download, verify, and
+# check data availability.
+#
+# Path conventions:
+#   - All `path` fields are relative to DATA_ROOT (set per-machine in machines/*.yaml)
+#   - DATA_ROOT defaults to ./data (relative to this repo)
+#   - For Zarr datasets, path points to the Zarr directory
+#
+# Access levels:
+#   - "public": Direct HTTP/HTTPS download
+#   - "globus": Requires Globus transfer (instructions provided)
+#   - "institutional": Requires institutional access / registration
+#   - "derived": Must be built from other catalog entries (build_script provided)
+
+files:
+  # ===========================================================================
+  # Bathymetry / Topography
+  # ===========================================================================
+  etopo1_1deg:
+    description: "ETOPO1 1-degree global topography/bathymetry (ice surface)"
+    path: bathymetry/etopo_1deg.nc
+    url: "https://www.ncei.noaa.gov/data/oceans/etopo/etopo1/etopo1_ice/etopo1_ice_g_gmt4.grd.nc"
+    access: public
+    sha256: pending
+    size_mb: 48
+    format: NetCDF4
+    variables: [z, latitude, longitude]
+    citation: "Amante & Eakins 2009, NOAA Tech. Memo. NESDIS NGDC-24"
+
+  etopo1_quarter:
+    description: "ETOPO1 1/4-degree global topography/bathymetry (ice surface)"
+    path: bathymetry/etopo_quarter.nc
+    url: "https://www.ncei.noaa.gov/data/oceans/etopo/etopo1/etopo1_ice/etopo1_ice_g_gmt4_025.grd.nc"
+    access: public
+    sha256: pending
+    size_mb: 750
+    format: NetCDF4
+    variables: [z, latitude, longitude]
+    citation: "Amante & Eakins 2009, NOAA Tech. Memo. NESDIS NGDC-24"
+
+  gebco_2023:
+    description: "GEBCO 2023 15-arc-second global bathymetry"
+    path: bathymetry/GEBCO_2023.nc
+    url: "https://www.bodc.ac.uk/data/open_download/gebco/gebco_2023/zip/"
+    access: institutional
+    instructions: |
+      1. Visit https://www.gebco.net/data_and_products/gridded_bathymetry_data/
+      2. Download GEBCO_2023 Grid (NetCDF)
+      3. Move to DATA_ROOT/bathymetry/GEBCO_2023.nc
+    sha256: pending
+    size_mb: 7800
+    format: NetCDF4
+    variables: [elevation, lat, lon]
+    citation: "GEBCO Compilation Group 2023, doi:10.5285/f9833022hf493f12da5a84e5e6de4"
+    note: "Only needed for high-resolution (>=0.25°) global configurations"
+
+  # ===========================================================================
+  # Ocean Initialization: WOA18 Climatology
+  # ===========================================================================
+  woa18_annual_t:
+    description: "WOA18 1-degree annual mean temperature"
+    path: woa18/woa18_decav_t00_01.nc
+    url: "https://www.ncei.noaa.gov/data/oceans/woa/WOA18/DATA/temperature/decav/1.00/woa18_decav_t00_01.nc"
+    access: public
+    sha256: pending
+    size_mb: 198
+    format: NetCDF4
+    variables: [t_an, depth, lat, lon]
+    citation: "Locarnini et al. 2018, NOAA Atlas NESDIS 81"
+
+  woa18_annual_s:
+    description: "WOA18 1-degree annual mean salinity"
+    path: woa18/woa18_decav_s00_01.nc
+    url: "https://www.ncei.noaa.gov/data/oceans/woa/WOA18/DATA/salinity/decav/1.00/woa18_decav_s00_01.nc"
+    access: public
+    sha256: pending
+    size_mb: 195
+    format: NetCDF4
+    variables: [s_an, depth, lat, lon]
+    citation: "Zweng et al. 2018, NOAA Atlas NESDIS 82"
+
+  woa18_monthly_t:
+    description: "WOA18 1-degree monthly temperature (12 months)"
+    path: woa18/woa18_decav_t01_13.nc
+    url: "https://www.ncei.noaa.gov/data/oceans/woa/WOA18/DATA/temperature/decav/1.00/woa18_decav_t01_13.nc"
+    access: public
+    sha256: pending
+    size_mb: 2400
+    format: NetCDF4
+    variables: [t_mn, depth, lat, lon, time]
+    citation: "Locarnini et al. 2018, NOAA Atlas NESDIS 81"
+
+  woa18_monthly_s:
+    description: "WOA18 1-degree monthly salinity (12 months)"
+    path: woa18/woa18_decav_s01_13.nc
+    url: "https://www.ncei.noaa.gov/data/oceans/woa/WOA18/DATA/salinity/decav/1.00/woa18_decav_s01_13.nc"
+    access: public
+    sha256: pending
+    size_mb: 2300
+    format: NetCDF4
+    variables: [s_mn, depth, lat, lon, time]
+    citation: "Zweng et al. 2018, NOAA Atlas NESDIS 82"
+
+  # ===========================================================================
+  # Ocean Grids: Tripolar / MPAS Meshes
+  # ===========================================================================
+  eorca1_mesh:
+    description: "eORCA1.2 tripolar mesh mask (NEMO format, 1° resolution)"
+    path: grids/eORCA1.2_mesh_mask.nc
+    url: "https://zenodo.org/records/4436658/files/eORCA1.2_mesh_mask.nc"
+    access: public
+    sha256: pending
+    size_mb: 484
+    format: NetCDF4
+    variables: [glamt, gphit, e1t, e2t, tmask, nav_lon, nav_lat, gdept_0]
+    citation: "Vancoppenolle et al. 2023, doi:10.5285/f9833022hf493f12da5a84e5e6de4"
+    note: "Downloaded automatically by legoESM if not present; also downloadable via scripts/download_grids.sh"
+
+  eorca025_mesh:
+    description: "eORCA025 tripolar mesh mask (1/4° resolution)"
+    path: grids/eORCA025_mesh_mask.nc
+    url: "https://zenodo.org/records/4436658/files/eORCA025_mesh_mask.nc"
+    access: public
+    sha256: pending
+    size_mb: 7200
+    format: NetCDF4
+    variables: [glamt, gphit, e1t, e2t, tmask, nav_lon, nav_lat, gdept_0]
+    note: "Large file (~7 GB). Only needed for 1/4° global ocean runs."
+
+  # ===========================================================================
+  # Surface Forcing: AMIP SST / Sea Ice
+  # ===========================================================================
+  hadisst_sst:
+    description: "HadISST monthly SST 1870-present"
+    path: forcing/hadisst_sst.nc
+    url: "https://www.metoffice.gov.uk/hadobs/hadisst/data/HadISST_sst.nc.gz"
+    access: public
+    sha256: pending
+    size_mb: 120
+    format: NetCDF4
+    variables: [sst, latitude, longitude, time]
+    citation: "Rayner et al. 2003, J. Climate, doi:10.1175/1520-0442(2003)016<1501:GIDHAI>2.0.CO;2"
+    post_process: "gunzip and rename to hadisst_sst.nc"
+
+  hadisst_sic:
+    description: "HadISST monthly sea ice concentration 1870-present"
+    path: forcing/hadisst_sic.nc
+    url: "https://www.metoffice.gov.uk/hadobs/hadisst/data/HadISST_ice.nc.gz"
+    access: public
+    sha256: pending
+    size_mb: 50
+    format: NetCDF4
+    variables: [seaice, latitude, longitude, time]
+    citation: "Rayner et al. 2003"
+    post_process: "gunzip and rename to hadisst_sic.nc"
+
+  cobe_sst:
+    description: "COBE SST monthly 1891-present (AMIP forcing)"
+    path: forcing/cobe_sst.nc
+    url: "https://psl.noaa.gov/data/gridded/data/cobe.html"
+    access: institutional
+    instructions: |
+      1. Visit https://psl.noaa.gov/data/gridded/data.cobe2.html
+      2. Download COBE2 SST data (NetCDF)
+      3. Move to DATA_ROOT/forcing/cobe_sst.nc
+    sha256: pending
+    size_mb: 80
+    format: NetCDF4
+    variables: [sst, lat, lon, time]
+
+  # ===========================================================================
+  # Surface Forcing: JRA55-do (OMIP)
+  # ===========================================================================
+  jra55_do_ryf:
+    description: "JRA55-do Repeat Year Forcing, pre-processed Zarr cache"
+    path: jra55_ryf_cache/jra55_do_v14_omip2_1deg_noleap.zarr/
+    access: derived
+    build_from: [jra55_iaf_raw]
+    build_script: "scripts/prepare_omip_forcing.py"
+    build_instructions: |
+      1. Fetch raw JRA55-do IAF data (see jra55_iaf_raw)
+      2. Run: python scripts/prepare_omip_forcing.py --input-dir DATA_ROOT/jra55_iaf/ --output DATA_ROOT/jra55_ryf_cache/
+      3. Alternatively, download pre-built RYF cache from institutional storage
+    sha256: pending
+    size_mb: 5000
+    format: Zarr
+    variables: [uas, vas, tas, huss, psl, rsds, rlds, prra, prsn, friver]
+    citation: "Tsujino et al. 2018, doi:10.2208/prog.2018-006"
+
+  jra55_iaf_raw:
+    description: "JRA55-do IAF raw forcing data (60+ years, all variables at 3hr resolution)"
+    path: jra55_iaf/
+    access: globus
+    instructions: |
+      1. Register at https://esgf-node.llnl.gov/
+      2. Use scripts/download_jra55_iaf.py to fetch per-variable per-year NetCDF files
+      3. Files will be stored under DATA_ROOT/jra55_iaf/atmos/ and DATA_ROOT/jra55_iaf/land/
+      4. Run scripts/prepare_omip_forcing.py to build the Zarr cache (see jra55_do_ryf)
+    sha256: pending
+    size_mb: 50000
+    format: NetCDF4
+    variables: [uas, vas, tas, huss, psl, rsds, rlds, prra, prsn, friver]
+    citation: "Tsujino et al. 2018"
+
+  # ===========================================================================
+  # Radiation: RRTMGP Optics
+  # ===========================================================================
+  rrtmgp_gas_lw:
+    description: "RRTMGP longwave gas optics coefficients"
+    path: rrtmgp/rrtmgp-gas-lw-g128.nc
+    url: "https://github.com/earth-system-radiation/rrtmgp-data/releases/download/v1.7.1/rrtmgp-gas-lw-g128.nc"
+    access: public
+    sha256: pending
+    size_mb: 150
+    format: NetCDF4
+    citation: "Pincus et al. 2019, JAMES, doi:10.1029/2019MS001725"
+
+  rrtmgp_gas_sw:
+    description: "RRTMGP shortwave gas optics coefficients"
+    path: rrtmgp/rrtmgp-gas-sw-g112.nc
+    url: "https://github.com/earth-system-radiation/rrtmgp-data/releases/download/v1.7.1/rrtmgp-gas-sw-g112.nc"
+    access: public
+    sha256: pending
+    size_mb: 120
+    format: NetCDF4
+    citation: "Pincus et al. 2019"
+
+  rrtmgp_cloud_lw:
+    description: "RRTMGP longwave cloud optics coefficients"
+    path: rrtmgp/rrtmgp-cloud-lw.nc
+    url: "https://github.com/earth-system-radiation/rrtmgp-data/releases/download/v1.7.1/rrtmgp-cloud-lw.nc"
+    access: public
+    sha256: pending
+    size_mb: 70
+    format: NetCDF4
+
+  rrtmgp_cloud_sw:
+    description: "RRTMGP shortwave cloud optics coefficients"
+    path: rrtmgp/rrtmgp-cloud-sw.nc
+    url: "https://github.com/earth-system-radiation/rrtmgp-data/releases/download/v1.7.1/rrtmgp-cloud-sw.nc"
+    access: public
+    sha256: pending
+    size_mb: 50
+    format: NetCDF4
+
+  # ===========================================================================
+  # CMIP6 Forcing: GHG, Ozone, Aerosol, Solar
+  # ===========================================================================
+  cmip6_ghg:
+    description: "CMIP6 historical + SSP greenhouse gas concentrations (CO2, CH4, N2O)"
+    path: forcing/cmip6_ghg.nc
+    url: "https://github.com/gentine/legoESM/raw/main/data/cmip6_ghg.nc"
+    access: public
+    sha256: pending
+    size_mb: 5
+    format: NetCDF4
+    variables: [co2, ch4, n2o, time]
+    note: "Bundled with legoESM; also available from input4MIPs"
+
+  cmip6_ozone:
+    description: "CMIP6 ozone forcing (monthly zonal mean)"
+    path: forcing/cmip6_ozone.nc
+    url: "https://github.com/gentine/legoESM/raw/main/data/cmip6_ozone.nc"
+    access: public
+    sha256: pending
+    size_mb: 20
+    format: NetCDF4
+    note: "Bundled with legoESM; also from input4MIPs"
+
+  cmip6_aerosol:
+    description: "CMIP6 aerosol forcing (optical properties)"
+    path: forcing/cmip6_aerosol.nc
+    access: institutional
+    instructions: |
+      1. Download from https://esgf-node.llnl.gov/search/input4mips/
+      2. Move to DATA_ROOT/forcing/cmip6_aerosol.nc
+    sha256: pending
+    size_mb: 30
+    format: NetCDF4
+
+  cmip6_solar:
+    description: "CMIP6 solar irradiance forcing (daily spectral)"
+    path: forcing/cmip6_solar.nc
+    url: "https://github.com/gentine/legoESM/raw/main/data/cmip6_solar.nc"
+    access: public
+    sha256: pending
+    size_mb: 1
+    format: NetCDF4
+    note: "Bundled with legoESM; also from input4MIPs"
+
+  # ===========================================================================
+  # Topography (for atmosphere)
+  # ===========================================================================
+  etopo_topo_1deg:
+    description: "ETOPO1 1-degree topography for atmosphere surface elevation"
+    path: topography/etopo_topo_1deg.nc
+    url: "https://www.ncei.noaa.gov/data/oceans/etopo/etopo1/etopo1_ice/etopo1_ice_g_gmt4.grd.nc"
+    access: public
+    sha256: pending
+    size_mb: 48
+    format: NetCDF4
+    note: "Same source as etopo1_1deg; can be symlinked"
+
+  # ===========================================================================
+  # Initial Conditions: ERA5 (for AMIP)
+  # ===========================================================================
+  era5_monthly:
+    description: "ERA5 monthly reanalysis (for AMIP initial conditions and validation)"
+    path: forcing/era5_monthly/
+    access: institutional
+    instructions: |
+      1. Register at https://cds.climate.copernicus.eu/
+      2. Use CDS API to download ERA5 monthly fields
+      3. Store under DATA_ROOT/forcing/era5_monthly/
+      4. Alternatively, use analytical initial conditions (no data needed)
+    sha256: pending
+    size_mb: 5000
+    format: NetCDF/Zarr
+    variables: [t, u, v, q, z, sp]
+    note: "Only needed for realistic atmosphere IC; analytical IC available without data"
+
+  # ===========================================================================
+  # Validation / Diagnostics: Observational
+  # ===========================================================================
+  era5_sst_climatology:
+    description: "ERA5 SST climatology for validation"
+    path: validation/era5_sst_climatology.nc
+    access: institutional
+    instructions: "Download from CDS; optional for validation"
+    size_mb: 50
+    format: NetCDF4
+
+  woce_hydrographic:
+    description: "WOCE hydrographic sections for ocean validation"
+    path: validation/woce/
+    access: public
+    url: "https://cchdo.ucsd.edu/"
+    size_mb: 200
+    format: NetCDF
+    note: "Optional; for advanced ocean validation only"

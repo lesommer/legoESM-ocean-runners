@@ -10,6 +10,8 @@ experiment:
   mode: atmosphere_only
   description: "Williamson Test Case 2: steady-state zonal flow"
 
+requires: []
+
 model:
   name: "Williamson Test 2"
   type: atmosphere_only

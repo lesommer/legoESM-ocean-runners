@@ -18,7 +18,8 @@ precision: "mixed"         # fp32 | fp64 | mixed
 
 # ---------- Paths ----------
 # Adjust these to your machine's filesystem layout.
-data_dir: ""               # Root directory for forcing files (ERA5, OMIP, etc.)
+data_root: ""              # DATA_ROOT for data_catalog.yaml files (ERA5, OMIP, etc.)
+                          # If empty, falls back to $LEGOESM_DATA_DIR or ./data
 legoesm_dir: ""            # Path to legoESM checkout (if not auto-detected)
 output_root: "./output"    # Root for experiment output
 

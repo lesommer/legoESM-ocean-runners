@@ -10,6 +10,12 @@ experiment:
   mode: 3d_ocean_realistic
   description: "OMIP on a cubed-sphere grid (C48)"
 
+requires:
+  - etopo1_1deg
+  - woa18_annual_t
+  - woa18_annual_s
+  - jra55_do_ryf
+
 grid:
   type: cubed_sphere
   resolution: 48

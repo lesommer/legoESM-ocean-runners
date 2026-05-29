@@ -10,6 +10,8 @@ experiment:
   mode: barotropic_ocean
   description: "Inertia-gravity wave propagation test"
 
+requires: []
+
 grid:
   type: latlon
   resolution: 64x128

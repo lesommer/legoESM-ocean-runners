@@ -10,6 +10,8 @@ experiment:
   mode: 3d_ocean
   description: "Dense water overflow down a continental slope"
 
+requires: []
+
 grid:
   type: latlon
   resolution: 64x64

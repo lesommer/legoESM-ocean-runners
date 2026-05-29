@@ -10,6 +10,8 @@ experiment:
   mode: barotropic_ocean
   description: "Wind-driven barotropic gyre on a beta-plane"
 
+requires: []
+
 grid:
   type: latlon
   resolution: 64x128

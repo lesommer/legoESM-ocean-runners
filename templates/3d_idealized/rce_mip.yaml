@@ -11,6 +11,12 @@ experiment:
   mode: atmosphere_only
   description: "RCE-MIP: radiative-convective equilibrium"
 
+requires:
+  - rrtmgp_gas_lw
+  - rrtmgp_gas_sw
+  - rrtmgp_cloud_lw
+  - rrtmgp_cloud_sw
+
 grid:
   type: cubed_sphere
   resolution: 48

@@ -10,6 +10,8 @@ experiment:
   mode: 3d_ocean
   description: "Eady baroclinic instability test"
 
+requires: []
+
 grid:
   type: latlon
   resolution: 64x128

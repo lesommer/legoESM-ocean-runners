@@ -10,6 +10,20 @@ experiment:
   mode: coupled
   description: "Fully coupled ESM: atmosphere + dynamic ocean + land + ice"
 
+requires:
+  - rrtmgp_gas_lw
+  - rrtmgp_gas_sw
+  - rrtmgp_cloud_lw
+  - rrtmgp_cloud_sw
+  - etopo1_1deg
+  - woa18_annual_t
+  - woa18_annual_s
+  - eorca1_mesh
+  - hadisst_sst
+  - hadisst_sic
+  - cmip6_ghg
+  - cmip6_ozone
+
 atmosphere:
   dynamics: hydrostatic
   discretization: cdgrid

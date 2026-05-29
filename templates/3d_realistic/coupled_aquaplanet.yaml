@@ -11,6 +11,12 @@ experiment:
   mode: coupled
   description: "Coupled aquaplanet: slab ocean + atmosphere"
 
+requires:
+  - rrtmgp_gas_lw
+  - rrtmgp_gas_sw
+  - rrtmgp_cloud_lw
+  - rrtmgp_cloud_sw
+
 atmosphere:
   dynamics: hydrostatic
   discretization: cdgrid

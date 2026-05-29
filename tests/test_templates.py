@@ -168,3 +168,106 @@ class TestOceanTestMatrix:
         cases = build_test_matrix(grid_types=["latlon"])
         for case in cases:
             assert case.grid_type == "latlon"
+
+
+class TestDataCatalog:
+    """Validate data catalog and template requires references."""
+
+    CATALOG_PATH = ROOT_DIR / "data_catalog.yaml"
+
+    def test_catalog_loads(self):
+        with open(self.CATALOG_PATH) as f:
+            catalog = yaml.safe_load(f)
+        assert isinstance(catalog, dict)
+        assert "files" in catalog
+
+    def test_catalog_entries_have_required_fields(self):
+        with open(self.CATALOG_PATH) as f:
+            catalog = yaml.safe_load(f)
+        for file_id, entry in catalog["files"].items():
+            assert "description" in entry, f"{file_id}: missing description"
+            assert "path" in entry, f"{file_id}: missing path"
+            assert "access" in entry, f"{file_id}: missing access"
+            assert "format" in entry, f"{file_id}: missing format"
+            assert "size_mb" in entry, f"{file_id}: missing size_mb"
+
+    def test_access_values_valid(self):
+        with open(self.CATALOG_PATH) as f:
+            catalog = yaml.safe_load(f)
+        valid_access = {"public", "globus", "institutional", "derived"}
+        for file_id, entry in catalog["files"].items():
+            assert entry.get("access") in valid_access, (
+                f"{file_id}: invalid access={entry.get('access')}"
+            )
+
+    def test_derived_entries_have_build_info(self):
+        with open(self.CATALOG_PATH) as f:
+            catalog = yaml.safe_load(f)
+        for file_id, entry in catalog["files"].items():
+            if entry.get("access") == "derived":
+                assert "build_instructions" in entry or "build_script" in entry, (
+                    f"{file_id}: derived entry missing build instructions"
+                )
+
+    def test_template_requires_reference_catalog(self):
+        """Every requires ID in templates must exist in the data catalog."""
+        from runners.run_experiment import load_catalog
+
+        catalog = load_catalog()
+        catalog_ids = set(catalog["files"].keys())
+
+        for yaml_file in sorted(TEMPLATES_DIR.rglob("*.yaml")):
+            with open(yaml_file) as f:
+                config = yaml.safe_load(f)
+            requires = config.get("requires", [])
+            for req_id in requires:
+                assert req_id in catalog_ids, (
+                    f"{yaml_file.name} requires '{req_id}' but it is not in data_catalog.yaml"
+                )
+
+    def test_idealized_templates_require_no_data(self):
+        """Idealized experiments should have empty requires."""
+        idealized = [
+            "1d/ocean_scm",
+            "2d/barotropic_gyre",
+            "2d/stommel_gyre_tracer",
+            "2d/inertia_gravity_wave",
+            "3d_idealized/baroclinic_gyre",
+            "3d_idealized/lock_exchange",
+            "3d_idealized/overflow",
+            "3d_idealized/eady_instability",
+            "3d_idealized/phillips_two_layer",
+            "3d_idealized/acc_channel",
+            "3d_idealized/dino",
+            "3d_idealized/geostrophic_adjustment",
+            "3d_idealized/isomip_plus",
+        ]
+        from runners.run_experiment import load_template
+        for tmpl in idealized:
+            path = TEMPLATES_DIR / f"{tmpl}.yaml"
+            if path.exists():
+                config = load_template(tmpl)
+                assert config.get("requires") == [], (
+                    f"{tmpl} should require no external data, got: {config.get('requires')}"
+                )
+
+    def test_realistic_templates_require_data(self):
+        """Realistic experiments should require external data."""
+        from runners.run_experiment import load_template
+        realistic = [
+            "3d_realistic/omip_jra55",
+            "3d_realistic/amip",
+        ]
+        for tmpl in realistic:
+            path = TEMPLATES_DIR / f"{tmpl}.yaml"
+            if path.exists():
+                config = load_template(tmpl)
+                requires = config.get("requires", [])
+                assert len(requires) > 0, f"{tmpl} should require external data"
+
+    def test_resolve_data_paths(self):
+        """Test that resolve_data_paths returns paths for catalog entries."""
+        from runners.run_experiment import resolve_data_paths
+        paths = resolve_data_paths(["etopo1_1deg"])
+        assert "etopo1_1deg" in paths
+        assert paths["etopo1_1deg"].name == "etopo_1deg.nc"

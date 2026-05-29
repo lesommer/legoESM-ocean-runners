@@ -10,6 +10,13 @@ experiment:
   mode: 3d_ocean_realistic
   description: "Global OMIP at production resolution"
 
+requires:
+  - etopo1_1deg
+  - woa18_annual_t
+  - woa18_annual_s
+  - jra55_do_ryf
+  - eorca1_mesh
+
 grid:
   type: latlon
   resolution: 180x360

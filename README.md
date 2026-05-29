@@ -244,6 +244,94 @@ env_setup:
 
 Machine files containing secrets should be added to `.gitignore`.
 
+## Data Management
+
+### Overview
+
+Experiment templates that require external data files (NetCDF grids, forcings, bathymetry) declare their dependencies in a `requires` field. The `data_catalog.yaml` file is the single source of truth for all downloadable data.
+
+### Catalog Structure
+
+Each entry in `data_catalog.yaml` specifies:
+
+| Field | Description |
+|-------|-------------|
+| `description` | Human-readable description |
+| `path` | Relative path under `DATA_ROOT` |
+| `url` | Direct download URL (if public) |
+| `access` | `public`, `globus`, `institutional`, or `derived` |
+| `sha256` | Checksum (or `pending` until computed) |
+| `size_mb` | Approximate file size |
+| `format` | `NetCDF4`, `Zarr`, etc. |
+| `variables` | Key NetCDF variable names |
+| `citation` | Academic citation |
+
+### Template Requires
+
+Each template YAML includes a `requires` list referencing catalog IDs:
+
+```yaml
+# templates/3d_realistic/omip_jra55.yaml
+experiment:
+  name: omip_jra55
+  mode: 3d_ocean_realistic
+
+requires:
+  - etopo1_1deg
+  - woa18_annual_t
+  - woa18_annual_s
+  - jra55_do_ryf
+  - eorca1_mesh
+```
+
+Idealized experiments have `requires: []` since they use analytical forcings.
+
+### Fetching Data
+
+```bash
+# List data required by a template
+python scripts/fetch_data.py list 3d_realistic/omip_jra55 -v
+
+# Check what's missing locally
+python scripts/fetch_data.py check 3d_realistic/omip_jra55
+
+# Download all required data
+python scripts/fetch_data.py fetch 3d_realistic/omip_jra55
+
+# Download a specific file
+python scripts/fetch_data.py fetch-file etopo1_1deg
+
+# Verify a downloaded file
+python scripts/fetch_data.py verify etopo1_1deg
+
+# List all catalog entries
+python scripts/fetch_data.py list-all
+```
+
+### Data Root
+
+The `DATA_ROOT` directory is resolved in order:
+
+1. `--data-dir` CLI argument
+2. `LEGOESM_DATA_DIR` environment variable
+3. `./data` (relative to the repo)
+
+Machine configs can set `data_root` to point to shared storage on HPC systems.
+
+### Data That Requires Manual Setup
+
+Some datasets cannot be auto-downloaded:
+
+| ID | Access | Instructions |
+|----|--------|-------------|
+| `jra55_iaf_raw` | Globus | Use `scripts/download_jra55_iaf.py` |
+| `jra55_do_ryf` | Derived | Run `scripts/prepare_omip_forcing.py` after downloading raw JRA55 |
+| `era5_monthly` | Institutional | Register at CDS, download via CDS API |
+| `cmip6_aerosol` | Institutional | Download from ESGF |
+| `gebco_2023` | Institutional | Download from GEBCO website |
+
+The `fetch_data.py` tool will print manual instructions for these entries.
+
 ## CI
 
 The GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push/PR and weekly:

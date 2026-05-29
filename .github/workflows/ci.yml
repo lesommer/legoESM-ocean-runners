@@ -62,6 +62,43 @@ jobs:
       - name: Validate template YAML structure
         run: python scripts/validate_templates.py --skip-imports --verbose
 
+      - name: Validate data catalog
+        run: |
+          python -c "
+          import yaml
+          with open('data_catalog.yaml') as f:
+              catalog = yaml.safe_load(f)
+          assert 'files' in catalog
+          for fid, entry in catalog['files'].items():
+              assert 'description' in entry, f'{fid}: missing description'
+              assert 'path' in entry, f'{fid}: missing path'
+              assert 'access' in entry, f'{fid}: missing access'
+              assert 'format' in entry, f'{fid}: missing format'
+          print(f'Catalog OK: {len(catalog[\"files\"])} entries')
+          "
+
+      - name: Validate template requires reference catalog
+        run: |
+          python -c "
+          import yaml
+          from pathlib import Path
+          with open('data_catalog.yaml') as f:
+              catalog = yaml.safe_load(f)
+          catalog_ids = set(catalog['files'].keys())
+          errors = []
+          for tmpl in Path('templates').rglob('*.yaml'):
+              with open(tmpl) as f:
+                  config = yaml.safe_load(f)
+              for req in config.get('requires', []):
+                  if req not in catalog_ids:
+                      errors.append(f'{tmpl.name}: requires \"{req}\" not in catalog')
+          if errors:
+              for e in errors:
+                  print(f'ERROR: {e}')
+              raise SystemExit(1)
+          print('All template requires reference valid catalog entries')
+          "
+
       - name: Install legoESM + JAX
         run: |
           pip install -e legoESM/
