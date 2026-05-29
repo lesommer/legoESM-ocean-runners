@@ -5,9 +5,11 @@
 # 1. Fetches the latest from the legoESM remote
 # 2. Updates legoESM_version.txt to the HEAD of the specified ref
 # 3. Runs template validation to check compatibility
+# 4. With --tag: creates a git tag on successful validation
 #
 # Usage:
 #   bash scripts/sync_legoesm.sh                    # sync to latest main
+#   bash scripts/sync_legoesm.sh --tag              # sync + validate + tag on success
 #   bash scripts/sync_legoesm.sh feature/ocean-btr   # sync to a specific branch
 #   bash scripts/sync_legoesm.sh --check-only        # just validate, don't update
 
@@ -30,15 +32,30 @@ if [ ! -d "$LEGOESM_DIR/.git" ]; then
     exit 1
 fi
 
-REF="${1:-main}"
+# Parse arguments
+REF="main"
 CHECK_ONLY=0
-if [ "$REF" = "--check-only" ]; then
-    CHECK_ONLY=1
-    REF="main"
-fi
+CREATE_TAG=0
+
+for arg in "$@"; do
+    case "$arg" in
+        --tag)
+            CREATE_TAG=1
+            ;;
+        --check-only)
+            CHECK_ONLY=1
+            ;;
+        *)
+            REF="$arg"
+            ;;
+    esac
+done
 
 echo "legoESM directory: $LEGOESM_DIR"
 echo "Target ref: $REF"
+if [ "$CREATE_TAG" = "1" ]; then
+    echo "Tag on success: yes"
+fi
 
 # Fetch latest
 echo "Fetching latest from remote..."
@@ -62,6 +79,17 @@ fi
 
 if [ "$NEW_COMMIT" = "$CURRENT_COMMIT" ]; then
     echo "Already up to date."
+    # Even if up to date, create tag if requested and not already tagged
+    if [ "$CREATE_TAG" = "1" ]; then
+        TAG_NAME="legoesm-${SHORT_COMMIT}-$(date +%Y%m%d)"
+        if git -C "$ROOT_DIR" tag -l "$TAG_NAME" | grep -q .; then
+            echo "Tag $TAG_NAME already exists."
+        else
+            echo "Creating tag: $TAG_NAME"
+            git -C "$ROOT_DIR" tag "$TAG_NAME"
+            git -C "$ROOT_DIR" push origin "$TAG_NAME" 2>/dev/null || echo "  (Could not push tag to remote)"
+        fi
+    fi
     exit 0
 fi
 
@@ -89,10 +117,45 @@ echo "  date:   $TODAY"
 # Run validation
 echo ""
 echo "Running template validation..."
-python "$SCRIPT_DIR/validate_templates.py" --legoesm-dir "$LEGOESM_DIR" --verbose
+VALIDATION_OK=1
+python "$SCRIPT_DIR/validate_templates.py" --legoesm-dir "$LEGOESM_DIR" --verbose || VALIDATION_OK=0
 
-if [ $? -ne 0 ]; then
+if [ "$VALIDATION_OK" = "0" ]; then
     echo ""
     echo "WARNING: Some templates failed validation with the new legoESM version."
     echo "         Please review and update the failing templates before committing."
+    echo "         Do NOT tag until all templates pass validation."
+    exit 1
+fi
+
+echo ""
+echo "All templates validated successfully."
+
+if [ "$CREATE_TAG" = "1" ]; then
+    TAG_NAME="legoesm-${SHORT_COMMIT}-$(date +%Y%m%d)"
+
+    # Check if already tagged
+    if git -C "$ROOT_DIR" tag -l "$TAG_NAME" | grep -q .; then
+        echo "Tag $TAG_NAME already exists."
+    else
+        # Commit the version file update if there are changes
+        if git -C "$ROOT_DIR" diff --quiet "$VERSION_FILE" 2>/dev/null; then
+            echo "No changes to commit."
+        else
+            git -C "$ROOT_DIR" add "$VERSION_FILE"
+            git -C "$ROOT_DIR" commit -m "chore: update legoESM pin to ${SHORT_COMMIT}"
+        fi
+
+        echo "Creating tag: $TAG_NAME"
+        git -C "$ROOT_DIR" tag "$TAG_NAME"
+        echo "Tag created: $TAG_NAME"
+        echo ""
+        echo "To push the tag to remote:"
+        echo "  git push origin $TAG_NAME"
+    fi
+else
+    echo ""
+    echo "To create a reproducibility tag after committing:"
+    echo "  git tag \"legoesm-${SHORT_COMMIT}-$(date +%Y%m%d)\""
+    echo "  git push --tags"
 fi

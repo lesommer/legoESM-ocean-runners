@@ -20,7 +20,7 @@ The repo serves three goals:
 - **Data files** (NetCDF/Zarr) → never stored here; cataloged in `data_catalog.yaml`, fetched by `scripts/fetch_data.py`
 - **Experiment archives** (output) → stored in a separate archive repo; this repo only produces `experiment.tag` files that describe what was run
 
-**Version control as contract.** `legoESM_version.txt` pins the exact legoESM commit. Templates are validated against that version by CI. When legoESM changes, `scripts/sync_legoesm.sh` updates the pin and CI checks if templates still work.
+**Version control as reproducibility contract.** `main` always targets the latest legoESM. Git tags (`legoesm-<hash>-<date>`) mark validated compatibility points — every time `legoESM_version.txt` is updated and templates pass validation, a tag is created. Past experiments are reproduced by checking out the tag recorded in their `experiment.tag` file. Never create branches for different legoESM versions; use tags instead.
 
 **Machine-agnostic templates.** Templates contain no machine-specific paths or scheduler settings. Machine configuration lives in `machines/*.yaml` (git-ignored except `_template.yaml`).
 
@@ -123,7 +123,7 @@ Every initialized experiment produces an `experiment.tag` INI file with:
 - `[run]` — duration, timestep
 - `[data]` — data_root, requires list, resolved file paths
 - `[machine]` — hostname, machine config
-- `[reproducibility]` — config hash, legoESM ref, Python/JAX versions
+- `[reproducibility]` — config hash, runner_tag (git tag in THIS repo), legoESM ref, Python/JAX versions
 
 These tag files are intended to be archived alongside experiment output in a separate archive repository.
 
@@ -151,10 +151,21 @@ These tag files are intended to be archived alongside experiment output in a sep
 4. For derived data, set `access: derived` and add `build_from` and `build_instructions`
 
 ### Update legoESM version
-1. Run `bash scripts/sync_legoesm.sh` to update `legoESM_version.txt` to the latest commit
-2. Run `python scripts/validate_templates.py --legoesm-dir ../legoESM --verbose`
-3. Fix any templates that break due to API changes
-4. Commit the updated version + fixes
+1. Run `bash scripts/sync_legoesm.sh --tag` to update the pin and create a compatibility tag
+2. If validation passes: a tag `legoesm-<hash>-<date>` is created automatically
+3. If validation fails: fix the templates, then commit and tag manually: `git tag "legoesm-$(grep '^commit:' legoESM_version.txt | cut -d: -f2 | tr -d ' ' | cut -c1-12)-$(date +%Y%m%d)"`
+
+### Reproduce a past experiment
+1. Read the `experiment.tag` file: find `runner_tag` in the `[reproducibility]` section
+2. Checkout that tag: `git checkout legoesm-c78680b-20260529`
+3. Or use the reproduce script: `python scripts/reproduce.py path/to/experiment.tag`
+4. The script checks out the matching legoESM commit, applies patches, and verifies data availability
+
+### Use a feature branch locally (temporary, never committed)
+1. Create `legoESM_version.txt.override` with the branch name and commit (git-ignored)
+2. Create a patch: `cd ../legoESM && git diff main > ../legoESM-ocean-runners/patches/001-my-feature.patch`
+3. Apply patches: `bash scripts/apply_patches.sh`
+4. When merged upstream: remove the override and patch, run `sync_legoesm.sh --tag`
 
 ## 7. What Agents Must NOT Do
 
@@ -165,6 +176,8 @@ These tag files are intended to be archived alongside experiment output in a sep
 - **Never modify `data_catalog.yaml` checksums** without verifying them against actual downloaded files.
 - **Never remove the `requires` field** from a template. Even idealized templates have `requires: []` — this is intentional and validated by CI.
 - **Never bypass validation.** Always run `python scripts/validate_templates.py` after modifying templates.
+- **Never create branches for different legoESM versions.** Use tags (`legoesm-<hash>-<date>`) for reproducibility. The `main` branch always tracks the latest legoESM.
+- **Never modify `legoESM_version.txt` without tagging.** Every pin update should be accompanied by a `legoesm-<hash>-<date>` tag after validation passes.
 
 ## 8. Key File Locations
 
@@ -173,6 +186,9 @@ These tag files are intended to be archived alongside experiment output in a sep
 | Experiment templates | `templates/<category>/<name>.yaml` |
 | Data catalog | `data_catalog.yaml` |
 | Pinned legoESM version | `legoESM_version.txt` |
+| Compatibility tags | `git tag -l 'legoesm-*'` |
+| Reproduction tool | `scripts/reproduce.py` |
+| Version sync + tagging | `scripts/sync_legoesm.sh --tag` |
 | Data fetch tool | `scripts/fetch_data.py` |
 | Template validator | `scripts/validate_templates.py` |
 | Experiment runner | `runners/run_experiment.py` |
@@ -219,11 +235,56 @@ cd ../legoESM && git checkout -b feature/my-feature
 
 # 2. Develop and test
 
-# 3. Create a patch
+# 3. Create a local override (never committed)
+echo "ref: feature/my-feature" > legoESM_version.txt.override
+echo "commit: $(cd ../legoESM && git rev-parse HEAD)" >> legoESM_version.txt.override
+
+# 4. Create a patch
 cd ../legoESM && git diff main > ../legoESM-ocean-runners/patches/001-my-feature.patch
 
-# 4. Apply patches to your legoESM checkout
+# 5. Apply patches to your legoESM checkout
 cd ../legoESM-ocean-runners && bash scripts/apply_patches.sh
 
-# 5. Remove the patch once the feature is merged into legoESM main
+# 6. When done, remove override and patch
+rm legoESM_version.txt.override patches/001-my-feature.patch
+```
+
+### "I need to reproduce a past experiment"
+```bash
+# Option A: Use the reproduce script (automatic)
+python scripts/reproduce.py experiments/my_old_run/experiment.tag
+# This checks out the right repo tag, legoESM commit, and applies patches.
+
+# Option B: Manual reproduction
+# 1. Read the experiment.tag to find the runner_tag
+grep runner_tag experiments/my_old_run/experiment.tag
+# runner_tag = legoesm-c78680b-20260529
+
+# 2. Checkout that tag in this repo
+git checkout legoesm-c78680b-20260529
+
+# 3. Checkout the corresponding legoESM commit
+cd ../legoESM && git checkout c78680b839de
+
+# 4. Apply any patches listed in the tag
+cd ../legoESM-ocean-runners && bash scripts/apply_patches.sh
+
+# 5. Fetch data and run
+python scripts/fetch_data.py check 3d_idealized/baroclinic_gyre
+python scripts/init_experiment.py 3d_idealized/baroclinic_gyre --name reproduced_run
+cd experiments/reproduced_run && bash run.sh
+```
+
+### "I want to update the pinned legoESM version"
+```bash
+# Sync to latest main, validate, and tag on success:
+bash scripts/sync_legoesm.sh --tag
+
+# If validation fails, fix templates first, then tag manually:
+bash scripts/sync_legoesm.sh           # update the pin
+python scripts/validate_templates.py   # check what broke
+# ... fix templates ...
+git commit -am "fix: update templates for new legoESM API"
+git tag "legoesm-$(grep '^commit:' legoESM_version.txt | cut -d: -f2 | tr -d ' ' | cut -c1-12)-$(date +%Y%m%d)"
+git push --tags
 ```

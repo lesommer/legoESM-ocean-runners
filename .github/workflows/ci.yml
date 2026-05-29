@@ -116,6 +116,20 @@ jobs:
           python scripts/init_experiment.py 1d/ocean_scm --name ci_smoke_test
         continue-on-error: true
 
+      - name: Check for reproducibility tag
+        if: success()
+        run: |
+          COMMIT=$(grep '^commit:' legoESM_version.txt | cut -d: -f2 | tr -d ' ' | cut -c1-12)
+          DATE=$(date +%Y%m%d)
+          TAG="legoesm-${COMMIT}-${DATE}"
+          if git tag -l "$TAG" | grep -q .; then
+            echo "Tag $TAG already exists."
+          else
+            echo "No reproducibility tag for current version."
+            echo "Consider running: bash scripts/sync_legoesm.sh --tag"
+            echo "This would create tag: $TAG"
+          fi
+
   sync-check:
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule'

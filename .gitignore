@@ -238,6 +238,9 @@ output/
 *.nc
 *.npz
 
+# Local version override (for feature branch development)
+legoESM_version.txt.override
+
 # JAX cache
 ~/.jax/
 

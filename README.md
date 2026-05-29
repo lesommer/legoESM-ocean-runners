@@ -187,21 +187,86 @@ jax_version = 0.4.35
 
 These tag files are intended to be archived alongside experiment output in a separate archive repository.
 
-## Version Tracking
+## Version Strategy
 
-`legoESM_version.txt` pins the exact commit of legoESM that templates are tested against:
+This repository always targets the **latest legoESM main branch**. Past compatibility states are preserved via **git tags**, enabling exact reproduction of any experiment ever run.
 
-```
-ref: main
-commit: c78680b839de0693acfbfe3798f92ef2ede1039d
-date: 2026-05-29
-```
+### How it works
 
-To update:
+| Concept | Mechanism |
+|---------|-----------|
+| **Current version** | `legoESM_version.txt` pins the exact legoESM commit that `main` templates are validated against |
+| **Past versions** | Git tags (`legoesm-<hash>-<date>`) capture the repo state each time the pin is updated |
+| **Reproducibility** | Every `experiment.tag` file records `runner_tag`, tying an experiment to a specific repo tag |
+| **Feature branches** | Local `.override` files + patches for temporary legoESM branches (never committed) |
+
+### Updating the pinned version
 
 ```bash
-bash scripts/sync_legoesm.sh              # sync to latest main
-bash scripts/sync_legoesm.sh feature/ocean-btr  # sync to a specific branch
+# Sync to latest legoESM main, validate, and create a tag on success:
+bash scripts/sync_legoesm.sh --tag
+
+# Sync to a specific legoESM branch (local override, no tag):
+bash scripts/sync_legoesm.sh feature/ocean-btr
+```
+
+When `--tag` is used, `sync_legoesm.sh` will:
+1. Update `legoESM_version.txt` to the new commit
+2. Run `validate_templates.py` against the new version
+3. If validation passes: commit, create tag `legoesm-<hash>-<date>`, push
+4. If validation fails: report failures, hold for manual fixes
+
+### Viewing and using tags
+
+```bash
+# List all compatibility tags
+git tag -l 'legoesm-*'
+
+# Find tags from a specific date range
+git tag -l 'legoesm-*202605*'
+
+# Checkout a past compatibility state
+git checkout legoesm-c78680b-20260529
+```
+
+### Reproducing a past experiment
+
+Every experiment produces an `experiment.tag` file that records the exact repo tag:
+
+```ini
+[reproducibility]
+runner_tag = legoesm-c78680b-20260529    # ← repo tag
+legoesm_ref = main
+```
+
+To reproduce:
+
+```bash
+# Automatic: reads experiment.tag and reproduces the environment
+python scripts/reproduce.py experiments/my_gyre/experiment.tag
+
+# Manual: checkout the tag and corresponding legoESM version
+git checkout legoesm-c78680b-20260529
+cd ../legoESM && git checkout c78680b839de
+cd ../legoESM-ocean-runners && bash scripts/apply_patches.sh
+```
+
+### Using a feature branch locally
+
+For development with a legoESM feature branch (never committed to the repo):
+
+```bash
+# 1. Create a local override (git-ignored)
+echo "ref: feature/ocean-partial-cells" > legoESM_version.txt.override
+echo "commit: $(cd ../legoESM && git rev-parse HEAD)" >> legoESM_version.txt.override
+
+# 2. Create a patch for your feature
+cd ../legoESM && git diff main > ../legoESM-ocean-runners/patches/001-my-feature.patch
+bash scripts/apply_patches.sh
+
+# 3. When the feature is merged upstream, clean up:
+rm legoESM_version.txt.override patches/001-my-feature.patch
+bash scripts/sync_legoesm.sh --tag
 ```
 
 ## Patches

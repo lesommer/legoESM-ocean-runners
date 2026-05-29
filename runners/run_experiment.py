@@ -44,6 +44,22 @@ def resolve_data_root() -> Path:
     return Path(__file__).resolve().parent.parent / "data"
 
 
+def _get_current_tag() -> str:
+    """Get the current git tag for HEAD that matches legoesm-*, or return 'untagged'."""
+    try:
+        result = subprocess.run(
+            ["git", "describe", "--tags", "--exact-match", "HEAD"],
+            capture_output=True, text=True, cwd=ROOT_DIR,
+        )
+        if result.returncode == 0:
+            tag = result.stdout.strip()
+            if tag.startswith("legoesm-"):
+                return tag
+        return "untagged"
+    except Exception:
+        return "untagged"
+
+
 def resolve_data_paths(requires: list[str], data_root: Path | None = None) -> dict[str, Path]:
     """Resolve template requires IDs to absolute file paths.
 
@@ -360,8 +376,15 @@ def generate_tag(
         "[reproducibility]",
         f"config_hash = sha256:{config_hash[:16]}",
         f"legoesm_ref = {version_info.get('ref', 'unknown')}",
-        f"python_version = {platform.python_version()}",
     ]
+
+    try:
+        runner_tag = _get_current_tag()
+        lines.append(f"runner_tag = {runner_tag}")
+    except Exception:
+        lines.append("runner_tag = untagged")
+
+    lines.append(f"python_version = {platform.python_version()}")
 
     try:
         import jax
