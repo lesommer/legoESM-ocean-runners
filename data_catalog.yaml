@@ -9,7 +9,7 @@
 # check data availability.
 #
 # Path conventions:
-#   - All `path` fields are relative to DATA_ROOT (set per-machine in machines/*.yaml)
+#   - All `path` fields are relative to DATA_ROOT (set per-machine or via $LEGOESM_DATA_DIR)
 #   - DATA_ROOT defaults to ./data (relative to this repo)
 #   - For Zarr datasets, path points to the Zarr directory
 #

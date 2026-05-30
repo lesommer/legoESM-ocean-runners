@@ -228,10 +228,6 @@ experiments/*/
 # Data directory (downloaded data, too large for git)
 data/
 
-# Machine configs with secrets (only commit the template)
-machines/*.yaml
-!machines/_template.yaml
-
 # Output data
 output/
 *.zarr/

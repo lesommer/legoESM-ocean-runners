@@ -24,7 +24,6 @@ legoESM-ocean-runners/
 │   ├── apply_patches.sh          #   Apply patches to legoESM checkout
 │   └── sync_legoesm.sh           #   Update pinned legoESM version
 ├── experiments/                  # Instantiated experiments (git-ignored)
-├── machines/                     # Machine-specific configs (secrets git-ignored)
 ├── patches/                      # Pre-merge patches for legoESM
 ├── .github/workflows/ci.yml      # CI: validate templates against latest legoESM
 ├── legoESM_version.txt           # Pinned legoESM commit
@@ -291,7 +290,14 @@ Remove patches once they are merged upstream.
 
 ## Machine Configurations
 
-`machines/` contains per-cluster YAML configs for paths, scheduler settings, and device selection. Copy `_template.yaml` and customize for your machine:
+Machine configs live in the experiments repo (`../my-legoESM-ocean-experiments/machines/`), not here. Pass the full path to `--machine`:
+
+```bash
+python scripts/init_experiment.py 3d_realistic/omip_jra55 --name omip_run \
+    --machine ../my-legoESM-ocean-experiments/machines/perlmutter.yaml
+```
+
+The config format (copy `_template.yaml` from the experiments repo and customize):
 
 ```yaml
 scheduler: slurm
@@ -306,8 +312,6 @@ env_setup:
   - "module load python/3.12"
   - "conda activate legoesm"
 ```
-
-Machine files containing secrets should be added to `.gitignore`.
 
 ## Data Management
 

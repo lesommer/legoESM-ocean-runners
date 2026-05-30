@@ -45,7 +45,7 @@ template + overrides  →  config.yaml  →  experiment.tag  →  reproduce.py
 
 **Version control as reproducibility contract.** `main` always targets the latest legoESM. Git tags (`legoesm-<hash>-<date>`) mark validated compatibility points — every time `legoESM_version.txt` is updated and templates pass validation, a tag is created. Past experiments are reproduced by checking out the tag recorded in their `experiment.tag` file. Never create branches for different legoESM versions; use tags instead.
 
-**Machine-agnostic templates.** Templates contain no machine-specific paths or scheduler settings. Machine configuration lives in `machines/*.yaml` (git-ignored except `_template.yaml`).
+**Machine-agnostic templates.** Templates contain no machine-specific paths or scheduler settings. Machine configuration lives in the experiments repo's `machines/*.yaml`, passed to the runners via `--machine <path>`.
 
 ## 3. Repository Map
 
@@ -61,7 +61,6 @@ templates/           YAML experiment configurations (the core of this repo)
 data_catalog.yaml    Single source of truth for external data files
 runners/             Python package: experiment init, run, tag generation
 scripts/             CLI tools: fetch_data, validate_templates, init_experiment, etc.
-machines/            Machine configs (only _template.yaml is committed)
 patches/             Pre-merge patches for legoESM
 experiments/         Instantiated experiments (git-ignored)
 legoESM_version.txt  Pinned legoESM commit hash
@@ -217,7 +216,7 @@ These tag files are intended to be archived alongside experiment output in a sep
 | Experiment runner | `runners/run_experiment.py` |
 | Ocean test matrix | `runners/run_ocean_test_matrix.py` |
 | Patches | `patches/*.patch` |
-| Machine config template | `machines/_template.yaml` |
+| Machine config template | `../my-legoESM-ocean-experiments/machines/_template.yaml` |
 | Tests | `tests/test_templates.py` |
 | CI workflow | `.github/workflows/ci.yml` |
 
@@ -258,12 +257,14 @@ cd experiments/my_gyre && bash run.sh
 # 1. Fetch needed data
 python scripts/fetch_data.py fetch 3d_realistic/omip_jra55 --data-dir /scratch/data
 
-# 2. Create a machine config
-cp machines/_template.yaml machines/perlmutter.yaml
+# 2. Create a machine config (in the experiments repo)
+cp ../my-legoESM-ocean-experiments/machines/_template.yaml \
+   ../my-legoESM-ocean-experiments/machines/perlmutter.yaml
 # Edit perlmutter.yaml with SLURM settings and data_root
 
-# 3. Initialize with machine override
-python scripts/init_experiment.py 3d_realistic/omip_jra55 --name omip_run --machine perlmutter
+# 3. Initialize with machine override (pass full path)
+python scripts/init_experiment.py 3d_realistic/omip_jra55 --name omip_run \
+    --machine ../my-legoESM-ocean-experiments/machines/perlmutter.yaml
 
 # 4. Submit
 cd experiments/omip_run && sbatch run.sh

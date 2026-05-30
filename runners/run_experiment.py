@@ -422,7 +422,10 @@ def _generate_run_script(config: dict, exp_dir: Path, machine: str | None = None
 
     machine_cfg_path = ""
     if machine:
-        machine_cfg_path = str(Path(__file__).resolve().parent.parent / "machines" / f"{machine}.yaml")
+        if Path(machine).is_absolute() or "/" in machine:
+            machine_cfg_path = machine
+        else:
+            machine_cfg_path = str(Path(__file__).resolve().parent.parent / "machines" / f"{machine}.yaml")
         lines.append(f"# Machine config: {machine_cfg_path}")
         lines.append(f"LEGOESM_MACHINE_CONFIG={machine_cfg_path}")
         lines.append("")
