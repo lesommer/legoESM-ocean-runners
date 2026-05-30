@@ -2,419 +2,95 @@
 
 Experiment templates, runners, and reproducibility tools for ocean simulations with [legoESM](https://github.com/gentine/legoESM).
 
-## Repository Structure
+## Why use this repo?
 
-```
-legoESM-ocean-runners/
-├── templates/                    # Experiment templates (YAML, version-controlled)
-│   ├── 1d/                       #   Single-column / SCM experiments
-│   ├── 2d/                       #   Barotropic / shallow-water experiments
-│   ├── 3d_idealized/             #   Idealized 3D ocean process studies
-│   ├── coupled/                  #   Coupled ESM configurations
-│   └── global_ocean/             #   Global ocean experiments
-├── runners/                      # Python runners (shared execution logic)
-│   ├── run_experiment.py         #   Generic experiment runner (init/run/tag)
-│   ├── run_ocean_test_matrix.py  #   Cross-product ocean test suite
-│   └── run_coupled.py            #   Coupled ESM runner
-├── scripts/                      # CLI utilities
-│   ├── init_experiment.py        #   Create experiment directory from template
-│   ├── generate_tag.py           #   Generate reproducibility tag files
-│   ├── validate_templates.py     #   Validate templates against legoESM
-│   ├── apply_patches.sh          #   Apply patches to legoESM checkout
-│   └── sync_legoesm.sh           #   Update pinned legoESM version
-├── patches/                      # Pre-merge patches for legoESM
-├── .github/workflows/ci.yml      # CI: validate templates against latest legoESM
-├── legoESM_version.txt           # Pinned legoESM commit
-└── pyproject.toml                # Project metadata and dependencies
-```
+Running legoESM directly means editing `scripts/run_omip.py` (3655 lines) by hand — no versioned configurations, no provenance trail, no way to reproduce past runs.
 
-## Quick Start
+This repo gives you:
 
-### Prerequisites
+- **Named templates** — version-controlled YAML files instead of ad-hoc script edits
+- **Reproducibility tags** — every run produces an `experiment.tag` capturing the exact software environment (legoESM commit, patches, Python/JAX versions)
+- **One-command reproduction** — `reproduce.py` reconstructs any past experiment from its tag file
 
-- Python 3.10+
-- JAX installed (`pip install jax jaxlib`)
-- legoESM checked out at `../legoESM` (or set `$LEGOESM_DIR`)
+For managing personal experiment directories across machines, see [my-legoESM-ocean-experiments](https://github.com/lesommer/my-legoESM-ocean-experiments).
 
-### Initialize an Experiment
+## Run an experiment
 
 ```bash
-# From a template (e.g., baroclinic gyre)
-python scripts/init_experiment.py 3d_idealized/baroclinic_gyre --name my_gyre --output-dir /path/to/experiments/my_gyre
+# 1. Check data availability (idealized experiments need no data)
+python scripts/fetch_data.py check 3d_idealized/baroclinic_gyre
 
-# With overrides
+# 2. Initialize (--output-dir is required)
 python scripts/init_experiment.py 3d_idealized/baroclinic_gyre \
-    --name gyre_high_res \
-    --output-dir /path/to/experiments/gyre_high_res \
+    --name my_gyre --output-dir ./my_gyre
+
+# 3. Run
+cd my_gyre && bash run.sh
+```
+
+## Modify an experiment
+
+Templates are the starting point. Override any parameter with dot-notation `-o` flags:
+
+```bash
+# Higher resolution and stronger lateral viscosity
+python scripts/init_experiment.py 3d_idealized/baroclinic_gyre \
+    --name gyre_hires --output-dir ./gyre_hires \
     -o grid.resolution=128x256 \
     -o ocean.A_h=1e6 \
     -o time.duration_days=730
 
-# Then run
-cd /path/to/experiments/my_gyre
-bash run.sh
+# Change vertical mixing scheme
+python scripts/init_experiment.py global_ocean/omip_jra55 \
+    --name omip_kpp --output-dir ./omip_kpp \
+    -o physics.vertical_mixing.scheme=kpp
 ```
 
-### Run the Ocean Test Matrix
+## Reproduce an experiment
 
-```bash
-# Quick smoke tests for all 2D and 3D idealized experiments
-python -m runners.run_ocean_test_matrix --categories 2d 3d_idealized --quick
-
-# Specific grid types only
-python -m runners.run_ocean_test_matrix --grid-types latlon --dry-run
-```
-
-### Validate Templates
-
-```bash
-# Validate all templates (structure only, no legoESM needed)
-python scripts/validate_templates.py --skip-imports --verbose
-
-# Full validation with legoESM import checks
-python scripts/validate_templates.py --legoesm-dir /path/to/legoESM
-```
-
-## Template System
-
-### Template Format
-
-Templates are YAML files that describe experiments in a mode-aware way. Each template specifies:
-
-| Section | Purpose |
-|---------|---------|
-| `experiment` | Name, mode (e.g., `3d_ocean`), description |
-| `grid` | Grid type, resolution, vertical levels |
-| `ocean` / `atmosphere` | Physics and numerics configuration |
-| `domain` | Basin geometry, boundaries, bathymetry |
-| `physics` | Vertical mixing, surface forcing, bottom drag |
-| `initial_conditions` | IC parameters |
-| `time` | Duration, timestep |
-| `output` | Diagnostics and checkpoint intervals |
-
-### Experiment Modes
-
-| Mode | Description | Config Target |
-|------|-------------|---------------|
-| `ocean_scm` | Single-column ocean | `OceanConfig` (1D) |
-| `barotropic_ocean` | 2D barotropic tests | Barotropic config |
-| `3d_ocean` | Idealized 3D ocean | `LatLonCGridOceanConfig` / `OceanConfig` |
-| `3d_ocean_realistic` | Realistic 3D ocean (OMIP) | `LatLonCGridOceanConfig` |
-| `coupled` | Coupled ESM | `ExperimentConfig` + `CoupledConfig` |
-
-### Available Templates
-
-**1D:**
-- `1d/ocean_scm` — Single-column rest state with KPP
-
-**2D:**
-- `2d/barotropic_gyre` — Wind-driven barotropic gyre
-- `2d/stommel_gyre_tracer` — Stommel gyre with tracer
-- `2d/inertia_gravity_wave` — Inertia-gravity wave test
-- `2d/williamson_test2` — Williamson shallow water test case 2
-
-**3D Idealized:**
-- `3d_idealized/baroclinic_gyre` — Wind-driven baroclinic instability
-- `3d_idealized/lock_exchange` — Density-driven lock exchange
-- `3d_idealized/overflow` — Dense water overflow down slope
-- `3d_idealized/eady_instability` — Eady baroclinic instability
-- `3d_idealized/phillips_two_layer` — Two-layer QG instability
-- `3d_idealized/acc_channel` — ACC with topographic ridge
-- `3d_idealized/dino` — DINO diabatic ocean basin
-- `3d_idealized/isomip_plus` — Ice shelf-ocean interaction
-- `3d_idealized/geostrophic_adjustment` — Geostrophic adjustment
-
-**Coupled:**
-- `coupled/coupled_aquaplanet` — Coupled aquaplanet
-- `coupled/coupled_slab` — Coupled slab ocean
-- `coupled/coupled_full` — Fully coupled ESM
-
-**Global Ocean:**
-- `global_ocean/global_overturning` — Global overturning circulation
-- `global_ocean/neverworld2_lite` — Neverworld2 benchmark
-- `global_ocean/omip_jra55` — OMIP forced by JRA55-do
-- `global_ocean/omip_global` — Production-resolution OMIP
-- `global_ocean/omip_cubed_sphere` — OMIP on cubed-sphere
-
-## Reproducibility Tags
-
-Every initialized experiment produces an `experiment.tag` file in INI format:
+Every run produces an `experiment.tag` (INI format) recording the full software environment:
 
 ```ini
-[experiment]
-name = baroclinic_gyre
-template = 3d_idealized/baroclinic_gyre
-mode = 3d_ocean
-created = 2026-05-29T14:30:00+00:00
-
 [legoESM]
 ref = main
-commit = c78680b839de
-patches = 
-
-[model]
-configuration = 3d_ocean
-grid_type = latlon
-resolution = 64x128
-nlev = 50
-
-[run]
-duration_days = 365
-dt_seconds = 1800
-
-[machine]
-hostname = my-workstation
-machine_config = default
+commit = 6056a0d0402968d952089209098c5990ed7d53fa
 
 [reproducibility]
-config_hash = sha256:abcdef1234567890
-legoesm_ref = main
-python_version = 3.12.3
-jax_version = 0.4.35
-```
-
-These tag files are intended to be archived alongside experiment output in a separate archive repository.
-
-## Version Strategy
-
-This repository always targets the **latest legoESM main branch**. Past compatibility states are preserved via **git tags**, enabling exact reproduction of any experiment ever run.
-
-### How it works
-
-| Concept | Mechanism |
-|---------|-----------|
-| **Current version** | `legoESM_version.txt` pins the exact legoESM commit that `main` templates are validated against |
-| **Past versions** | Git tags (`legoesm-<hash>-<date>`) capture the repo state each time the pin is updated |
-| **Reproducibility** | Every `experiment.tag` file records `runner_tag`, tying an experiment to a specific repo tag |
-| **Feature branches** | Local `.override` files + patches for temporary legoESM branches (never committed) |
-
-### Updating the pinned version
-
-```bash
-# Sync to latest legoESM main, validate, and create a tag on success:
-bash scripts/sync_legoesm.sh --tag
-
-# Sync to a specific legoESM branch (local override, no tag):
-bash scripts/sync_legoesm.sh feature/ocean-btr
-```
-
-When `--tag` is used, `sync_legoesm.sh` will:
-1. Update `legoESM_version.txt` to the new commit
-2. Run `validate_templates.py` against the new version
-3. If validation passes: commit, create tag `legoesm-<hash>-<date>`, push
-4. If validation fails: report failures, hold for manual fixes
-
-### Viewing and using tags
-
-```bash
-# List all compatibility tags
-git tag -l 'legoesm-*'
-
-# Find tags from a specific date range
-git tag -l 'legoesm-*202605*'
-
-# Checkout a past compatibility state
-git checkout legoesm-c78680b-20260529
-```
-
-### Reproducing a past experiment
-
-Every experiment produces an `experiment.tag` file that records the exact repo tag:
-
-```ini
-[reproducibility]
-runner_tag = legoesm-c78680b-20260529    # ← repo tag
-legoesm_ref = main
+runner_tag = legoesm-6056a0d04029-20260530
+python_version = 3.11.14
+jax_version = 0.4.38
 ```
 
 To reproduce:
 
 ```bash
-# Automatic: reads experiment.tag and reproduces the environment
-python scripts/reproduce.py /path/to/experiment/experiment.tag
-
-# Manual: checkout the tag and corresponding legoESM version
-git checkout legoesm-c78680b-20260529
-cd ../legoESM && git checkout c78680b839de
-cd ../legoESM-ocean-runners && bash scripts/apply_patches.sh
+python scripts/reproduce.py path/to/experiment.tag
 ```
 
-### Using a feature branch locally
+This checks out the runner tag → checks out the legoESM commit → applies patches → verifies data.
 
-For development with a legoESM feature branch (never committed to the repo):
+## Available templates
 
-```bash
-# 1. Create a local override (git-ignored)
-echo "ref: feature/ocean-partial-cells" > legoESM_version.txt.override
-echo "commit: $(cd ../legoESM && git rev-parse HEAD)" >> legoESM_version.txt.override
+| Category | Templates |
+|----------|-----------|
+| `1d/` | `ocean_scm_convective`, `ocean_scm_ekman`, `ocean_scm_surface_heating`, `ocean_scm_kpp_wind`, `ocean_scm` |
+| `2d/` | `barotropic_gyre`, `stommel_gyre_tracer`, `inertia_gravity_wave`, `williamson_test2` |
+| `3d_idealized/` | `baroclinic_gyre`, `lock_exchange`, `overflow`, `eady_instability`, `phillips_two_layer`, `acc_channel`, `dino`, `geostrophic_adjustation`, `isomip_plus` |
+| `coupled/` | `coupled_aquaplanet`, `coupled_slab`, `coupled_full` |
+| `global_ocean/` | `omip_jra55`, `global_overturning`, `neverworld2_lite`, `omip_global`, `omip_cubed_sphere` |
 
-# 2. Create a patch for your feature
-cd ../legoESM && git diff main > ../legoESM-ocean-runners/patches/001-my-feature.patch
-bash scripts/apply_patches.sh
+## CLI tools
 
-# 3. When the feature is merged upstream, clean up:
-rm legoESM_version.txt.override patches/001-my-feature.patch
-bash scripts/sync_legoesm.sh --tag
-```
+| Command | Description |
+|---------|-------------|
+| `python scripts/init_experiment.py` | Create experiment directory from template |
+| `python scripts/validate_templates.py` | Validate templates against legoESM |
+| `python scripts/generate_tag.py` | Generate reproducibility tag file |
+| `python scripts/fetch_data.py` | Download/verify external data files |
+| `python scripts/reproduce.py` | Reproduce experiment from its tag file |
+| `bash scripts/sync_legoesm.sh --tag` | Update pinned legoESM version and tag |
+| `bash scripts/apply_patches.sh` | Apply patches to legoESM checkout |
 
-## Patches
+## Further reading
 
-Patches in `patches/` are applied on top of the pinned legoESM version. They allow running experiments with features not yet merged into legoESM main.
-
-```bash
-# Create a patch
-cd ../legoESM && git diff main > ../legoESM-ocean-runners/patches/001-my-feature.patch
-
-# Apply patches
-bash scripts/apply_patches.sh
-
-# Check patches apply cleanly
-bash scripts/apply_patches.sh --check
-
-# Reverse patches
-bash scripts/apply_patches.sh --reverse
-```
-
-Remove patches once they are merged upstream.
-
-## Machine Configurations
-
-Machine configs live in the experiments repo (`../my-legoESM-ocean-experiments/machines/`), not here. Pass the full path to `--machine`:
-
-```bash
-python scripts/init_experiment.py global_ocean/omip_jra55 --name omip_run \
-    --machine ../my-legoESM-ocean-experiments/machines/perlmutter.yaml
-```
-
-The config format (copy `_template.yaml` from the experiments repo and customize):
-
-```yaml
-scheduler: slurm
-scheduler_partition: gpu
-scheduler_account: project123
-devices: gpu
-n_devices: 4
-precision: mixed
-data_dir: /scratch/project123/legoesm-data
-output_root: /scratch/project123/output
-env_setup:
-  - "module load python/3.12"
-  - "conda activate legoesm"
-```
-
-## Data Management
-
-### Overview
-
-Experiment templates that require external data files (NetCDF grids, forcings, bathymetry) declare their dependencies in a `requires` field. The `data_catalog.yaml` file is the single source of truth for all downloadable data.
-
-### Catalog Structure
-
-Each entry in `data_catalog.yaml` specifies:
-
-| Field | Description |
-|-------|-------------|
-| `description` | Human-readable description |
-| `path` | Relative path under `DATA_ROOT` |
-| `url` | Direct download URL (if public) |
-| `access` | `public`, `globus`, `institutional`, or `derived` |
-| `sha256` | Checksum (or `pending` until computed) |
-| `size_mb` | Approximate file size |
-| `format` | `NetCDF4`, `Zarr`, etc. |
-| `variables` | Key NetCDF variable names |
-| `citation` | Academic citation |
-
-### Template Requires
-
-Each template YAML includes a `requires` list referencing catalog IDs:
-
-```yaml
-# templates/global_ocean/omip_jra55.yaml
-experiment:
-  name: omip_jra55
-  mode: 3d_ocean_realistic
-
-requires:
-  - etopo1_1deg
-  - woa18_annual_t
-  - woa18_annual_s
-  - jra55_do_ryf
-  - eorca1_mesh
-```
-
-Idealized experiments have `requires: []` since they use analytical forcings.
-
-### Fetching Data
-
-```bash
-# List data required by a template
-python scripts/fetch_data.py list global_ocean/omip_jra55 -v
-
-# Check what's missing locally
-python scripts/fetch_data.py check global_ocean/omip_jra55
-
-# Download all required data
-python scripts/fetch_data.py fetch global_ocean/omip_jra55
-
-# Download a specific file
-python scripts/fetch_data.py fetch-file etopo1_1deg
-
-# Verify a downloaded file
-python scripts/fetch_data.py verify etopo1_1deg
-
-# List all catalog entries
-python scripts/fetch_data.py list-all
-```
-
-### Data Root
-
-The `DATA_ROOT` directory is resolved in order:
-
-1. `--data-dir` CLI argument
-2. `LEGOESM_DATA_DIR` environment variable
-3. `./data` (relative to the repo)
-
-Machine configs can set `data_root` to point to shared storage on HPC systems.
-
-### Data That Requires Manual Setup
-
-Some datasets cannot be auto-downloaded:
-
-| ID | Access | Instructions |
-|----|--------|-------------|
-| `jra55_iaf_raw` | Globus | Use `scripts/download_jra55_iaf.py` |
-| `jra55_do_ryf` | Derived | Run `scripts/prepare_omip_forcing.py` after downloading raw JRA55 |
-| `era5_monthly` | Institutional | Register at CDS, download via CDS API |
-| `cmip6_aerosol` | Institutional | Download from ESGF |
-| `gebco_2023` | Institutional | Download from GEBCO website |
-
-The `fetch_data.py` tool will print manual instructions for these entries.
-
-## CI
-
-The GitHub Actions workflow (`.github/workflows/ci.yml`) runs two tiers on every push/PR and weekly:
-
-### Tier 1: Structural validation (always runs, no legoESM access needed)
-1. Validates all template YAML structure (`--skip-imports`)
-2. Validates data catalog completeness
-3. Checks that all template `requires` reference valid catalog entries
-4. Checks for reproducibility tags
-
-### Tier 2: Full validation against legoESM (requires PAT)
-1. Checks out the pinned legoESM version
-2. Installs legoESM and validates templates against it
-3. Runs a smoke test with one template
-
-### Setting up the PAT
-
-Since legoESM is a private repository, Tier 2 and the scheduled sync-check require a **Personal Access Token** with read access to `gentine/legoESM`:
-
-1. Go to GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens
-2. Create a token with **Contents: Read** permission for `gentine/legoESM`
-3. Add it as a repository secret named `LEGOESM_ACCESS_TOKEN` in `lesommer/legoESM-ocean-runners` → Settings → Secrets → Actions
-
-If the `LEGOESM_ACCESS_TOKEN` secret is not set, Tier 2 will be skipped and the sync-check will not be able to query the legoESM remote.
-
-## License
-
-MIT License. See [LICENSE](LICENSE) for details.
+See [AGENTS.md](AGENTS.md) for full conventions, CI setup, data catalog schema, patch workflow, and version strategy.
