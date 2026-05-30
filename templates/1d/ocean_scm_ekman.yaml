@@ -1,0 +1,52 @@
+# Ocean SCM: wind-driven Ekman layer.
+#
+# Constant wind stress in +x with Coriolis at mid-latitude produces
+# the classic Ekman spiral: surface current veers to the right of
+# the wind (NH), and depth-averaged meridional transport matches
+# -tau/(rho*f).
+#
+# Maps to: legoesm.ocean.scm.OceanColumnModel
+# Grid:    nlev vertical levels, single column
+# Mode:    ocean_scm
+
+experiment:
+  name: ocean_scm_ekman
+  mode: ocean_scm
+  description: "Wind-driven Ekman layer: constant mixing + Coriolis"
+
+requires: []
+
+grid:
+  type: scm
+  nlev: 40
+  H_max: 800.0
+  dz_surface: 5.0
+  dz_deep: 30.0
+  latitude_deg: 43.0
+
+ocean:
+  eos: wright
+
+physics:
+  vertical_mixing:
+    scheme: constant
+    constant:
+      A_v: 0.01
+      K_v: 0.0001
+  convection:
+    scheme: none
+
+surface_forcing:
+  scheme: prescribed
+  tau_x: 0.1
+
+initial_conditions:
+  T_water_init_C: 15.0
+  S_uniform: 35.0
+
+time:
+  duration_days: 10
+  dt_seconds: 1200
+
+output:
+  diag_interval_hours: 1

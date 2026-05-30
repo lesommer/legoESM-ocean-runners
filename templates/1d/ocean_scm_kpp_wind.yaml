@@ -1,0 +1,51 @@
+# Ocean SCM: KPP response to wind forcing.
+#
+# Full KPP boundary-layer scheme driven by constant wind stress
+# with Coriolis at mid-latitude. The KPP scheme diagnoses the
+# boundary-layer depth from the bulk Richardson number and applies
+# non-local counter-gradient fluxes + shape-function mixing.
+#
+# Maps to: legoesm.ocean.scm.OceanColumnModel
+# Grid:    nlev vertical levels, single column
+# Mode:    ocean_scm
+
+experiment:
+  name: ocean_scm_kpp_wind
+  mode: ocean_scm
+  description: "KPP boundary layer: wind-driven mixing with Coriolis"
+
+requires: []
+
+grid:
+  type: scm
+  nlev: 50
+  H_max: 5500.0
+  dz_surface: 10.0
+  dz_deep: 200.0
+  latitude_deg: 45.0
+
+ocean:
+  eos: wright
+
+physics:
+  vertical_mixing:
+    scheme: kpp
+  convection:
+    scheme: enhanced_diffusion
+
+surface_forcing:
+  scheme: prescribed
+  tau_x: 0.1
+
+initial_conditions:
+  T_water_init_C: 20.0
+  T_deep: 2.0
+  scale_depth: 1000.0
+  S_uniform: 35.0
+
+time:
+  duration_days: 30
+  dt_seconds: 1800
+
+output:
+  diag_interval_hours: 24

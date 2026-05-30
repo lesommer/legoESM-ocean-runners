@@ -1,0 +1,48 @@
+# Ocean SCM: convective adjustment of an unstable column.
+#
+# A statically unstable column (cold/dense surface over warm/light deep water)
+# is mixed back toward neutral stratification by enhanced-diffusion convection
+# while conserving heat content.
+#
+# Maps to: legoesm.ocean.scm.OceanColumnModel
+# Grid:    nlev vertical levels, single column
+# Mode:    ocean_scm
+
+experiment:
+  name: ocean_scm_convective
+  mode: ocean_scm
+  description: "Convective adjustment: unstable column mixed by enhanced-diffusion convection"
+
+requires: []
+
+grid:
+  type: scm
+  nlev: 20
+  H_max: 200.0
+  dz_surface: 5.0
+  dz_deep: 15.0
+
+ocean:
+  eos: wright
+
+physics:
+  vertical_mixing:
+    scheme: none
+  convection:
+    scheme: enhanced_diffusion
+
+surface_forcing:
+  scheme: none
+
+initial_conditions:
+  linear_profile: true
+  T_water_init_C: 8.0
+  T_deep: 16.0
+  S_uniform: 35.0
+
+time:
+  duration_days: 5
+  dt_seconds: 600
+
+output:
+  diag_interval_hours: 6

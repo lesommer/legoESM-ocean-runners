@@ -1,0 +1,50 @@
+# Ocean SCM: surface heating with exact energy budget.
+#
+# A uniform-temperature column is heated by a constant surface heat
+# flux. The total heat content change must match q_net * duration
+# exactly, validating the energy budget closure.
+#
+# Maps to: legoesm.ocean.scm.OceanColumnModel
+# Grid:    nlev vertical levels, single column
+# Mode:    ocean_scm
+
+experiment:
+  name: ocean_scm_surface_heating
+  mode: ocean_scm
+  description: "Surface heating: constant q_net with energy budget verification"
+
+requires: []
+
+grid:
+  type: scm
+  nlev: 30
+  H_max: 1000.0
+  dz_surface: 10.0
+  dz_deep: 50.0
+
+ocean:
+  eos: wright
+
+physics:
+  vertical_mixing:
+    scheme: constant
+    constant:
+      A_v: 0.001
+      K_v: 0.0001
+  convection:
+    scheme: none
+
+surface_forcing:
+  scheme: prescribed
+  q_net: 200.0
+
+initial_conditions:
+  T_water_init_C: 10.0
+  S_uniform: 35.0
+
+time:
+  duration_days: 3
+  dt_seconds: 1800
+
+output:
+  diag_interval_hours: 6
