@@ -45,6 +45,7 @@ VALID_GRID_TYPES = {
     "gaussian",
     "mpas",
     "scm",
+    "tripole",
 }
 
 
@@ -87,14 +88,31 @@ def validate_template(path: Path, verbose: bool = False) -> list[str]:
     if time_cfg and "duration_days" not in time_cfg and "duration_hours" not in time_cfg:
         errors.append("Missing key: 'time.duration_days' or 'time.duration_hours'")
 
+    # Validate requires_patches: optional list of patch filenames
+    requires_patches = config.get("requires_patches")
+    if requires_patches is not None:
+        if not isinstance(requires_patches, list):
+            errors.append("'requires_patches' must be a list")
+        else:
+            import re
+            for entry in requires_patches:
+                if not isinstance(entry, str):
+                    errors.append(f"'requires_patches' entry must be a string, got: {entry!r}")
+                elif not re.match(r"^\d{3}-", entry):
+                    errors.append(
+                        f"'requires_patches' entry must match NNN-description.patch format, got: '{entry}'"
+                    )
+
     if verbose:
         name = config.get("experiment", {}).get("name", "?")
         mode = config.get("experiment", {}).get("mode", "?")
         grid = config.get("grid", {}).get("type", "?")
         res = config.get("grid", {}).get("resolution", "?")
         nlev = config.get("grid", {}).get("n_levels", config.get("grid", {}).get("nlev", "?"))
+        rp = config.get("requires_patches", [])
+        extra = f", requires_patches={rp}" if rp else ""
         print(f"  {path.relative_to(TEMPLATES_DIR)}: name={name}, mode={mode}, "
-              f"grid={grid}/{res}/{nlev}lev")
+              f"grid={grid}/{res}/{nlev}lev{extra}")
 
     return errors
 

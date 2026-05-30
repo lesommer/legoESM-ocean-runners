@@ -283,6 +283,17 @@ def init_experiment(
     if overrides:
         config = apply_overrides(config, overrides)
 
+    requires_patches = config.get("requires_patches", [])
+    if requires_patches:
+        missing = [p for p in requires_patches if not (PATCHES_DIR / p).exists()]
+        if missing:
+            print(f"WARNING: Template requires patches not found in patches/:")
+            for p in missing:
+                print(f"  - {p}")
+            print("  Apply them with: bash scripts/apply_patches.sh")
+        else:
+            print(f"All required patches present: {', '.join(requires_patches)}")
+
     if experiment_name is None:
         experiment_name = config.get("experiment", {}).get("name", "untitled")
 
@@ -339,6 +350,10 @@ def generate_tag(
     patches = sorted(PATCHES_DIR.glob("*.patch"))
     if patches:
         lines.append(f"patches = {','.join(p.name for p in patches)}")
+
+    requires_patches = config.get("requires_patches", [])
+    if requires_patches:
+        lines.append(f"requires_patches = {','.join(requires_patches)}")
 
     lines += [
         "",

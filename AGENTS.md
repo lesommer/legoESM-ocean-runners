@@ -94,8 +94,11 @@ experiment:
 requires:          # list of data_catalog.yaml IDs; empty list for idealized configs
   - <file_id>
 
+requires_patches:  # optional list of patches in patches/ needed by this template
+  - 001-description.patch
+
 grid:
-  type: <one of: latlon, cubed_sphere, gaussian, mpas, scm>
+  type: <one of: latlon, cubed_sphere, gaussian, mpas, scm, tripole>
   resolution: <int or string like "64x128">
   n_levels: <int>   # or nlev for ocean configs
 
@@ -136,11 +139,27 @@ If an experiment needs a legoESM feature not yet in main:
 3. Patches are numbered and applied in order by `scripts/apply_patches.sh`
 4. Remove the patch once the feature is merged into legoESM main
 
+### Patch Dependencies
+
+Templates that require patches not yet merged into legoESM declare them via `requires_patches`:
+
+```yaml
+requires_patches:
+  - 001-tripole-omip.patch
+  - 002-tke-closure.patch
+```
+
+- `requires_patches` is optional. Omit it or set to `[]` if the template only uses features in the pinned legoESM.
+- Each entry must match a file in `patches/` (with the `NNN-` prefix and `.patch` suffix).
+- At `init` time, the runner checks that listed patches exist in `patches/` and warns if any are missing.
+- The `experiment.tag` records `requires_patches` for reproducibility.
+- When a patch is merged upstream and removed from `patches/`, update the template to remove it from `requires_patches`.
+
 ### Tag Files
 
 Every initialized experiment produces an `experiment.tag` INI file with:
 - `[experiment]` — name, template, mode, creation timestamp
-- `[legoESM]` — pinned ref, commit hash, patches applied
+- `[legoESM]` — pinned ref, commit hash, patches applied, requires_patches
 - `[model]` — configuration, grid type, resolution, vertical levels
 - `[run]` — duration, timestep
 - `[data]` — data_root, requires list, resolved file paths
@@ -158,8 +177,9 @@ These tag files are intended to be archived alongside experiment output in a sep
 4. Include `experiment`, `requires`, `grid`, and `time` sections at minimum
 5. Use a valid `mode` (see table above)
 6. Reference data catalog IDs in `requires` — never invent new IDs without adding them to `data_catalog.yaml`
-7. Run `python scripts/validate_templates.py --skip-imports` to verify
-8. Update the test count in `tests/test_templates.py` if needed
+7. If the template needs unmerged legoESM features, add `requires_patches` listing the patch filenames
+8. Run `python scripts/validate_templates.py --skip-imports` to verify
+9. Update the test count in `tests/test_templates.py` if needed
 
 ### Fix a broken template
 1. Run `python scripts/validate_templates.py --skip-imports --verbose` to identify the issue
