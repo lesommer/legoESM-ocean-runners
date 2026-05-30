@@ -6,19 +6,42 @@ This document explains the purpose, philosophy, boundaries, and working conventi
 
 This repository stores **experiment templates, runners, and reproducibility tools** for running ocean (and coupled) simulations with [legoESM](https://github.com/gentine/legoESM). It is not the model itself — legoESM lives in a separate repository and is referenced by a pinned commit in `legoESM_version.txt`.
 
-The repo serves three goals:
-1. Provide version-controlled experiment configurations that stay in phase with the latest legoESM
-2. Make experiments reproducible via tag files that capture every parameter, version, and machine detail
+**Reproducibility is the core guiding principle.** Every experiment must be reconstructable from its provenance records. The full chain `template + overrides → config.yaml → experiment.tag → reproduce.py` must be unbroken. If an experiment cannot be reproduced from what is committed, the system has failed.
+
+The repo serves three goals (in priority order):
+1. **Reproducibility** — make experiments reconstructable via tag files that capture every parameter, version, and machine detail
+2. Provide version-controlled experiment configurations that stay in phase with the latest legoESM
 3. Manage external data dependencies (grids, forcings, bathymetry) declaratively without storing the data itself
 
 ## 2. Philosophy
+
+**Reproducibility contract.** The following chain must be unbroken for every experiment:
+
+```
+legoESM_version.txt  ←pins model commit→  git tag (legoesm-<hash>-<date>)
+                                             ↕ validated by CI
+template + overrides  →  config.yaml  →  experiment.tag  →  reproduce.py
+```
+
+- `legoESM_version.txt` + git tags are the provenance anchor. Every `experiment.tag` records the `runner_tag` that can reproduce the exact software environment.
+- Every tag must be validated (templates pass `lego-validate`) before creation.
+- `experiment.tag` is the permanent reproducibility record — never delete or modify it after creation.
+- `runner_tag` in `experiment.tag` must resolve to a tag in this repo. If it reads `untagged`, the reproducibility chain is broken.
+- Never change `legoESM_version.txt` without creating a corresponding tag.
+
+**Reproducibility verification checklist.** Before considering an experiment complete, verify:
+- [ ] `config.yaml` matches `run.yaml` + overrides
+- [ ] `experiment.tag` has a valid `runner_tag` (not `untagged`)
+- [ ] `experiment.tag` legoESM commit matches `legoESM_version.txt`
+- [ ] The tag recorded in `experiment.tag` exists in this repo and points to a validated commit
+- [ ] `reproduce.py` can reconstruct the software environment from `experiment.tag`
 
 **Declarative, not imperative.** Experiment templates are YAML files that describe *what* to run, not *how* to run it. The runners translate these declarations into legoESM configuration objects at runtime.
 
 **Separation of concerns.** This repo handles configuration and orchestration only. Three hard boundaries exist:
 - **legoESM** (model code) → pinned, never edited here; modifications go through `patches/`
 - **Data files** (NetCDF/Zarr) → never stored here; cataloged in `data_catalog.yaml`, fetched by `scripts/fetch_data.py`
-- **Experiment archives** (output) → stored in a separate archive repo; this repo only produces `experiment.tag` files that describe what was run
+- **Experiment Archives** (output) → stored in a separate archive repo; this repo only produces `experiment.tag` files that describe what was run
 
 **Version control as reproducibility contract.** `main` always targets the latest legoESM. Git tags (`legoesm-<hash>-<date>`) mark validated compatibility points — every time `legoESM_version.txt` is updated and templates pass validation, a tag is created. Past experiments are reproduced by checking out the tag recorded in their `experiment.tag` file. Never create branches for different legoESM versions; use tags instead.
 

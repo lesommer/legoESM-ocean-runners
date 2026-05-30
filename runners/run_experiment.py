@@ -44,12 +44,15 @@ def resolve_data_root() -> Path:
     return Path(__file__).resolve().parent.parent / "data"
 
 
+_RUNNERS_ROOT = Path(__file__).resolve().parent.parent
+
+
 def _get_current_tag() -> str:
     """Get the current git tag for HEAD that matches legoesm-*, or return 'untagged'."""
     try:
         result = subprocess.run(
             ["git", "describe", "--tags", "--exact-match", "HEAD"],
-            capture_output=True, text=True, cwd=ROOT_DIR,
+            capture_output=True, text=True, cwd=_RUNNERS_ROOT,
         )
         if result.returncode == 0:
             tag = result.stdout.strip()
@@ -477,23 +480,31 @@ def run_experiment(config_path: Path, legoesm_path: Path | None = None):
         driver.setup()
         driver.run()
     elif mode in ("3d_ocean", "3d_ocean_realistic", "barotropic_ocean", "ocean_scm"):
-        _run_ocean(config, legoesm_path)
+        _run_ocean(config, legoesm_path, config_path)
     elif mode == "coupled":
         _run_coupled(config, legoesm_path)
     else:
         raise ValueError(f"Unknown mode: {mode}")
 
 
-def _run_ocean(config: dict, legoesm_path: Path):
+def _run_ocean(config: dict, legoesm_path: Path, config_path: Path | None = None):
     """Run an ocean experiment using the legoesm ocean model directly."""
     sys.path.insert(0, str(legoesm_path / "src"))
+
+    mode = config.get("experiment", {}).get("mode", "3d_ocean")
+
+    if mode == "ocean_scm":
+        from runners.run_ocean_scm import run_ocean_scm
+        if config_path is None:
+            config_path = Path("config.yaml")
+        run_ocean_scm(config_path)
+        return
 
     from legoesm.ocean.state import LatLonCGridOceanConfig
     from legoesm.ocean.experiments import get_experiment
     import jax
     import jax.numpy as jnp
 
-    mode = config.get("experiment", {}).get("mode", "3d_ocean")
     case = config.get("ocean", {}).get("case", "rest_state")
     grid_type = config.get("grid", {}).get("type", "latlon")
 
