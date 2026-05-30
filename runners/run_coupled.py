@@ -22,10 +22,10 @@ COUPLED_PRESETS = {
 
 def list_coupled_templates() -> list[str]:
     """Return available coupled experiment template names."""
-    coupled_dir = TEMPLATES_DIR / "3d_realistic"
+    coupled_dir = TEMPLATES_DIR / "coupled"
     templates = []
     for yaml_file in sorted(coupled_dir.glob("coupled_*.yaml")):
-        templates.append(f"3d_realistic/{yaml_file.stem}")
+        templates.append(f"coupled/{yaml_file.stem}")
     return templates
 
 
@@ -46,7 +46,7 @@ def main():
         for t in list_coupled_templates():
             print(t)
     elif args.command == "run":
-        template_name = f"3d_realistic/{COUPLED_PRESETS[args.preset]}"
+        template_name = f"coupled/{COUPLED_PRESETS[args.preset]}"
         from runners.run_experiment import init_experiment
         overrides = [
             f"grid.resolution={args.resolution}",

@@ -34,8 +34,6 @@ VALID_MODES = {
     "barotropic_ocean",
     "3d_ocean",
     "3d_ocean_realistic",
-    "atmosphere_only",
-    "atmosphere_only_aimip",
     "coupled",
 }
 

@@ -2,11 +2,11 @@
 """Initialize an experiment from a template.
 
 Usage:
-    python scripts/init_experiment.py <template_name> [--name NAME] [-o KEY=VALUE...]
+    python scripts/init_experiment.py <template_name> --output-dir <dir> [-o KEY=VALUE...]
 
 Example:
     python scripts/init_experiment.py 3d_idealized/baroclinic_gyre \\
-        --name my_gyre_run \\
+        --output-dir runs/my_gyre_run \\
         -o ocean.A_h=1e6 \\
         -o time.duration_days=730
 """
@@ -30,7 +30,7 @@ def main():
     parser.add_argument("-o", "--override", action="append", default=[],
                         help="Override in KEY=VALUE format (dot-notation)")
     parser.add_argument("--machine", help="Machine config name (e.g. perlmutter)")
-    parser.add_argument("--output-dir", type=Path, help="Write files to this directory instead of experiments/")
+    parser.add_argument("--output-dir", type=Path, required=True, help="Write files to this directory (required)")
 
     args = parser.parse_args()
     exp_dir = init_experiment(args.template, args.name, args.override, args.machine, args.output_dir)

@@ -21,7 +21,6 @@ import yaml
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 PATCHES_DIR = Path(__file__).resolve().parent.parent / "patches"
 VERSION_FILE = Path(__file__).resolve().parent.parent / "legoESM_version.txt"
-EXPERIMENTS_DIR = Path(__file__).resolve().parent.parent / "experiments"
 CATALOG_FILE = Path(__file__).resolve().parent.parent / "data_catalog.yaml"
 
 
@@ -275,9 +274,11 @@ def init_experiment(
         <output_dir>/experiment.tag — reproducibility tag
         <output_dir>/run.sh        — launch script
 
-    If ``output_dir`` is provided, files are written there directly.
-    Otherwise they go to ``experiments/<name>/`` (standalone CLI usage).
+    ``output_dir`` is required — files are written there directly.
     """
+    if output_dir is None:
+        raise ValueError("--output-dir is required (e.g. runs/<experiment-name>/)")
+
     config = load_template(template_name)
 
     if overrides:
@@ -297,10 +298,7 @@ def init_experiment(
     if experiment_name is None:
         experiment_name = config.get("experiment", {}).get("name", "untitled")
 
-    if output_dir is not None:
-        exp_dir = output_dir
-    else:
-        exp_dir = EXPERIMENTS_DIR / experiment_name
+    exp_dir = output_dir
     exp_dir.mkdir(parents=True, exist_ok=True)
 
     config_path = exp_dir / "config.yaml"
@@ -497,14 +495,7 @@ def run_experiment(config_path: Path, legoesm_path: Path | None = None):
     print(f"Mode: {mode}")
     print(f"legoESM: {legoesm_path}")
 
-    if mode == "atmosphere_only":
-        exp = build_atmosphere_config(config, legoesm_path)
-        sys.path.insert(0, str(legoesm_path / "src"))
-        from legoesm.driver.model_driver import ModelDriver
-        driver = ModelDriver(exp)
-        driver.setup()
-        driver.run()
-    elif mode in ("3d_ocean", "3d_ocean_realistic", "barotropic_ocean", "ocean_scm"):
+    if mode in ("3d_ocean", "3d_ocean_realistic", "barotropic_ocean", "ocean_scm"):
         _run_ocean(config, legoesm_path, config_path)
     elif mode == "coupled":
         _run_coupled(config, legoesm_path)
@@ -587,7 +578,7 @@ def main():
     init_p.add_argument("--name", help="Experiment name (default: from template)")
     init_p.add_argument("-o", "--override", action="append", default=[], help="Override (key=value)")
     init_p.add_argument("--machine", help="Machine config name")
-    init_p.add_argument("--output-dir", type=Path, help="Write files to this directory instead of experiments/")
+    init_p.add_argument("--output-dir", type=Path, required=True, help="Write files to this directory (required)")
 
     tag_p = subparsers.add_parser("tag", help="Generate a tag file for a config")
     tag_p.add_argument("config", type=Path, help="Path to config.yaml")

@@ -221,10 +221,6 @@ __marimo__/
 # legoESM-ocean-runners specific
 # =============================================================================
 
-# Experiment output directories (archived separately)
-experiments/*/
-!experiments/.gitkeep
-
 # Data directory (downloaded data, too large for git)
 data/
 

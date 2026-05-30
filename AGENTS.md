@@ -54,15 +54,13 @@ templates/           YAML experiment configurations (the core of this repo)
   1d/                 Single-column / SCM experiments
   2d/                 Barotropic / shallow-water experiments
   3d_idealized/       Idealized 3D basins and process studies
-  3d_realistic/       OMIP, AMIP, coupled ESM configurations
+  coupled/            Coupled ESM configurations
   global_ocean/       Global ocean at various resolutions
-  ml_aimip/           ML/AIMIP experiment variants
 
 data_catalog.yaml    Single source of truth for external data files
 runners/             Python package: experiment init, run, tag generation
 scripts/             CLI tools: fetch_data, validate_templates, init_experiment, etc.
 patches/             Pre-merge patches for legoESM
-experiments/         Instantiated experiments (git-ignored)
 legoESM_version.txt  Pinned legoESM commit hash
 ```
 
@@ -88,7 +86,7 @@ Every template YAML must have:
 ```yaml
 experiment:
   name: <string>
-  mode: <one of: ocean_scm, barotropic_ocean, 3d_ocean, 3d_ocean_realistic, atmosphere_only, atmosphere_only_aimip, coupled>
+  mode: <one of: ocean_scm, barotropic_ocean, 3d_ocean, 3d_ocean_realistic, coupled>
   description: <string>
 
 requires:          # list of data_catalog.yaml IDs; empty list for idealized configs
@@ -117,8 +115,6 @@ Templates are mode-aware. The runner dispatches based on `experiment.mode`:
 | `barotropic_ocean` | Barotropic config |
 | `3d_ocean` | `LatLonCGridOceanConfig` / `OceanConfig` / `MPASOceanConfig` / `SpectralOceanConfig` (depends on `grid.type`) |
 | `3d_ocean_realistic` | Same as `3d_ocean` but with realistic bathymetry and forcing |
-| `atmosphere_only` | `ExperimentConfig` |
-| `atmosphere_only_aimip` | `ExperimentConfig` with AIMIP variant |
 | `coupled` | `ExperimentConfig` + `CoupledConfig` (selected by `coupled.preset`) |
 
 For field-level details, read the legoESM source code directly (`../legoESM/src/legoesm/driver/config.py` for atmosphere, `../legoESM/src/legoesm/ocean/state.py` for ocean).
@@ -262,32 +258,30 @@ If the secret is missing, Tier 2 is skipped. The scheduled `sync-check` job also
 # 1. Check data availability (idealized = no data needed)
 python scripts/fetch_data.py check 3d_idealized/baroclinic_gyre
 
-# 2. Initialize the experiment
-python scripts/init_experiment.py 3d_idealized/baroclinic_gyre --name my_gyre
-
-# Or write directly to a custom directory:
+# 2. Initialize the experiment (--output-dir is required)
 python scripts/init_experiment.py 3d_idealized/baroclinic_gyre --name my_gyre --output-dir /path/to/experiment
 
 # 3. Run it
-cd experiments/my_gyre && bash run.sh
+cd /path/to/experiment && bash run.sh
 ```
 
 ### "I want to run OMIP on an HPC cluster"
 ```bash
 # 1. Fetch needed data
-python scripts/fetch_data.py fetch 3d_realistic/omip_jra55 --data-dir /scratch/data
+python scripts/fetch_data.py fetch global_ocean/omip_jra55 --data-dir /scratch/data
 
 # 2. Create a machine config (in the experiments repo)
 cp ../my-legoESM-ocean-experiments/machines/_template.yaml \
    ../my-legoESM-ocean-experiments/machines/perlmutter.yaml
 # Edit perlmutter.yaml with SLURM settings and data_root
 
-# 3. Initialize with machine override (pass full path)
-python scripts/init_experiment.py 3d_realistic/omip_jra55 --name omip_run \
+# 3. Initialize with machine override (pass full path; --output-dir is required)
+python scripts/init_experiment.py global_ocean/omip_jra55 --name omip_run \
+    --output-dir /scratch/experiments/omip_run \
     --machine ../my-legoESM-ocean-experiments/machines/perlmutter.yaml
 
 # 4. Submit
-cd experiments/omip_run && sbatch run.sh
+cd /scratch/experiments/omip_run && sbatch run.sh
 ```
 
 ### "I need a legoESM feature that isn't in main yet"
@@ -314,12 +308,12 @@ rm legoESM_version.txt.override patches/001-my-feature.patch
 ### "I need to reproduce a past experiment"
 ```bash
 # Option A: Use the reproduce script (automatic)
-python scripts/reproduce.py experiments/my_old_run/experiment.tag
+python scripts/reproduce.py path/to/experiment.tag
 # This checks out the right repo tag, legoESM commit, and applies patches.
 
 # Option B: Manual reproduction
 # 1. Read the experiment.tag to find the runner_tag
-grep runner_tag experiments/my_old_run/experiment.tag
+grep runner_tag path/to/experiment.tag
 # runner_tag = legoesm-c78680b-20260529
 
 # 2. Checkout that tag in this repo
@@ -331,10 +325,10 @@ cd ../legoESM && git checkout c78680b839de
 # 4. Apply any patches listed in the tag
 cd ../legoESM-ocean-runners && bash scripts/apply_patches.sh
 
-# 5. Fetch data and run
+# 5. Fetch data and run (--output-dir is required)
 python scripts/fetch_data.py check 3d_idealized/baroclinic_gyre
-python scripts/init_experiment.py 3d_idealized/baroclinic_gyre --name reproduced_run
-cd experiments/reproduced_run && bash run.sh
+python scripts/init_experiment.py 3d_idealized/baroclinic_gyre --name reproduced_run --output-dir /path/to/experiment
+cd /path/to/experiment && bash run.sh
 ```
 
 ### "I want to update the pinned legoESM version"

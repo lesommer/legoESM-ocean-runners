@@ -28,8 +28,6 @@ class TestTemplates:
         "barotropic_ocean",
         "3d_ocean",
         "3d_ocean_realistic",
-        "atmosphere_only",
-        "atmosphere_only_aimip",
         "coupled",
     }
 
@@ -39,6 +37,7 @@ class TestTemplates:
         "gaussian",
         "mpas",
         "scm",
+        "tripole",
     }
 
     @pytest.fixture(params=list(TEMPLATES_DIR.rglob("*.yaml")))
@@ -85,7 +84,7 @@ class TestTemplates:
         )
 
     def test_all_template_categories_exist(self):
-        for category in ["1d", "2d", "3d_idealized", "3d_realistic", "global_ocean", "ml_aimip"]:
+        for category in ["1d", "2d", "3d_idealized", "coupled", "global_ocean"]:
             assert (TEMPLATES_DIR / category).is_dir(), f"Missing template category: {category}"
 
     def test_minimum_template_count(self):
@@ -255,8 +254,7 @@ class TestDataCatalog:
         """Realistic experiments should require external data."""
         from runners.run_experiment import load_template
         realistic = [
-            "3d_realistic/omip_jra55",
-            "3d_realistic/amip",
+            "global_ocean/omip_jra55",
         ]
         for tmpl in realistic:
             path = TEMPLATES_DIR / f"{tmpl}.yaml"

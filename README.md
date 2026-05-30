@@ -9,10 +9,9 @@ legoESM-ocean-runners/
 ├── templates/                    # Experiment templates (YAML, version-controlled)
 │   ├── 1d/                       #   Single-column / SCM experiments
 │   ├── 2d/                       #   Barotropic / shallow-water experiments
-│   ├── 3d_idealized/             #   Idealized 3D ocean & atmosphere tests
-│   ├── 3d_realistic/             #   Realistic configurations (OMIP, AMIP, coupled)
-│   ├── global_ocean/             #   Global ocean experiments
-│   └── ml_aimip/                 #   ML/AIMIP configurations
+│   ├── 3d_idealized/             #   Idealized 3D ocean process studies
+│   ├── coupled/                  #   Coupled ESM configurations
+│   └── global_ocean/             #   Global ocean experiments
 ├── runners/                      # Python runners (shared execution logic)
 │   ├── run_experiment.py         #   Generic experiment runner (init/run/tag)
 │   ├── run_ocean_test_matrix.py  #   Cross-product ocean test suite
@@ -23,7 +22,6 @@ legoESM-ocean-runners/
 │   ├── validate_templates.py     #   Validate templates against legoESM
 │   ├── apply_patches.sh          #   Apply patches to legoESM checkout
 │   └── sync_legoesm.sh           #   Update pinned legoESM version
-├── experiments/                  # Instantiated experiments (git-ignored)
 ├── patches/                      # Pre-merge patches for legoESM
 ├── .github/workflows/ci.yml      # CI: validate templates against latest legoESM
 ├── legoESM_version.txt           # Pinned legoESM commit
@@ -42,17 +40,18 @@ legoESM-ocean-runners/
 
 ```bash
 # From a template (e.g., baroclinic gyre)
-python scripts/init_experiment.py 3d_idealized/baroclinic_gyre --name my_gyre
+python scripts/init_experiment.py 3d_idealized/baroclinic_gyre --name my_gyre --output-dir /path/to/experiments/my_gyre
 
 # With overrides
 python scripts/init_experiment.py 3d_idealized/baroclinic_gyre \
     --name gyre_high_res \
+    --output-dir /path/to/experiments/gyre_high_res \
     -o grid.resolution=128x256 \
     -o ocean.A_h=1e6 \
     -o time.duration_days=730
 
 # Then run
-cd experiments/my_gyre
+cd /path/to/experiments/my_gyre
 bash run.sh
 ```
 
@@ -101,8 +100,6 @@ Templates are YAML files that describe experiments in a mode-aware way. Each tem
 | `barotropic_ocean` | 2D barotropic tests | Barotropic config |
 | `3d_ocean` | Idealized 3D ocean | `LatLonCGridOceanConfig` / `OceanConfig` |
 | `3d_ocean_realistic` | Realistic 3D ocean (OMIP) | `LatLonCGridOceanConfig` |
-| `atmosphere_only` | Atmosphere-only (Held-Suarez, AMIP) | `ExperimentConfig` |
-| `atmosphere_only_aimip` | AIMIP ML physics | `ExperimentConfig` |
 | `coupled` | Coupled ESM | `ExperimentConfig` + `CoupledConfig` |
 
 ### Available Templates
@@ -126,26 +123,18 @@ Templates are YAML files that describe experiments in a mode-aware way. Each tem
 - `3d_idealized/dino` — DINO diabatic ocean basin
 - `3d_idealized/isomip_plus` — Ice shelf-ocean interaction
 - `3d_idealized/geostrophic_adjustment` — Geostrophic adjustment
-- `3d_idealized/held_suarez` — Held-Suarez atmosphere
-- `3d_idealized/rce_mip` — Radiative-convective equilibrium
 
-**3D Realistic:**
-- `3d_realistic/omip_jra55` — OMIP forced by JRA55-do
-- `3d_realistic/amip` — AMIP atmosphere-only
-- `3d_realistic/coupled_aquaplanet` — Coupled aquaplanet
-- `3d_realistic/coupled_slab` — Coupled slab ocean
-- `3d_realistic/coupled_full` — Fully coupled ESM
+**Coupled:**
+- `coupled/coupled_aquaplanet` — Coupled aquaplanet
+- `coupled/coupled_slab` — Coupled slab ocean
+- `coupled/coupled_full` — Fully coupled ESM
 
 **Global Ocean:**
 - `global_ocean/global_overturning` — Global overturning circulation
 - `global_ocean/neverworld2_lite` — Neverworld2 benchmark
+- `global_ocean/omip_jra55` — OMIP forced by JRA55-do
 - `global_ocean/omip_global` — Production-resolution OMIP
 - `global_ocean/omip_cubed_sphere` — OMIP on cubed-sphere
-
-**ML/AIMIP:**
-- `ml_aimip/aimip_classical` — Classical physics AIMIP
-- `ml_aimip/aimip_column_nn` — Per-column MLP physics
-- `ml_aimip/aimip_sfno` — SFNO global emulator
 
 ## Reproducibility Tags
 
@@ -242,7 +231,7 @@ To reproduce:
 
 ```bash
 # Automatic: reads experiment.tag and reproduces the environment
-python scripts/reproduce.py experiments/my_gyre/experiment.tag
+python scripts/reproduce.py /path/to/experiment/experiment.tag
 
 # Manual: checkout the tag and corresponding legoESM version
 git checkout legoesm-c78680b-20260529
@@ -293,7 +282,7 @@ Remove patches once they are merged upstream.
 Machine configs live in the experiments repo (`../my-legoESM-ocean-experiments/machines/`), not here. Pass the full path to `--machine`:
 
 ```bash
-python scripts/init_experiment.py 3d_realistic/omip_jra55 --name omip_run \
+python scripts/init_experiment.py global_ocean/omip_jra55 --name omip_run \
     --machine ../my-legoESM-ocean-experiments/machines/perlmutter.yaml
 ```
 
@@ -340,7 +329,7 @@ Each entry in `data_catalog.yaml` specifies:
 Each template YAML includes a `requires` list referencing catalog IDs:
 
 ```yaml
-# templates/3d_realistic/omip_jra55.yaml
+# templates/global_ocean/omip_jra55.yaml
 experiment:
   name: omip_jra55
   mode: 3d_ocean_realistic
@@ -359,13 +348,13 @@ Idealized experiments have `requires: []` since they use analytical forcings.
 
 ```bash
 # List data required by a template
-python scripts/fetch_data.py list 3d_realistic/omip_jra55 -v
+python scripts/fetch_data.py list global_ocean/omip_jra55 -v
 
 # Check what's missing locally
-python scripts/fetch_data.py check 3d_realistic/omip_jra55
+python scripts/fetch_data.py check global_ocean/omip_jra55
 
 # Download all required data
-python scripts/fetch_data.py fetch 3d_realistic/omip_jra55
+python scripts/fetch_data.py fetch global_ocean/omip_jra55
 
 # Download a specific file
 python scripts/fetch_data.py fetch-file etopo1_1deg

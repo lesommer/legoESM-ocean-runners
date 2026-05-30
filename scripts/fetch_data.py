@@ -396,7 +396,7 @@ def main():
     subparsers = parser.add_subparsers(dest="command", help="Command")
 
     fetch_p = subparsers.add_parser("fetch", help="Download all data for a template")
-    fetch_p.add_argument("template", help="Template name (e.g. 3d_realistic/omip_jra55)")
+    fetch_p.add_argument("template", help="Template name (e.g. global_ocean/omip_jra55)")
     fetch_p.add_argument("--data-dir", default=None, help="Data root directory (default: $LEGOESM_DATA_DIR or ./data)")
     fetch_p.add_argument("-q", "--quiet", action="store_true", help="Less verbose output")
 
