@@ -266,13 +266,17 @@ def init_experiment(
     experiment_name: str | None = None,
     overrides: list[str] | None = None,
     machine: str | None = None,
+    output_dir: Path | None = None,
 ) -> Path:
     """Create an experiment directory from a template.
 
     Creates:
-        experiments/<name>/config.yaml   — resolved config
-        experiments/<name>/experiment.tag — reproducibility tag
-        experiments/<name>/run.sh        — launch script
+        <output_dir>/config.yaml   — resolved config
+        <output_dir>/experiment.tag — reproducibility tag
+        <output_dir>/run.sh        — launch script
+
+    If ``output_dir`` is provided, files are written there directly.
+    Otherwise they go to ``experiments/<name>/`` (standalone CLI usage).
     """
     config = load_template(template_name)
 
@@ -282,7 +286,10 @@ def init_experiment(
     if experiment_name is None:
         experiment_name = config.get("experiment", {}).get("name", "untitled")
 
-    exp_dir = EXPERIMENTS_DIR / experiment_name
+    if output_dir is not None:
+        exp_dir = output_dir
+    else:
+        exp_dir = EXPERIMENTS_DIR / experiment_name
     exp_dir.mkdir(parents=True, exist_ok=True)
 
     config_path = exp_dir / "config.yaml"
@@ -562,6 +569,7 @@ def main():
     init_p.add_argument("--name", help="Experiment name (default: from template)")
     init_p.add_argument("-o", "--override", action="append", default=[], help="Override (key=value)")
     init_p.add_argument("--machine", help="Machine config name")
+    init_p.add_argument("--output-dir", type=Path, help="Write files to this directory instead of experiments/")
 
     tag_p = subparsers.add_parser("tag", help="Generate a tag file for a config")
     tag_p.add_argument("config", type=Path, help="Path to config.yaml")
@@ -572,7 +580,7 @@ def main():
     if args.command == "run":
         run_experiment(args.config)
     elif args.command == "init":
-        exp_dir = init_experiment(args.template, args.name, args.override, args.machine)
+        exp_dir = init_experiment(args.template, args.name, args.override, args.machine, args.output_dir)
         print(f"Experiment initialized: {exp_dir}")
         print(f"  config.yaml:  {exp_dir / 'config.yaml'}")
         print(f"  experiment.tag: {exp_dir / 'experiment.tag'}")

@@ -30,9 +30,10 @@ def main():
     parser.add_argument("-o", "--override", action="append", default=[],
                         help="Override in KEY=VALUE format (dot-notation)")
     parser.add_argument("--machine", help="Machine config name (e.g. perlmutter)")
+    parser.add_argument("--output-dir", type=Path, help="Write files to this directory instead of experiments/")
 
     args = parser.parse_args()
-    exp_dir = init_experiment(args.template, args.name, args.override, args.machine)
+    exp_dir = init_experiment(args.template, args.name, args.override, args.machine, args.output_dir)
     print(f"Experiment initialized: {exp_dir}")
     print()
     print("Files created:")

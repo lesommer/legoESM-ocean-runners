@@ -246,6 +246,9 @@ python scripts/fetch_data.py check 3d_idealized/baroclinic_gyre
 # 2. Initialize the experiment
 python scripts/init_experiment.py 3d_idealized/baroclinic_gyre --name my_gyre
 
+# Or write directly to a custom directory:
+python scripts/init_experiment.py 3d_idealized/baroclinic_gyre --name my_gyre --output-dir /path/to/experiment
+
 # 3. Run it
 cd experiments/my_gyre && bash run.sh
 ```
