@@ -72,15 +72,30 @@ jobs:
 
       - name: Check for reproducibility tag
         run: |
-          COMMIT=$(grep '^commit:' legoESM_version.txt | cut -d: -f2 | tr -d ' ' | cut -c1-12)
-          DATE=$(date +%Y%m%d)
-          TAG="legoesm-${COMMIT}-${DATE}"
-          if git tag -l "$TAG" | grep -q .; then
-            echo "Tag $TAG already exists."
+          UNTAGGED=$(git log --oneline HEAD --not --tags='legoesm-*' | head -1)
+          if [ -n "$UNTAGGED" ]; then
+            echo "::warning::HEAD is not covered by a legoesm-* tag. Untagged commit(s) found."
+            echo "  First untagged: $UNTAGGED"
+            echo "  Run: bash scripts/sync_legoesm.sh --tag-only"
+            if [ "${{ github.event_name }}" = "push" ]; then
+              echo ""
+              echo "ERROR: Pushes to main must be covered by a legoesm-* tag."
+              echo "Reproducibility chain is broken — experiment.tag would record runner_tag=untagged."
+              exit 1
+            fi
           else
-            echo "No reproducibility tag for current version."
-            echo "Consider running: bash scripts/sync_legoesm.sh --tag"
-            echo "This would create tag: $TAG"
+            echo "HEAD is covered by a legoesm-* tag."
+          fi
+
+      - name: Remind to tag on reproducibility-affecting changes
+        if: github.event_name == 'pull_request'
+        run: |
+          CHANGES=$(git diff --name-only origin/main...HEAD -- 'patches/' 'templates/' 'runners/' 2>/dev/null || true)
+          if [ -n "$CHANGES" ]; then
+            echo "::notice::This PR modifies reproducibility-affecting paths. A legoesm-* tag must be created after merge."
+            echo "  Affected files:"
+            echo "$CHANGES" | while read -r f; do echo "    $f"; done
+            echo "  After merge, run: bash scripts/sync_legoesm.sh --tag-only [--push]"
           fi
 
   # Tier 2: Full validation against legoESM (requires PAT access)

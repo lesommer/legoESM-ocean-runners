@@ -43,7 +43,9 @@ template + overrides  →  config.yaml  →  experiment.tag  →  reproduce.py
 - **Data files** (NetCDF/Zarr) → never stored here; cataloged in `data_catalog.yaml`, fetched by `scripts/fetch_data.py`
 - **Experiment Archives** (output) → stored in a separate archive repo; this repo only produces `experiment.tag` files that describe what was run
 
-**Version control as reproducibility contract.** `main` always targets the latest legoESM. Git tags (`legoesm-<hash>-<date>`) mark validated compatibility points — every time `legoESM_version.txt` is updated and templates pass validation, a tag is created. Past experiments are reproduced by checking out the tag recorded in their `experiment.tag` file. Never create branches for different legoESM versions; use tags instead.
+**Version control as reproducibility contract.** `main` always targets the latest legoESM. Git tags (`legoesm-<hash>-<date>[<letter>]`) mark validated compatibility points — every time `legoESM_version.txt` is updated and templates pass validation, a tag is created. If the same legoESM pin gets multiple tags (e.g., due to runner/template/patch changes), a letter suffix is appended: `b`, `c`, etc. Past experiments are reproduced by checking out the tag recorded in their `experiment.tag` file. Never create branches for different legoESM versions; use tags instead.
+
+**Every commit to `main` must be tagged.** Changes to `patches/`, `templates/`, or `runners/` affect reproducibility just as much as legoESM pin updates. After merging such changes, run `bash scripts/sync_legoesm.sh --tag-only` to validate and tag HEAD without updating the pin. CI enforces this: pushes to `main` fail if HEAD is not covered by a `legoesm-*` tag.
 
 **Machine-agnostic templates.** Templates contain no machine-specific paths or scheduler settings. Machine configuration lives in the experiments repo's `machines/*.yaml`, passed to the runners via `--machine <path>`.
 
@@ -205,6 +207,13 @@ These tag files are intended to be archived alongside experiment output in a sep
 3. Apply patches: `bash scripts/apply_patches.sh`
 4. When merged upstream: remove the override and patch, run `sync_legoesm.sh --tag`
 
+### Tag after patches/templates/runners changes
+1. After committing changes to `patches/`, `templates/`, or `runners/`, run: `bash scripts/sync_legoesm.sh --tag-only`
+2. This validates templates and creates a `legoesm-*` tag at HEAD
+3. If the base tag already exists for the same legoESM pin, a letter suffix is appended automatically
+4. To also push: `bash scripts/sync_legoesm.sh --tag-only --push`
+5. CI will fail pushes to `main` that aren't covered by a `legoesm-*` tag
+
 ## 7. What Agents Must NOT Do
 
 - **Never edit `../legoESM/` directly.** If legoESM needs changes, create a patch in `patches/`.
@@ -216,6 +225,7 @@ These tag files are intended to be archived alongside experiment output in a sep
 - **Never bypass validation.** Always run `python scripts/validate_templates.py` after modifying templates.
 - **Never create branches for different legoESM versions.** Use tags (`legoesm-<hash>-<date>`) for reproducibility. The `main` branch always tracks the latest legoESM.
 - **Never modify `legoESM_version.txt` without tagging.** Every pin update should be accompanied by a `legoesm-<hash>-<date>` tag after validation passes.
+- **Never merge changes to `patches/`, `templates/`, or `runners/` without tagging.** These affect reproducibility just as much as pin updates. Run `bash scripts/sync_legoesm.sh --tag-only` after merging.
 - **Never assume runner capabilities without checking `project_status.md`.** The runners support init + provenance tagging for all modes, but run path availability varies. Consult `project_status.md` for what's currently implemented and tested before assuming a template can be executed through the runners.
 - **Never modify runners or templates without updating `project_status.md`.** Any change that affects runner capabilities or template test status must be reflected in `project_status.md` before committing:
   - New runner functionality (e.g., implementing the `3d_ocean` run path) → update the "Runner implementation status" table and move affected templates from "structurally validated" to "run tested"
@@ -234,6 +244,7 @@ These tag files are intended to be archived alongside experiment output in a sep
 | Compatibility tags | `git tag -l 'legoesm-*'` |
 | Reproduction tool | `scripts/reproduce.py` |
 | Version sync + tagging | `scripts/sync_legoesm.sh --tag` |
+| Tag-only (no pin update) | `scripts/sync_legoesm.sh --tag-only` |
 | Data fetch tool | `scripts/fetch_data.py` |
 | Template validator | `scripts/validate_templates.py` |
 | Experiment runner | `runners/run_experiment.py` |
@@ -348,6 +359,17 @@ bash scripts/sync_legoesm.sh           # update the pin
 python scripts/validate_templates.py   # check what broke
 # ... fix templates ...
 git commit -am "fix: update templates for new legoESM API"
-git tag "legoesm-$(grep '^commit:' legoESM_version.txt | cut -d: -f2 | tr -d ' ' | cut -c1-12)-$(date +%Y%m%d)"
-git push --tags
+bash scripts/sync_legoesm.sh --tag-only
+git push origin main --tags
 ```
+
+### "I changed patches/templates/runners but not the legoESM pin"
+```bash
+# After committing changes to patches/, templates/, or runners/:
+bash scripts/sync_legoesm.sh --tag-only           # validate + tag current HEAD
+# Or with push:
+bash scripts/sync_legoesm.sh --tag-only --push    # validate + tag + push
+```
+This creates a `legoesm-<hash>-<date>[<letter>]` tag at HEAD. If the base tag already exists
+(e.g., from a previous tag on the same legoESM pin), a letter suffix (`b`, `c`, ...) is appended
+automatically.
