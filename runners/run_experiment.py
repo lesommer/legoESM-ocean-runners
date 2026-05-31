@@ -612,6 +612,7 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
     import subprocess
 
     grid_cfg = config.get("grid", {})
+    ocean_cfg = config.get("ocean", {})
     time_cfg = config.get("time", {})
     forcing_cfg = config.get("forcing", {})
     output_cfg = config.get("output", {})
@@ -625,12 +626,20 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
         "--dt", str(time_cfg.get("dt_seconds", 3600)),
         "--nlev", str(grid_cfg.get("nlev", 75)),
         "--mesh-path", str(data_root / "grids" / "eORCA1.2_mesh_mask.nc"),
+        "--fold-convention", str(grid_cfg.get("fold_convention", "auto")),
         "--bathymetry", str(data_root / "etopo1" / "etopo1.nc"),
         "--woa-t", str(data_root / "woa18" / "woa18_annual_t.nc"),
         "--woa-s", str(data_root / "woa18" / "woa18_annual_s.nc"),
         "--core2-cache", str(data_root / "core2_nyf"),
         "--output", str(output_cfg.get("path", "results/omip_tripole")),
     ]
+
+    smag_safety = ocean_cfg.get("smag_cfl_safety", 0.0)
+    if smag_safety > 0:
+        cmd.extend(["--smag-cfl-safety", str(smag_safety)])
+
+    if not ocean_cfg.get("adaptive_implicit_vertadv", False):
+        cmd.append("--no-adaptive-vertadv")
 
     print(f"Running tripolar OMIP via: {' '.join(cmd)}")
     result = subprocess.run(cmd, env={**os.environ, "JAX_ENABLE_X64": "1"})

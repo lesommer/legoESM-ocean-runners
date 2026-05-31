@@ -16,7 +16,12 @@ requires_patches:
 grid:
   type: tripole
   resolution: eORCA1
+  fold_convention: n_lon-1-i
   nlev: 75
+
+ocean:
+  smag_cfl_safety: 0.125
+  adaptive_implicit_vertadv: true
 
 physics:
   vertical_mixing:
