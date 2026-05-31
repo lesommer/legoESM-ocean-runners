@@ -1,9 +1,9 @@
 diff --git a/scripts/run_omip_tripole.py b/scripts/run_omip_tripole.py
 new file mode 100644
-index 00000000..719d8854
+index 00000000..7b6fb539
 --- /dev/null
 +++ b/scripts/run_omip_tripole.py
-@@ -0,0 +1,730 @@
+@@ -0,0 +1,754 @@
 +#!/usr/bin/env python
 +"""Tripolar eORCA1 OMIP run with CORE-II Normal Year Forcing.
 +
@@ -75,17 +75,21 @@ index 00000000..719d8854
 +                   choices=["auto", "n_lon-1-i", "(n_lon-i)%n_lon"],
 +                   help="Tripole fold index convention (default: n_lon-1-i for eORCA1)")
 +    # Initial conditions
-+    p.add_argument("--ic-t", type=str, required=True,
++    p.add_argument("--ic-t", type=str, default="",
 +                   help="Path to NEMO WOCE temperature IC NetCDF (contemp)")
-+    p.add_argument("--ic-s", type=str, required=True,
++    p.add_argument("--ic-s", type=str, default="",
 +                   help="Path to NEMO WOCE salinity IC NetCDF (presalt)")
 +    p.add_argument("--ic-month", type=int, default=0,
 +                   help="Month index (0-11) for ICs (default 0 = January)")
++    p.add_argument("--idealized-ic", action="store_true",
++                   help="Use idealized exponentially-stratified ICs (in hydrostatic balance, avoids cold-start blowup)")
 +    # Forcing
 +    p.add_argument("--core2-cache", type=str, default="",
 +                   help="Path to CORE-II NYF cache directory")
 +    p.add_argument("--synthetic-forcing", action="store_true",
 +                   help="Use synthetic forcing (for testing without CORE2 data)")
++    p.add_argument("--forcing-scale", type=float, default=1.0,
++                   help="Scale factor for surface forcing amplitude (default 1.0; use <1 for cold-start spinup)")
 +    # Physics
 +    p.add_argument("--water-type", type=str, default="II",
 +                   choices=["I", "II", "III", "IA", "IB", "III", "none"],
@@ -98,6 +102,8 @@ index 00000000..719d8854
 +                   help="Smagorinsky CFL safety cap (0=disabled, default 0.125)")
 +    p.add_argument("--no-adaptive-vertadv", action="store_true",
 +                   help="Disable adaptive-implicit vertical momentum advection")
++    p.add_argument("--no-gm-redi", action="store_true",
++                   help="Disable GM/Redi isopycnal mixing (useful for cold-start spinup)")
 +    # Output
 +    p.add_argument("--output", type=str, default="results/omip_tripole",
 +                   help="Output directory")
@@ -549,7 +555,7 @@ index 00000000..719d8854
 +        bottom_drag_bbl_thickness=100.0,
 +        bottom_drag_bg_velocity=0.1,
 +        freshwater_closure="virtual_salt_flux",
-+        gm_redi=GMRediConfig(
++        gm_redi=None if args.no_gm_redi else GMRediConfig(
 +            kappa_GM=600.0, kappa_Redi=600.0,
 +            S_max=0.005,
 +            visbeck=VisbeckConfig(enabled=False),
@@ -561,11 +567,21 @@ index 00000000..719d8854
 +    model = LatLonCGridOceanModel(geom, z_coord, config)
 +
 +    # --- Initial conditions ---
-+    state = init_from_nemo_ic(
-+        geom, z_coord, args.ic_t, args.ic_s,
-+        land_mask_2d=land_mask_2d, H_bathy_2d=H_bathy_2d,
-+        month=args.ic_month,
-+    )
++    if args.idealized_ic:
++        from legoesm.ocean.init_latlon_cgrid import rest_state_latlon_cgrid_ocean
++        state = rest_state_latlon_cgrid_ocean(
++            geom, z_coord, H_max=float(z_coord.H_max),
++            land_mask_override=jnp.asarray(land_mask_2d),
++            H_bathy_override=jnp.asarray(H_bathy_2d),
++        )
++    else:
++        if not args.ic_t or not args.ic_s:
++            raise ValueError("Must provide --ic-t and --ic-s, or use --idealized-ic")
++        state = init_from_nemo_ic(
++            geom, z_coord, args.ic_t, args.ic_s,
++            land_mask_2d=land_mask_2d, H_bathy_2d=H_bathy_2d,
++            month=args.ic_month,
++        )
 +    print(f"  Initial state: T shape={state.T.data.shape}, "
 +          f"u shape={state.u.data.shape}")
 +
@@ -651,6 +667,14 @@ index 00000000..719d8854
 +            state, forcing=forcing, idx_t=idx_t,
 +            grid=geom, grid_type="tripole",
 +        )
++        if args.forcing_scale != 1.0:
++            from legoesm.ocean.state import OceanSurfaceForcing
++            sfc = OceanSurfaceForcing(
++                tau_x=sfc.tau_x * args.forcing_scale,
++                tau_y=sfc.tau_y * args.forcing_scale,
++                q_net=sfc.q_net * args.forcing_scale,
++                sw_down=sfc.sw_down * args.forcing_scale,
++            )
 +        state = model.step(state, dt, surface_forcing=sfc)
 +
 +        # NaN/Inf guard
