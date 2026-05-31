@@ -516,6 +516,12 @@ def _run_ocean(config: dict, legoesm_path: Path, config_path: Path | None = None
         run_ocean_scm(config_path)
         return
 
+    grid_type = config.get("grid", {}).get("type", "latlon")
+
+    if mode == "3d_ocean_realistic" and grid_type == "tripole":
+        _run_tripolar_omip(config, legoesm_path, config_path)
+        return
+
     from legoesm.ocean.state import LatLonCGridOceanConfig
     from legoesm.ocean.experiments import get_experiment
     import jax
@@ -532,6 +538,37 @@ def _run_ocean(config: dict, legoesm_path: Path, config_path: Path | None = None
     print("NOTE: Full ocean experiment execution requires case-specific Python code.")
     print("      Use run_ocean_test_matrix.py for pre-built test harnesses.")
     print("      The config.yaml and experiment.tag have been generated for reproducibility.")
+
+
+def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | None = None):
+    """Run a tripolar OMIP experiment via script delegation to run_omip_tripole.py."""
+    import subprocess
+
+    grid_cfg = config.get("grid", {})
+    time_cfg = config.get("time", {})
+    forcing_cfg = config.get("forcing", {})
+    output_cfg = config.get("output", {})
+
+    script = str(legoesm_path / "scripts" / "run_omip_tripole.py")
+    data_root = resolve_data_root()
+
+    cmd = [
+        sys.executable, script,
+        "--days", str(time_cfg.get("duration_days", 3650)),
+        "--dt", str(time_cfg.get("dt_seconds", 3600)),
+        "--nlev", str(grid_cfg.get("nlev", 75)),
+        "--mesh-path", str(data_root / "grids" / "eORCA1.2_mesh_mask.nc"),
+        "--bathymetry", str(data_root / "etopo1" / "etopo1.nc"),
+        "--woa-t", str(data_root / "woa18" / "woa18_annual_t.nc"),
+        "--woa-s", str(data_root / "woa18" / "woa18_annual_s.nc"),
+        "--core2-cache", str(data_root / "core2_nyf"),
+        "--output", str(output_cfg.get("path", "results/omip_tripole")),
+    ]
+
+    print(f"Running tripolar OMIP via: {' '.join(cmd)}")
+    result = subprocess.run(cmd, env={**os.environ, "JAX_ENABLE_X64": "1"})
+    if result.returncode != 0:
+        raise RuntimeError(f"run_omip_tripole.py exited with code {result.returncode}")
 
 
 def _run_coupled(config: dict, legoesm_path: Path):

@@ -4,13 +4,13 @@ This document tracks what's currently implemented and tested in the runners. Con
 
 ## Runner implementation status
 
-Only `ocean_scm` mode has a working run path (YAML → model object → output). All other modes (`3d_ocean`, `3d_ocean_realistic`, `barotropic_ocean`, `coupled`) have working init but stub or untested run paths. Do not assume that calling `run_experiment run` on a 3D or coupled template will execute a simulation — it will not.
+Only `ocean_scm` mode has a working native run path (YAML → model object → output). The `3d_ocean_realistic` mode has a working run path for tripolar grids via script delegation to `run_omip_tripole.py`. All other mode/grid combinations have working init but stub or untested run paths. Do not assume that calling `run_experiment run` on a 3D or coupled template will execute a simulation — check the table below.
 
 | Mode | Init (YAML → config.yaml + tag) | Run (config.yaml → model → output) | Notes |
 |------|----------------------------------|-------------------------------------|-------|
 | `ocean_scm` | Working | **Working** | Constructs `OceanColumnModel`, runs, saves NetCDF. 5 templates tested end-to-end. |
 | `3d_ocean` | Working | **Stub** | Prints note to use `run_ocean_test_matrix.py` or legoESM scripts directly. No model object constructed. |
-| `3d_ocean_realistic` | Working | **Stub** | Same as `3d_ocean`. |
+| `3d_ocean_realistic` | Working | **Working for tripolar only** | Script delegation: calls `run_omip_tripole.py` (patch `001-omip-tripole-script.patch`) which constructs `LatLonCGridOceanModel`, applies CORE2 NYF forcing, runs Python time loop. Other grid types still stub. |
 | `barotropic_ocean` | Working | **Not implemented** | Raises `NotImplementedError`. |
 | `coupled` | Working | **Partially implemented** | Constructs `CoupledESMDriver` but untested. |
 
@@ -44,13 +44,16 @@ Only `ocean_scm` mode has a working run path (YAML → model object → output).
 | `global_ocean/` | `neverworld2_lite` | structurally validated only | no |
 | `global_ocean/` | `omip_global` | structurally validated only | no |
 | `global_ocean/` | `omip_cubed_sphere` | structurally validated only | no |
+| `global_ocean/` | `omip_tripole` | structurally validated only | no |
 
 ## Definitions
 
 - **Structurally validated** — `validate_templates.py --skip-imports` passes: the YAML has required sections (`experiment`, `grid`, `time`), a valid mode, a valid grid type, and `requires` references match entries in `data_catalog.yaml`. No legoESM code is exercised.
 - **Init tested** — `init_experiment()` successfully loads the template, applies overrides, writes `config.yaml`, `experiment.tag`, and `run.sh`.
-- **Run tested** — the runner constructed a legoESM model object from the YAML, executed it, and produced output (NetCDF).
+- **Run tested** — the runner executed the experiment and produced output (NetCDF, diagnostics JSON, etc.).
 
 ## Current 3D / coupled workflow
 
-For modes where the runner's `run` path is a stub, experiments are executed by calling legoESM's own Python scripts directly (e.g., `legoESM/scripts/run_omip.py`). The runners still handle init and provenance tagging for these modes — the generated `config.yaml` and `experiment.tag` are valid even though `run_experiment run` does not execute a simulation.
+For `3d_ocean_realistic` on tripolar grids, the runner delegates to `run_omip_tripole.py` (delivered as patch `001-omip-tripole-script.patch`). This script constructs a `LatLonCGridOceanModel` with validated production defaults, loads CORE2 NYF forcing, and runs a Python time loop. The patch also extends `apply_omip2_surface_fluxes()` in legoESM with tripolar grid support (2D lat/lon forcing sampling + wind-stress rotation at the bipolar fold).
+
+For all other 3D/coupled modes, experiments are executed by calling legoESM's own Python scripts directly (e.g., `legoESM/scripts/run_omip.py`). The runners still handle init and provenance tagging for these modes — the generated `config.yaml` and `experiment.tag` are valid even though `run_experiment run` does not execute a simulation.

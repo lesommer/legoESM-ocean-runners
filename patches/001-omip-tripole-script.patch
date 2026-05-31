@@ -1,0 +1,421 @@
+diff --git a/scripts/run_omip_tripole.py b/scripts/run_omip_tripole.py
+new file mode 100644
+index 00000000..7f9a97f6
+--- /dev/null
++++ b/scripts/run_omip_tripole.py
+@@ -0,0 +1,316 @@
++#!/usr/bin/env python
++"""Tripolar eORCA1 OMIP run with CORE-II Normal Year Forcing.
++
++A focused tripolar OMIP script that uses the same validated production
++configuration as run_omip.py's tripolar branch and run_tripole_20yr.py,
++but with the simpler COREv2 NYF forcing pipeline (Python time loop +
++apply_omip2_surface_fluxes) instead of the JRA55 scan-body infrastructure.
++
++Usage:
++    JAX_ENABLE_X64=1 python scripts/run_omip_tripole.py \\
++        --days 365 --dt 3600 --nlev 75 \\
++        --mesh-path data/grids/eORCA1.2_mesh_mask.nc \\
++        --bathymetry data/etopo1/etopo1.nc \\
++        --woa-t data/woa18/woa18_annual_t.nc \\
++        --woa-s data/woa18/woa18_annual_s.nc \\
++        --core2-cache data/core2_nyf \\
++        --output results/omip_tripole
++"""
++
++from __future__ import annotations
++
++import argparse
++import sys
++import time as _time
++from pathlib import Path
++
++sys.stdout.reconfigure(line_buffering=True)
++
++_PROJECT_ROOT = str(Path(__file__).resolve().parents[1])
++if _PROJECT_ROOT not in sys.path:
++    sys.path.insert(0, _PROJECT_ROOT)
++
++import jax
++jax.config.update("jax_enable_x64", True)
++
++import jax.numpy as jnp
++import numpy as np
++
++from legoesm.core.precision import PrecisionPolicy, set_policy
++set_policy(PrecisionPolicy.fp64())
++
++
++def parse_args():
++    p = argparse.ArgumentParser(
++        description="Tripolar eORCA1 OMIP with CORE-II Normal Year Forcing",
++    )
++    p.add_argument("--days", type=float, default=365.0,
++                   help="Simulation length [days] (default 365)")
++    p.add_argument("--dt", type=float, default=600.0,
++                   help="Timestep [s] (default 600)")
++    p.add_argument("--nlev", type=int, default=75,
++                   help="Number of vertical levels (default 75)")
++    p.add_argument("--H-max", type=float, default=5500.0,
++                   help="Maximum ocean depth [m] (default 5500)")
++    p.add_argument("--H-min", type=float, default=10.0,
++                   help="Minimum ocean depth [m] (default 10)")
++    p.add_argument("--smoothing-passes", type=int, default=2,
++                   help="Laplacian smoothing passes for bathymetry (default 2)")
++    p.add_argument("--r-factor-max", type=float, default=0.2,
++                   help="Max bathymetric slope r-factor (default 0.2)")
++    p.add_argument("--south-cap-lat", type=float, default=-75.0,
++                   help="Latitude below which cells become land (default -75)")
++    p.add_argument("--mesh-path", type=str, required=True,
++                   help="Path to eORCA1.2 mesh_mask NetCDF")
++    p.add_argument("--bathymetry", type=str, required=True,
++                   help="Path to ETOPO bathymetry NetCDF")
++    p.add_argument("--woa-t", type=str, required=True,
++                   help="Path to WOA18 temperature NetCDF")
++    p.add_argument("--woa-s", type=str, required=True,
++                   help="Path to WOA18 salinity NetCDF")
++    p.add_argument("--core2-cache", type=str, required=True,
++                   help="Path to CORE-II NYF cache directory")
++    p.add_argument("--output", type=str, default="results/omip_tripole",
++                   help="Output directory")
++    p.add_argument("--checkpoint-days", type=float, default=30.0,
++                   help="Save checkpoint every N days (default 30)")
++    return p.parse_args()
++
++
++def create_tripolar_setup(mesh_path, nlev, H_max):
++    """Create the tripolar grid, z-coordinate, config, and model.
++
++    Uses the validated production defaults from run_omip.py's tripolar
++    branch (L703-787) and run_tripole_20yr.py.
++    """
++    from legoesm.grids.tripole import create_tripole_grid
++    from legoesm.ocean.dynamics.ocean_model_latlon_cgrid import (
++        LatLonCGridOceanModel,
++    )
++    from legoesm.ocean.state import LatLonCGridOceanConfig
++    from legoesm.ocean.vertical import create_zstar_coordinate
++    from legoesm.ocean.physics.combined import OceanPhysicsConfig
++    from legoesm.ocean.physics.surface_forcing.config import (
++        SurfaceForcingConfig,
++    )
++    from legoesm.ocean.physics.vertical_mixing.config import (
++        VerticalMixingConfig, KPPConfig,
++    )
++    from legoesm.ocean.physics.convection.config import (
++        OceanConvectionConfig, EnhancedDiffusionConfig,
++    )
++    from legoesm.ocean.physics.bottom_drag.config import BottomDragConfig
++    from legoesm.ocean.physics.lateral_mixing.config import (
++        LateralMixingConfig, GMRediConfig, VisbeckConfig,
++    )
++
++    geom = create_tripole_grid(mesh_path)
++
++    z_coord = create_zstar_coordinate(nlev=nlev, H_max=H_max)
++
++    sf_config = SurfaceForcingConfig(scheme="none")
++
++    physics = OceanPhysicsConfig(
++        surface_forcing=sf_config,
++        vertical_mixing=VerticalMixingConfig(
++            scheme="kpp",
++            kpp=KPPConfig(K_conv=1.0),
++        ),
++        lateral_mixing=LateralMixingConfig(scheme="none"),
++        bottom_drag=BottomDragConfig(scheme="none"),
++        convection=OceanConvectionConfig(
++            scheme="enhanced_diffusion",
++            enhanced_diffusion=EnhancedDiffusionConfig(K_conv=1.0),
++        ),
++        shortwave_penetration=None,
++    )
++
++    config = LatLonCGridOceanConfig(
++        A_h=1.0e5,
++        A_v=1.0e-4,
++        K_v=1.0e-5,
++        B_h=0.0,
++        C_smag_lap=0.33,
++        n_barotropic_substeps=30,
++        barotropic_solver="implicit_cn",
++        barotropic_implicit_pcg_tol=1e-10,
++        barotropic_implicit_pcg_maxiter=300,
++        pgf_scheme="adcroft",
++        implicit_vertical_mixing=True,
++        tracer_advection="tvd",
++        bottom_drag_r=1e-3,
++        bottom_drag_bbl_thickness=100.0,
++        bottom_drag_bg_velocity=0.1,
++        freshwater_closure="virtual_salt_flux",
++        gm_redi=GMRediConfig(
++            kappa_GM=600.0, kappa_Redi=600.0,
++            S_max=0.005,
++            visbeck=VisbeckConfig(enabled=False),
++            slope_scheme="centered",
++        ),
++        physics=physics,
++    )
++
++    model = LatLonCGridOceanModel(geom, z_coord, config)
++    return geom, z_coord, config, model
++
++
++def init_tripolar_bathymetry(grid, z_coord, model, config, bathy_path,
++                             H_max, H_min, smoothing_passes, r_factor_max,
++                             south_cap_lat):
++    """Load ETOPO bathymetry and rebuild model with partial cells.
++
++    Mirrors the validated run_tripole_20yr.py / run_omip.py recipe
++    (L3285-3350): ETOPO loading, partial-cell snap (30% threshold),
++    model rebuild, rest-state rebuild.
++    """
++    from legoesm.ocean.bathymetry import BathymetryConfig, init_ocean_bathymetry
++    from legoesm.ocean.vertical import create_partial_cell_coordinate
++    from legoesm.ocean.init_latlon_cgrid import rest_state_latlon_cgrid_ocean
++    from legoesm.ocean.dynamics.ocean_model_latlon_cgrid import (
++        LatLonCGridOceanModel,
++    )
++
++    bathy_cfg = BathymetryConfig(
++        source="file", path=bathy_path,
++        H_max=H_max, H_min=H_min,
++        smoothing_passes=smoothing_passes,
++        r_factor_max=r_factor_max,
++        depth_is_negative=True,
++        north_cap_lat=None,
++        south_cap_lat=south_cap_lat,
++    )
++    H_raw, mask_raw = init_ocean_bathymetry(grid, bathy_cfg)
++    H_raw = jnp.asarray(H_raw, dtype=jnp.float64)
++    mask_raw = jnp.asarray(mask_raw, dtype=jnp.float64)
++
++    snap_frac = 0.30
++    abs_z_half = jnp.abs(z_coord.z_half_ref)
++    nlev = z_coord.n_levels
++    Hf = H_raw.ravel()
++    n_above = jnp.sum(abs_z_half[None, :] < Hf[:, None], axis=1)
++    bottom_level = jnp.clip(n_above - 1, 0, nlev - 1)
++    dzb = z_coord.dz_ref[bottom_level]
++    partial_thick = Hf - abs_z_half[bottom_level]
++    frac = partial_thick / jnp.maximum(dzb, 1e-10)
++    z_upper = abs_z_half[bottom_level]
++    z_lower = abs_z_half[jnp.minimum(bottom_level + 1, nlev)]
++    Hs = jnp.where(Hf - z_upper < z_lower - Hf, z_upper, z_lower)
++    needs_snap = (frac < snap_frac) & (frac > 0) & (Hf > 0)
++    H_snap = jnp.where(needs_snap, Hs, Hf)
++    H_snap = jnp.where(H_snap <= 0, 0.0, H_snap).reshape(H_raw.shape)
++    mask_snap = jnp.where(H_snap > 0, mask_raw, 0.0)
++
++    pc_coord = create_partial_cell_coordinate(z_coord, H_snap)
++    model = LatLonCGridOceanModel(grid, pc_coord, config)
++
++    state = rest_state_latlon_cgrid_ocean(
++        grid, pc_coord, H_max=H_max,
++        T_water_init_C=20.0, T_deep=2.0, S_uniform=35.0,
++        H_bathy_override=H_snap,
++        land_mask_override=mask_snap,
++    )
++
++    n_ocean = int(jnp.sum(mask_snap > 0.5))
++    n_total = int(np.prod(np.asarray(mask_snap).shape))
++    print(f"  Tripole ETOPO: {n_ocean}/{n_total} ocean cells "
++          f"(H_min={H_min}m, south_cap={south_cap_lat}, "
++          f"snap={snap_frac}, smooth={smoothing_passes})")
++
++    return pc_coord, model, state
++
++
++def main():
++    args = parse_args()
++    dt = args.dt
++    n_steps = int(args.days * 86400.0 / dt)
++    ckpt_steps = int(args.checkpoint_days * 86400.0 / dt)
++
++    print(f"Tripolar OMIP: {args.days} days, dt={dt}s, {n_steps} steps, "
++          f"{args.nlev} levels")
++    print(f"  Mesh: {args.mesh_path}")
++    print(f"  Bathymetry: {args.bathymetry}")
++    print(f"  WOA: {args.woa_t}, {args.woa_s}")
++    print(f"  CORE2 cache: {args.core2_cache}")
++
++    # --- Grid + model ---
++    geom, z_coord, config, model = create_tripolar_setup(
++        args.mesh_path, args.nlev, args.H_max,
++    )
++
++    # --- Rest state ---
++    from legoesm.ocean.init_latlon_cgrid import rest_state_latlon_cgrid_ocean
++    state = rest_state_latlon_cgrid_ocean(geom, z_coord, H_max=args.H_max)
++    print(f"  Rest state: T shape={state.T.data.shape}, "
++          f"u shape={state.u.data.shape}")
++
++    # --- Bathymetry ---
++    z_coord, model, state = init_tripolar_bathymetry(
++        geom, z_coord, model, config,
++        args.bathymetry, args.H_max, args.H_min,
++        args.smoothing_passes, args.r_factor_max, args.south_cap_lat,
++    )
++
++    # --- WOA18 initialization ---
++    from legoesm.ocean.init_woa import init_ocean_from_woa
++    T_woa, S_woa = init_ocean_from_woa(geom, z_coord, args.woa_t, args.woa_s)
++    T_woa_masked = T_woa * state.land_mask.data[..., jnp.newaxis]
++    S_woa_masked = S_woa * state.land_mask.data[..., jnp.newaxis]
++    state = state._replace(
++        T=state.T.replace(data=T_woa_masked.astype(state.T.data.dtype)),
++        S=state.S.replace(data=S_woa_masked.astype(state.S.data.dtype)),
++    )
++    print(f"  WOA18 initialized: T=[{float(T_woa_masked[state.land_mask.data > 0.5].min()):.1f}, "
++          f"{float(T_woa_masked[state.land_mask.data > 0.5].max()):.1f}] C")
++
++    # --- CORE-II NYF forcing ---
++    from legoesm.ocean.forcing import load_core2_nyf
++    from legoesm.ocean.coupler import apply_omip2_surface_fluxes
++    forcing = load_core2_nyf(cache_dir=args.core2_cache, allow_synthetic=False)
++    n_forc = forcing.u10.shape[0]
++    print(f"  CORE2 NYF: {n_forc} time records")
++
++    # --- Output ---
++    output_dir = Path(args.output)
++    output_dir.mkdir(parents=True, exist_ok=True)
++
++    # --- Time loop ---
++    diag = []
++    wall_t0 = _time.time()
++    for step in range(n_steps):
++        idx_t = (step * n_forc) // max(1, n_steps)
++        state = apply_omip2_surface_fluxes(
++            state, forcing=forcing, idx_t=idx_t,
++            z_coord=z_coord, grid=geom, grid_type="tripole",
++            dt=dt,
++        )
++        state = model.step(state, dt)
++
++        if (step + 1) % ckpt_steps == 0 or step == n_steps - 1:
++            day = (step + 1) * dt / 86400.0
++            T_top = np.asarray(state.T.data[..., 0])
++            mask = np.asarray(state.land_mask.data) > 0.5
++            sst = float(T_top[mask].mean()) if mask.any() else float("nan")
++            max_u = float(jnp.max(jnp.abs(state.u.data[..., 0])))
++            elapsed = _time.time() - wall_t0
++            print(f"  Day {day:7.1f}/{args.days}  SST={sst:6.2f} C  "
++                  f"max|u|={max_u:.4f} m/s  wall={elapsed:.0f}s")
++            diag.append(dict(day=day, sst=sst, max_u=max_u, wall=elapsed))
++
++            ckpt_path = output_dir / f"restart_day{day:.0f}.npz"
++            np.savez(ckpt_path,
++                     T=np.asarray(state.T.data),
++                     S=np.asarray(state.S.data),
++                     u=np.asarray(state.u.data),
++                     v=np.asarray(state.v.data),
++                     eta=np.asarray(state.eta.data))
++
++    # --- Save diagnostics ---
++    import json
++    with open(output_dir / "diagnostics.json", "w") as f:
++        json.dump(diag, f, indent=2)
++    print(f"Done. Output in {output_dir}")
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/src/legoesm/ocean/coupler/omip2_applicator.py b/src/legoesm/ocean/coupler/omip2_applicator.py
+index b5baf7a6..88037b1d 100644
+--- a/src/legoesm/ocean/coupler/omip2_applicator.py
++++ b/src/legoesm/ocean/coupler/omip2_applicator.py
+@@ -176,11 +176,11 @@ def apply_omip2_surface_fluxes(state, *, forcing, idx_t: int,
+                                  rho_air: float = 1.225):
+     """Apply one timestep of JRA55-do / CORE-II forcing to ``state``.
+ 
+-    Currently supports ``grid_type="latlon"`` and
+-    ``grid_type="latlon_regional"`` -- the two grids the OMIP-2 and
+-    Bryan-THC drivers use. MPAS + cube support stubbed (raises
+-    ``NotImplementedError``) because the production OMIP-2 spec uses
+-    lat-lon; MPAS extension is a follow-up.
++    Supports ``grid_type="latlon"``, ``grid_type="latlon_regional"``,
++    ``grid_type="cubed_sphere"``, ``grid_type="mpas"``, and
++    ``grid_type="tripole"``. The tripolar path uses nearest-neighbour
++    forcing sampling at 2-D curvilinear T-points and rotates wind stress
++    via ``cos/sin_alpha_u/v`` at the bipolar fold.
+ 
+     Returns a new ``state`` with updated top-layer u, v, T fields.
+     """
+@@ -344,6 +344,77 @@ def apply_omip2_surface_fluxes(state, *, forcing, idx_t: int,
+                     dims=state.u.dims, units=state.u.units),
+         )
+ 
++    if grid_type == "tripole":
++        # Tripolar eORCA1: forcing sampled at 2-D curvilinear T-points via
++        # nearest-neighbour, then C-grid face interpolation + wind-stress
++        # rotation at the bipolar fold (cos/sin_alpha_u/v).
++        lat_pts = np.degrees(np.asarray(grid.lat_T).ravel())
++        lon_pts = np.degrees(np.asarray(grid.lon_T).ravel())
++        target_shape = np.asarray(grid.lat_T).shape
++        forc = _sample_forcing_points(forcing, idx_t, lat_pts, lon_pts)
++        for k in forc:
++            forc[k] = forc[k].reshape(target_shape)
++        T_sfc_K = np.asarray(state.T.data, dtype=np.float64)[..., 0] + constants.T_freeze
++        q_sfc = np.asarray(_bolton_q_sat(jnp.asarray(T_sfc_K)),
++                           dtype=np.float64)
++        tau_x, tau_y, sh, lh = air_sea_fluxes(
++            u10=jnp.asarray(forc["u10"]),
++            v10=jnp.asarray(forc["v10"]),
++            T_air_K=jnp.asarray(forc["T_air"]),
++            q_air=jnp.asarray(forc["q_air"]),
++            T_sfc_K=jnp.asarray(T_sfc_K),
++            q_sfc=jnp.asarray(q_sfc),
++            rho_air=jnp.asarray(rho_air),
++        )
++        lw_up = 0.97 * sigma_sb * T_sfc_K ** 4
++        Q_net = (np.asarray(sh) + np.asarray(lh)
++                 + forc["sw_down"] - lw_up + forc["lw_down"])
++        mask = np.asarray(state.land_mask.data, dtype=np.float64)
++        dT_top = Q_net / (rho_0 * c_p * dz_0) * dt * mask
++        T_new = np.asarray(state.T.data, dtype=np.float64).copy()
++        T_new[..., 0] = T_new[..., 0] + dT_top
++        # C-grid face interpolation for tau_x, tau_y (same stencil as latlon).
++        tau_x_np = np.asarray(tau_x)
++        tau_y_np = np.asarray(tau_y)
++        n_lat, n_lon = tau_x_np.shape
++        tau_x_face = np.zeros((n_lat, n_lon + 1), dtype=np.float64)
++        tau_x_face[:, 1:-1] = 0.5 * (tau_x_np[:, :-1] + tau_x_np[:, 1:])
++        tau_x_face[:, 0] = tau_x_np[:, 0]
++        tau_x_face[:, -1] = tau_x_np[:, -1]
++        tau_y_face = np.zeros((n_lat + 1, n_lon), dtype=np.float64)
++        tau_y_face[1:-1, :] = 0.5 * (tau_y_np[:-1, :] + tau_y_np[1:, :])
++        tau_y_face[0, :] = tau_y_np[0, :]
++        tau_y_face[-1, :] = tau_y_np[-1, :]
++        # Wind-stress rotation at the bipolar fold.
++        # South of the fold cos_alpha≈1, sin_alpha≈0 so this is identity;
++        # near the fold the rotation aligns geographic tau to grid-aligned.
++        cos_alpha_u = np.asarray(grid.cos_alpha_u, dtype=np.float64)
++        sin_alpha_u = np.asarray(grid.sin_alpha_u, dtype=np.float64)
++        cos_alpha_v = np.asarray(grid.cos_alpha_v, dtype=np.float64)
++        sin_alpha_v = np.asarray(grid.sin_alpha_v, dtype=np.float64)
++        tau_i_face = (tau_x_face * cos_alpha_u
++                      + tau_y_face * sin_alpha_u)
++        tau_j_face = (-tau_x_face * sin_alpha_v
++                      + tau_y_face * cos_alpha_v)
++        u_mask = np.asarray(state.u_mask.data, dtype=np.float64)
++        u_face = np.asarray(state.u.data, dtype=np.float64).copy()
++        u_face[..., 0] = u_face[..., 0] + (
++            tau_i_face / (rho_0 * dz_0) * dt * u_mask
++        )
++        v_mask = np.asarray(state.v_mask.data, dtype=np.float64)
++        v_face = np.asarray(state.v.data, dtype=np.float64).copy()
++        v_face[..., 0] = v_face[..., 0] + (
++            tau_j_face / (rho_0 * dz_0) * dt * v_mask
++        )
++        return state._replace(
++            T=Field(jnp.asarray(T_new), name=state.T.name,
++                    dims=state.T.dims, units=state.T.units),
++            u=Field(jnp.asarray(u_face), name=state.u.name,
++                    dims=state.u.dims, units=state.u.units),
++            v=Field(jnp.asarray(v_face), name=state.v.name,
++                    dims=state.v.dims, units=state.v.units),
++        )
++
+     raise NotImplementedError(
+         f"OMIP-2 applicator does not support grid_type={grid_type!r}"
+     )

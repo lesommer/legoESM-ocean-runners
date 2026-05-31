@@ -1,0 +1,34 @@
+experiment:
+  name: omip_tripole
+  mode: 3d_ocean_realistic
+  description: "OMIP on tripolar grid (eORCA1) with COREv2 NYF forcing"
+
+requires:
+  - etopo1_1deg
+  - woa18_annual_t
+  - woa18_annual_s
+  - core2_nyf
+  - eorca1_mesh
+
+requires_patches:
+  - 001-omip-tripole-script.patch
+
+grid:
+  type: tripole
+  resolution: eORCA1
+  nlev: 75
+
+physics:
+  vertical_mixing:
+    scheme: kpp
+  tidal_mixing:
+    scheme: jayne_st_laurent
+  lateral_mixing:
+    scheme: gm_redi
+
+forcing:
+  mode: core2_nyf
+
+time:
+  duration_days: 3650
+  dt_seconds: 3600

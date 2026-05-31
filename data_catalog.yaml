@@ -210,6 +210,39 @@ files:
     citation: "Tsujino et al. 2018"
 
   # ===========================================================================
+  # Surface Forcing: CORE-II Normal Year (OMIP-1)
+  # ===========================================================================
+  core2_nyf:
+    description: "CORE-II Normal Year Forcing (Large & Yeager 2009), pre-processed Zarr"
+    path: core2_nyf/nyf.zarr/
+    access: institutional
+    instructions: |
+      1. Register at https://www.earthsystemgrid.org/dataset/ucar.cgd.artmip.core2.html
+      2. Download CORE-II NYF data (7 variables, daily climatological year)
+      3. Convert to Zarr with the same schema as legoESM's OceanForcing:
+         lon, lat, time_s, u10, v10, T_air, q_air, sw_down, lw_down, precip, runoff
+      4. Store as DATA_ROOT/core2_nyf/nyf.zarr/
+    sha256: pending
+    size_mb: 2000
+    format: Zarr
+    variables: [u10, v10, T_air, q_air, sw_down, lw_down, precip, runoff]
+    citation: "Large & Yeager 2009, Climate Dynamics 33, 341-364"
+
+  # ===========================================================================
+  # Ocean Grids: Tripolar
+  # ===========================================================================
+  eorca1_mesh:
+    description: "eORCA1.2 tripolar mesh mask (NEMO format)"
+    path: grids/eORCA1.2_mesh_mask.nc
+    url: "https://zenodo.org/records/4436658/files/eORCA1.2_mesh_mask.nc"
+    access: public
+    sha256: pending
+    size_mb: 484
+    format: NetCDF4
+    variables: [glamt, gphit, glamu, gphiu, glamv, gphiv, tmask, umask, vmask, e1t, e2t, e1u, e2u, e1v, e2v]
+    citation: "NEMO ocean model eORCA1.2 configuration"
+
+  # ===========================================================================
   # Radiation: RRTMGP Optics
   # ===========================================================================
   rrtmgp_gas_lw:
