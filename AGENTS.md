@@ -217,6 +217,11 @@ These tag files are intended to be archived alongside experiment output in a sep
 - **Never create branches for different legoESM versions.** Use tags (`legoesm-<hash>-<date>`) for reproducibility. The `main` branch always tracks the latest legoESM.
 - **Never modify `legoESM_version.txt` without tagging.** Every pin update should be accompanied by a `legoesm-<hash>-<date>` tag after validation passes.
 - **Never assume runner capabilities without checking `project_status.md`.** The runners support init + provenance tagging for all modes, but run path availability varies. Consult `project_status.md` for what's currently implemented and tested before assuming a template can be executed through the runners.
+- **Never modify runners or templates without updating `project_status.md`.** Any change that affects runner capabilities or template test status must be reflected in `project_status.md` before committing:
+  - New runner functionality (e.g., implementing the `3d_ocean` run path) → update the "Runner implementation status" table and move affected templates from "structurally validated" to "run tested"
+  - New template → add a row to the "Template test status" table (status: structurally validated only until run-tested)
+  - Broken/removed functionality → update status accordingly
+  - End-to-end test of a template → move it from "structurally validated" to "run tested"
 
 ## 8. Key File Locations
 
