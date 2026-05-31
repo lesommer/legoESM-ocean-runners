@@ -615,6 +615,7 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
     ocean_cfg = config.get("ocean", {})
     time_cfg = config.get("time", {})
     forcing_cfg = config.get("forcing", {})
+    physics_cfg = config.get("physics", {})
     output_cfg = config.get("output", {})
 
     script = str(legoesm_path / "scripts" / "run_omip_tripole.py")
@@ -625,11 +626,10 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
         "--days", str(time_cfg.get("duration_days", 3650)),
         "--dt", str(time_cfg.get("dt_seconds", 3600)),
         "--nlev", str(grid_cfg.get("nlev", 75)),
-        "--mesh-path", str(data_root / "grids" / "eORCA1.2_mesh_mask.nc"),
-        "--fold-convention", str(grid_cfg.get("fold_convention", "auto")),
-        "--bathymetry", str(data_root / "etopo1" / "etopo1.nc"),
-        "--woa-t", str(data_root / "woa18" / "woa18_annual_t.nc"),
-        "--woa-s", str(data_root / "woa18" / "woa18_annual_s.nc"),
+        "--domain-cfg", str(data_root / "grids" / "domain_cfg.nc"),
+        "--fold-convention", str(grid_cfg.get("fold_convention", "n_lon-1-i")),
+        "--ic-t", str(data_root / "ic" / "woce_temp_monthly_init_4p2.nc"),
+        "--ic-s", str(data_root / "ic" / "woce_salt_monthly_init_4p2.nc"),
         "--core2-cache", str(data_root / "core2_nyf"),
         "--output", str(output_cfg.get("path", "results/omip_tripole")),
     ]
@@ -640,6 +640,23 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
 
     if not ocean_cfg.get("adaptive_implicit_vertadv", False):
         cmd.append("--no-adaptive-vertadv")
+
+    sw_cfg = physics_cfg.get("shortwave_penetration", {})
+    water_type = sw_cfg.get("water_type", "II")
+    if water_type and water_type != "none":
+        cmd.extend(["--water-type", water_type])
+
+    sss_target = data_root / "sss" / "sss_climatology_for_restoring.nc"
+    sss_cfg = physics_cfg.get("sss_restoring", {})
+    if sss_cfg.get("enabled", False) and sss_target.exists():
+        cmd.extend(["--sss-target", str(sss_target)])
+
+    runoff_cfg = forcing_cfg.get("runoff", {})
+    if runoff_cfg.get("enabled", False):
+        cmd.append("--runoff")
+
+    exp_name = config.get("experiment", {}).get("name", "ORCA1_LEGO")
+    cmd.extend(["--exp-name", exp_name])
 
     print(f"Running tripolar OMIP via: {' '.join(cmd)}")
     result = subprocess.run(cmd, env={**os.environ, "JAX_ENABLE_X64": "1"})

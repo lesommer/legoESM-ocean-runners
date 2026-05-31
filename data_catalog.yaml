@@ -242,6 +242,64 @@ files:
     variables: [glamt, gphit, glamu, gphiu, glamv, gphiv, tmask, umask, vmask, e1t, e2t, e1u, e2u, e1v, e2v]
     citation: "NEMO ocean model eORCA1.2 configuration"
 
+  domain_cfg:
+    description: "NEMO ORCA1 domain configuration (grid + bathymetry + partial cells)"
+    path: grids/domain_cfg.nc
+    access: institutional
+    instructions: |
+      Copy from NEMO ORCA1 INPUTS directory or download from Zenodo:
+      https://doi.org/10.5281/zenodo.14041098
+      Place at DATA_ROOT/grids/domain_cfg.nc
+    size_mb: 520
+    format: NetCDF4
+    variables: [nav_lat, nav_lon, nav_lev, e3t_0, e3u_0, e3v_0, bottom_level, bathy_meter]
+    citation: "NEMO ORCA1 reference configuration"
+
+  # ===========================================================================
+  # Initial Conditions: NEMO WOCE/EN4 on eORCA1
+  # ===========================================================================
+  woce_ic_t:
+    description: "WOCE/EN4 v4.2 temperature on eORCA1 grid (NEMO ICs)"
+    path: ic/woce_temp_monthly_init_4p2.nc
+    access: institutional
+    instructions: |
+      Copy from NEMO ORCA1 INPUTS directory or download from Zenodo:
+      https://doi.org/10.5281/zenodo.14041098
+      Place at DATA_ROOT/ic/woce_temp_monthly_init_4p2.nc
+    size_mb: 834
+    format: NetCDF4
+    variables: [contemp, nav_lat, nav_lev, nav_lon]
+    citation: "Gouretski 2019 / WAGHC (WOCE/EN4 v4.2)"
+
+  woce_ic_s:
+    description: "WOCE/EN4 v4.2 salinity on eORCA1 grid (NEMO ICs)"
+    path: ic/woce_salt_monthly_init_4p2.nc
+    access: institutional
+    instructions: |
+      Copy from NEMO ORCA1 INPUTS directory or download from Zenodo:
+      https://doi.org/10.5281/zenodo.14041098
+      Place at DATA_ROOT/ic/woce_salt_monthly_init_4p2.nc
+    size_mb: 833
+    format: NetCDF4
+    variables: [presalt, nav_lat, nav_lev, nav_lon]
+    citation: "Gouretski 2019 / WAGHC (WOCE/EN4 v4.2)"
+
+  # ===========================================================================
+  # SSS Restoring
+  # ===========================================================================
+  sss_climatology:
+    description: "SSS climatology for restoring (WOCE/EN4 on eORCA1 grid)"
+    path: sss/sss_climatology_for_restoring.nc
+    access: institutional
+    instructions: |
+      Copy from NEMO ORCA1 INPUTS directory or download from Zenodo:
+      https://doi.org/10.5281/zenodo.14041098
+      Place at DATA_ROOT/sss/sss_climatology_for_restoring.nc
+    size_mb: 13
+    format: NetCDF4
+    variables: [presalt, nav_lat, nav_lon]
+    citation: "NEMO ORCA1 reference configuration"
+
   # ===========================================================================
   # Radiation: RRTMGP Optics
   # ===========================================================================

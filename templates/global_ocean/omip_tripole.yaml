@@ -4,14 +4,16 @@ experiment:
   description: "OMIP on tripolar grid (eORCA1) with COREv2 NYF forcing"
 
 requires:
-  - etopo1_1deg
-  - woa18_annual_t
-  - woa18_annual_s
+  - domain_cfg
+  - woce_ic_t
+  - woce_ic_s
+  - sss_climatology
   - core2_nyf
   - eorca1_mesh
 
 requires_patches:
   - 001-omip-tripole-script.patch
+  - 002-omip-tripole-physics.patch
 
 grid:
   type: tripole
@@ -26,13 +28,17 @@ ocean:
 physics:
   vertical_mixing:
     scheme: kpp
-  tidal_mixing:
-    scheme: jayne_st_laurent
   lateral_mixing:
     scheme: gm_redi
+  shortwave_penetration:
+    water_type: "II"
+  sss_restoring:
+    enabled: true
 
 forcing:
   mode: core2_nyf
+  runoff:
+    enabled: true
 
 time:
   duration_days: 3650
