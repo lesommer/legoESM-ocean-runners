@@ -1,9 +1,9 @@
 diff --git a/scripts/run_omip_tripole.py b/scripts/run_omip_tripole.py
 new file mode 100644
-index 00000000..1e3fe1c0
+index 00000000..719d8854
 --- /dev/null
 +++ b/scripts/run_omip_tripole.py
-@@ -0,0 +1,672 @@
+@@ -0,0 +1,730 @@
 +#!/usr/bin/env python
 +"""Tripolar eORCA1 OMIP run with CORE-II Normal Year Forcing.
 +
@@ -64,8 +64,8 @@ index 00000000..1e3fe1c0
 +    # Time
 +    p.add_argument("--days", type=float, default=365.0,
 +                   help="Simulation length [days] (default 365)")
-+    p.add_argument("--dt", type=float, default=600.0,
-+                   help="Timestep [s] (default 600)")
++    p.add_argument("--dt", type=float, default=1200.0,
++                   help="Timestep [s] (default 1200)")
 +    p.add_argument("--nlev", type=int, default=75,
 +                   help="Number of vertical levels (default 75)")
 +    # Grid
@@ -120,6 +120,9 @@ index 00000000..1e3fe1c0
 +    Reads nav_lev (reference 1D depth), e3t_0/e3u_0/e3v_0 (partial cell
 +    thicknesses), and bottom_level directly from the NEMO domain_cfg file,
 +    guaranteeing bit-for-bit identical grid to the NEMO ORCA1 reference.
++
++    Returns (z_ref, z_coord, land_mask_2d, H_bathy_2d) where the masks
++    are derived from bottom_level in domain_cfg (NEMO-identical).
 +    """
 +    import netCDF4
 +
@@ -186,7 +189,11 @@ index 00000000..1e3fe1c0
 +        is_active=jnp.array(is_active),
 +    )
 +
-+    return z_ref, z_coord
++    land_mask_2d = (bottom_level >= 0).astype(np.float64)
++    H_bathy_2d = np.sum(h_partial, axis=-1).astype(np.float64)
++    H_bathy_2d = np.where(land_mask_2d > 0.5, H_bathy_2d, 0.0)
++
++    return z_ref, z_coord, land_mask_2d, H_bathy_2d
 +
 +
 +# ---------------------------------------------------------------------------
@@ -194,11 +201,16 @@ index 00000000..1e3fe1c0
 +# ---------------------------------------------------------------------------
 +
 +def init_from_nemo_ic(geom, z_coord, ic_t_path: str, ic_s_path: str,
++                      land_mask_2d: np.ndarray, H_bathy_2d: np.ndarray,
 +                      month: int = 0):
 +    """Read WOCE/EN4 initial conditions on eORCA1 grid.
 +
 +    Expects NEMO-format files with variables contemp (Celsius) and
 +    presalt (g/kg), shape (12, 75, 331, 360).
++
++    Uses the NEMO land mask and H_bathy from domain_cfg to ensure the
++    state matches the NEMO grid exactly. Applies 3D masking via the
++    partial-cell is_active array to screen NEMO fill values at depth.
 +    """
 +    import netCDF4
 +
@@ -206,7 +218,11 @@ index 00000000..1e3fe1c0
 +
 +    H_max = float(z_coord.H_max)
 +
-+    state = rest_state_latlon_cgrid_ocean(geom, z_coord, H_max=H_max)
++    state = rest_state_latlon_cgrid_ocean(
++        geom, z_coord, H_max=H_max,
++        land_mask_override=jnp.asarray(land_mask_2d),
++        H_bathy_override=jnp.asarray(H_bathy_2d),
++    )
 +
 +    ds_t = netCDF4.Dataset(str(ic_t_path), "r")
 +    contemp = np.asarray(ds_t.variables["contemp"][month], dtype=np.float64)
@@ -216,17 +232,20 @@ index 00000000..1e3fe1c0
 +    presalt = np.asarray(ds_s.variables["presalt"][month], dtype=np.float64)
 +    ds_s.close()
 +
-+    mask = np.asarray(state.land_mask.data, dtype=np.float64)
-+    mask3d = mask[np.newaxis, :, :]
-+    T_data = jnp.asarray(np.where(mask3d > 0.5, contemp, 0.0), dtype=state.T.data.dtype)
-+    S_data = jnp.asarray(np.where(mask3d > 0.5, presalt, 0.0), dtype=state.S.data.dtype)
++    is_active_3d = np.asarray(z_coord.is_active, dtype=bool)
 +
-+    T_data = T_data.transpose(1, 2, 0)
-+    S_data = S_data.transpose(1, 2, 0)
++    contemp_t = contemp.transpose(1, 2, 0)
++    presalt_t = presalt.transpose(1, 2, 0)
++
++    T_data = np.where(is_active_3d, contemp_t, 0.0)
++    S_data = np.where(is_active_3d, presalt_t, 0.0)
++
++    T_data = np.clip(T_data, -2.0, 40.0)
++    S_data = np.clip(S_data, 0.0, 45.0)
 +
 +    state = state._replace(
-+        T=state.T.replace(data=T_data),
-+        S=state.S.replace(data=S_data),
++        T=state.T.replace(data=jnp.asarray(T_data, dtype=state.T.data.dtype)),
++        S=state.S.replace(data=jnp.asarray(S_data, dtype=state.S.data.dtype)),
 +    )
 +    return state
 +
@@ -336,14 +355,14 @@ index 00000000..1e3fe1c0
 +        if self.n_acc == 0:
 +            return
 +
++        ny, nx = self.nav_lat.shape
 +        n = self.n_acc
 +        avg_T = (self.sum_T / n).transpose(2, 0, 1)
 +        avg_S = (self.sum_S / n).transpose(2, 0, 1)
-+        avg_u = (self.sum_u / n)[:, :, :nx].transpose(2, 0, 1)
-+        avg_v = (self.sum_v / n)[:ny, :, :].transpose(2, 0, 1)
++        avg_u = (self.sum_u[:, :nx, :] / n).transpose(2, 0, 1)
++        avg_v = (self.sum_v[:ny, :, :] / n).transpose(2, 0, 1)
 +        avg_eta = self.sum_eta / n
 +
-+        ny, nx = self.nav_lat.shape
 +        mask = np.asarray(state.land_mask.data, dtype=np.float64)
 +        fill = np.float32(1.e20)
 +
@@ -355,7 +374,7 @@ index 00000000..1e3fe1c0
 +        tc = ds.variables["time_counter"]
 +        tc[year_idx] = t_val
 +
-+        def _write_var(ds, name, data, dims, long_name, std_name, units):
++        def _write_var(ds, name, data, dims, long_name, std_name, units, mask2d=None):
 +            if name not in ds.variables:
 +                v = ds.createVariable(name, "f4", dims, fill_value=fill,
 +                                     zlib=True, complevel=4)
@@ -364,10 +383,11 @@ index 00000000..1e3fe1c0
 +                v.units = units
 +                v.coordinates = "time_centered nav_lat nav_lon"
 +                v.cell_methods = "time: mean"
++            _mask = mask2d if mask2d is not None else mask
 +            if data.ndim == 3:
-+                mask_bc = mask[np.newaxis, :, :]
++                mask_bc = _mask[np.newaxis, :, :]
 +            else:
-+                mask_bc = mask
++                mask_bc = _mask
 +            data_masked = np.where(mask_bc > 0.5, data, fill)
 +            ds.variables[name][year_idx] = np.asarray(data_masked, dtype=np.float32)
 +
@@ -386,17 +406,21 @@ index 00000000..1e3fe1c0
 +        _write_var(ds, "sob", avg_S[-1], ("time_counter", "y", "x"),
 +                   "sea bottom salinity", "sea_bottom_salinity", "1e-3")
 +
-+        # grid_U
++        # grid_U: C-grid u is (ny, nx+1, nz); take western face -> T-point
 +        ds = self._files["U"]
 +        ds.variables["time_counter"][year_idx] = t_val
++        u_mask_2d = np.asarray(state.u_mask.data, dtype=np.float64)[:, :nx]
 +        _write_var(ds, "uo", avg_u, ("time_counter", "depthu", "y", "x"),
-+                   "sea_water_x_velocity", "sea_water_x_velocity", "m/s")
++                   "sea_water_x_velocity", "sea_water_x_velocity", "m/s",
++                   mask2d=u_mask_2d)
 +
-+        # grid_V
++        # grid_V: C-grid v is (ny+1, nx, nz); take southern face -> T-point
 +        ds = self._files["V"]
 +        ds.variables["time_counter"][year_idx] = t_val
++        v_mask_2d = np.asarray(state.v_mask.data, dtype=np.float64)[:ny, :]
 +        _write_var(ds, "vo", avg_v, ("time_counter", "depthv", "y", "x"),
-+                   "sea_water_y_velocity", "sea_water_y_velocity", "m/s")
++                   "sea_water_y_velocity", "sea_water_y_velocity", "m/s",
++                   mask2d=v_mask_2d)
 +
 +        self.sum_T[:] = 0
 +        self.sum_S[:] = 0
@@ -464,7 +488,7 @@ index 00000000..1e3fe1c0
 +    )
 +
 +    # --- Vertical coordinate from domain_cfg ---
-+    z_ref, z_coord = build_zcoord_from_domain_cfg(args.domain_cfg, args.nlev)
++    z_ref, z_coord, land_mask_2d, H_bathy_2d = build_zcoord_from_domain_cfg(args.domain_cfg, args.nlev)
 +
 +    # --- Model configuration ---
 +    from legoesm.ocean.dynamics.ocean_model_latlon_cgrid import (
@@ -538,10 +562,30 @@ index 00000000..1e3fe1c0
 +
 +    # --- Initial conditions ---
 +    state = init_from_nemo_ic(
-+        geom, z_coord, args.ic_t, args.ic_s, month=args.ic_month,
++        geom, z_coord, args.ic_t, args.ic_s,
++        land_mask_2d=land_mask_2d, H_bathy_2d=H_bathy_2d,
++        month=args.ic_month,
 +    )
 +    print(f"  Initial state: T shape={state.T.data.shape}, "
 +          f"u shape={state.u.data.shape}")
++
++    _mask = np.asarray(state.land_mask.data)
++    _T = np.asarray(state.T.data)
++    _S = np.asarray(state.S.data)
++    _wet = _mask > 0.5
++    _is_active = np.asarray(z_coord.is_active, dtype=bool)
++    _T_ocean = _T[_is_active]
++    _S_ocean = _S[_is_active]
++    print(f"  IC check: T range [{_T_ocean.min():.3f}, {_T_ocean.max():.3f}], "
++          f"S range [{_S_ocean.min():.3f}, {_S_ocean.max():.3f}]")
++    print(f"  Land mask: {int(_wet.sum())} ocean cells "
++          f"(NEMO domain_cfg: {int(land_mask_2d.sum())})")
++    _nemo_mask_cells = int(land_mask_2d.sum())
++    _lego_mask_cells = int(_wet.sum())
++    if _lego_mask_cells != _nemo_mask_cells:
++        print(f"  WARNING: legoESM mask ({_lego_mask_cells}) != NEMO mask "
++              f"({_nemo_mask_cells}) — {abs(_lego_mask_cells - _nemo_mask_cells)} "
++              f"cells differ")
 +
 +    # --- Load restart if provided ---
 +    if args.restart:
@@ -609,6 +653,20 @@ index 00000000..1e3fe1c0
 +        )
 +        state = model.step(state, dt, surface_forcing=sfc)
 +
++        # NaN/Inf guard
++        if step < 10 or (step + 1) % ckpt_steps == 0:
++            _T_check = np.asarray(state.T.data)
++            _u_check = np.asarray(state.u.data)
++            if not (np.all(np.isfinite(_T_check)) and np.all(np.isfinite(_u_check))):
++                _mask_chk = np.asarray(state.land_mask.data) > 0.5
++                _is_active_chk = np.asarray(z_coord.is_active, dtype=bool)
++                _T_ocean = _T_check[_is_active_chk]
++                print(f"  *** NaN/Inf detected at step {step}! ***")
++                print(f"      T range (active): [{np.nanmin(_T_ocean):.3f}, {np.nanmax(_T_ocean):.3f}]")
++                print(f"      NaN in T: {np.any(np.isnan(_T_check))}, Inf in T: {np.any(np.isinf(_T_check))}")
++                print(f"      NaN in u: {np.any(np.isnan(_u_check))}, Inf in u: {np.any(np.isinf(_u_check))}")
++                break
++
 +        # SSS restoring (operator-split)
 +        if sss_target_monthly is not None and sss_config is not None:
 +            from legoesm.ocean.forcing.sss_restoring import compute_sss_restoring_flux
@@ -663,7 +721,7 @@ index 00000000..1e3fe1c0
 +
 +        # Yearly output
 +        next_day = (step + 1) * dt / 86400.0
-+        if int(next_day) % 365 == 0 and step > 0:
++        if next_day >= 365.0 and abs(next_day - round(next_day / 365.0) * 365.0) < dt / 86400.0:
 +            writer.write_yearly(state, next_day)
 +
 +    writer.close()

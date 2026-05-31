@@ -42,4 +42,4 @@ forcing:
 
 time:
   duration_days: 3650
-  dt_seconds: 3600
+  dt_seconds: 1200
