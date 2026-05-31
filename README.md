@@ -14,6 +14,8 @@ This repo gives you:
 
 For managing personal experiment directories across machines, see [my-legoESM-ocean-experiments](https://github.com/lesommer/my-legoESM-ocean-experiments).
 
+See [project_status.md](project_status.md) for what's currently implemented and tested.
+
 ## Run an experiment
 
 ```bash
@@ -74,10 +76,8 @@ This checks out the runner tag → checks out the legoESM commit → applies pat
 | Category | Templates |
 |----------|-----------|
 | `1d/` | `ocean_scm_convective`, `ocean_scm_ekman`, `ocean_scm_surface_heating`, `ocean_scm_kpp_wind`, `ocean_scm` |
-| `2d/` | `barotropic_gyre`, `stommel_gyre_tracer`, `inertia_gravity_wave`, `williamson_test2` |
-| `3d_idealized/` | `baroclinic_gyre`, `lock_exchange`, `overflow`, `eady_instability`, `phillips_two_layer`, `acc_channel`, `dino`, `geostrophic_adjustation`, `isomip_plus` |
-| `coupled/` | `coupled_aquaplanet`, `coupled_slab`, `coupled_full` |
-| `global_ocean/` | `omip_jra55`, `global_overturning`, `neverworld2_lite`, `omip_global`, `omip_cubed_sphere` |
+
+Additional templates for 2D, 3D, coupled, and global ocean modes are available but not yet run-tested through the runners. See [project_status.md](project_status.md) for full status.
 
 ## CLI tools
 

@@ -216,11 +216,13 @@ These tag files are intended to be archived alongside experiment output in a sep
 - **Never bypass validation.** Always run `python scripts/validate_templates.py` after modifying templates.
 - **Never create branches for different legoESM versions.** Use tags (`legoesm-<hash>-<date>`) for reproducibility. The `main` branch always tracks the latest legoESM.
 - **Never modify `legoESM_version.txt` without tagging.** Every pin update should be accompanied by a `legoesm-<hash>-<date>` tag after validation passes.
+- **Never assume runner capabilities without checking `project_status.md`.** The runners support init + provenance tagging for all modes, but run path availability varies. Consult `project_status.md` for what's currently implemented and tested before assuming a template can be executed through the runners.
 
 ## 8. Key File Locations
 
 | What | Where |
 |------|-------|
+| Project status | `project_status.md` |
 | Experiment templates | `templates/<category>/<name>.yaml` |
 | Data catalog | `data_catalog.yaml` |
 | Pinned legoESM version | `legoESM_version.txt` |
