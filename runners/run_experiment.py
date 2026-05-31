@@ -418,10 +418,24 @@ def generate_tag(
     return "\n".join(lines)
 
 
+def _load_machine_config(machine: str | None) -> dict | None:
+    """Load machine config YAML if a path or name is given. Returns None if not available."""
+    if not machine:
+        return None
+    machine_path = Path(machine)
+    if not machine_path.is_absolute() and "/" not in machine:
+        machine_path = Path(__file__).resolve().parent.parent / "machines" / f"{machine}.yaml"
+    if machine_path.is_file():
+        with open(machine_path) as f:
+            return yaml.safe_load(f)
+    return None
+
+
 def _generate_run_script(config: dict, exp_dir: Path, machine: str | None = None) -> str:
     """Generate a shell launch script for the experiment."""
     mode = config.get("experiment", {}).get("mode", "unknown")
     template = config.get("experiment", {}).get("name", "unknown")
+    machine_cfg = _load_machine_config(machine)
 
     lines = [
         "#!/usr/bin/env bash",
@@ -443,30 +457,83 @@ def _generate_run_script(config: dict, exp_dir: Path, machine: str | None = None
         lines.append(f"LEGOESM_MACHINE_CONFIG={machine_cfg_path}")
         lines.append("")
 
+    scheduler = machine_cfg.get("scheduler") if machine_cfg else None
+
+    if scheduler == "slurm":
+        lines.append("# ---------- SLURM directives ----------")
+        lines.append(f"#SBATCH --job-name={template}")
+        partition = machine_cfg.get("scheduler_partition", "")
+        if partition:
+            lines.append(f"#SBATCH --partition={partition}")
+        account = machine_cfg.get("scheduler_account", "")
+        if account:
+            lines.append(f"#SBATCH --account={account}")
+        nodes = machine_cfg.get("scheduler_nodes", 1)
+        lines.append(f"#SBATCH --nodes={nodes}")
+        tasks_per_node = machine_cfg.get("scheduler_tasks_per_node", 1)
+        lines.append(f"#SBATCH --ntasks-per-node={tasks_per_node}")
+        walltime = machine_cfg.get("scheduler_walltime", "01:00:00")
+        lines.append(f"#SBATCH --time={walltime}")
+        mem = machine_cfg.get("scheduler_mem", "")
+        if mem:
+            lines.append(f"#SBATCH --mem={mem}")
+        gres = machine_cfg.get("scheduler_gres", "")
+        if gres:
+            lines.append(f"#SBATCH --gres={gres}")
+        qos = machine_cfg.get("scheduler_qos", "")
+        if qos:
+            lines.append(f"#SBATCH --qos={qos}")
+        out_pattern = machine_cfg.get("scheduler_output", "")
+        if out_pattern:
+            lines.append(f"#SBATCH --output={out_pattern}")
+        err_pattern = machine_cfg.get("scheduler_error", "")
+        if err_pattern:
+            lines.append(f"#SBATCH --error={err_pattern}")
+        lines.append("")
+
     lines += [
         'EXPERIMENT_DIR=$(cd "$(dirname "$0")" && pwd)',
         'CONFIG="$EXPERIMENT_DIR/config.yaml"',
         "",
-        "# Source machine environment if available",
-        'if [ -n "${LEGOESM_MACHINE_CONFIG:-}" ] && [ -f "$LEGOESM_MACHINE_CONFIG" ]; then',
-        "    # Parse machine YAML for env_setup commands",
-        '    echo "Loading machine config: $LEGOESM_MACHINE_CONFIG"',
-        "fi",
-        "",
-        "# Resolve data root",
-        f"DATA_ROOT=${{LEGOESM_DATA_DIR:-{resolve_data_root()}}}",
-        'export LEGOESM_DATA_DIR="$DATA_ROOT"',
-        "",
+    ]
+
+    env_setup = machine_cfg.get("env_setup", []) if machine_cfg else []
+    if env_setup:
+        lines.append("# ---------- Machine environment setup ----------")
+        for cmd in env_setup:
+            lines.append(cmd)
+        lines.append("")
+
+    data_root = machine_cfg.get("data_root", "") if machine_cfg else ""
+    if data_root:
+        lines.append(f"# Data root (from machine config: {machine_cfg_path})")
+        lines.append(f'DATA_ROOT=${{LEGOESM_DATA_DIR:-{data_root}}}')
+    else:
+        lines.append("# Resolve data root")
+        lines.append(f'DATA_ROOT=${{LEGOESM_DATA_DIR:-{resolve_data_root()}}}')
+    lines.append('export LEGOESM_DATA_DIR="$DATA_ROOT"')
+    lines.append("")
+
+    lines += [
         "# Check data availability before running",
         'python scripts/fetch_data.py check "$CONFIG_TEMPLATE" --data-dir "$DATA_ROOT" || {',
         '    echo "ERROR: Missing required data files. Run: python scripts/fetch_data.py fetch $CONFIG_TEMPLATE"',
         '    exit 1',
         '}',
         "",
-        "# Resolve legoESM",
-        f"LEGOESM_DIR={os.environ.get('LEGOESM_DIR', str(Path(__file__).resolve().parent.parent.parent / 'legoESM'))}",
-        'export PYTHONPATH="$LEGOESM_DIR/src:$PYTHONPATH"',
-        "",
+    ]
+
+    legoesm_dir = machine_cfg.get("legoesm_dir", "") if machine_cfg else ""
+    if legoesm_dir:
+        lines.append(f"# legoESM dir (from machine config: {machine_cfg_path})")
+        lines.append(f"LEGOESM_DIR={legoesm_dir}")
+    else:
+        lines.append("# Resolve legoESM")
+        lines.append(f"LEGOESM_DIR={os.environ.get('LEGOESM_DIR', str(Path(__file__).resolve().parent.parent.parent / 'legoESM'))}")
+    lines.append('export PYTHONPATH="$LEGOESM_DIR/src:$PYTHONPATH"')
+    lines.append("")
+
+    lines += [
         "# Run the experiment",
         'python -m runners.run_experiment run "$CONFIG"',
         "",
