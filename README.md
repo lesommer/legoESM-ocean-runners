@@ -4,7 +4,7 @@ Experiment templates, runners, and reproducibility tools for ocean simulations w
 
 ## Why use this repo?
 
-Running legoESM directly means editing `scripts/run_omip.py` (3655 lines) by hand — no versioned configurations, no provenance trail, no way to reproduce past runs.
+Running legoESM directly means editing `scripts/run_omip.py` (3687 lines) by hand — no versioned configurations, no provenance trail, no way to reproduce past runs.
 
 This repo gives you:
 
@@ -18,6 +18,8 @@ See [project_status.md](project_status.md) for what's currently implemented and 
 
 ## Run an experiment
 
+### Idealized (no data needed)
+
 ```bash
 # 1. Check data availability (idealized experiments need no data)
 python scripts/fetch_data.py check 3d_idealized/baroclinic_gyre
@@ -28,6 +30,20 @@ python scripts/init_experiment.py 3d_idealized/baroclinic_gyre \
 
 # 3. Run
 cd my_gyre && bash run.sh
+```
+
+### Global ocean / OMIP (requires data)
+
+```bash
+# 1. Fetch required data
+python scripts/fetch_data.py fetch global_ocean/omip_tripole
+
+# 2. Initialize
+python scripts/init_experiment.py global_ocean/omip_tripole \
+    --name orca1_phase0 --output-dir ./orca1_phase0
+
+# 3. Run (or submit run.sh to your scheduler)
+cd orca1_phase0 && bash run.sh
 ```
 
 ## Modify an experiment
@@ -73,11 +89,14 @@ This checks out the runner tag → checks out the legoESM commit → applies pat
 
 ## Available templates
 
-| Category | Templates |
-|----------|-----------|
-| `1d/` | `ocean_scm_convective`, `ocean_scm_ekman`, `ocean_scm_surface_heating`, `ocean_scm_kpp_wind`, `ocean_scm` |
+| Category | Templates | Run status |
+|----------|-----------|------------|
+| `1d/` | `ocean_scm_convective`, `ocean_scm_ekman`, `ocean_scm_surface_heating`, `ocean_scm_kpp_wind`, `ocean_scm` | **Run-tested** |
+| `global_ocean/` | `omip_tripole` | **Smoke-tested** (patch 001 + 002: NEMO-identical eORCA1 tripolar OMIP with domain_cfg grid, WOCE ICs, integrated forcing, Jerlov SW, SSS restoring, Dai-Trenberth runoff, NEMO-compatible output) |
+| `global_ocean/` | `omip_jra55`, `omip_global`, `omip_cubed_sphere`, `global_overturning`, `neverworld2_lite` | Init-only |
+| `2d/`, `3d_idealized/`, `coupled/` | See `templates/` | Init-only or structurally validated |
 
-Additional templates for 2D, 3D, coupled, and global ocean modes are available but not yet run-tested through the runners. See [project_status.md](project_status.md) for full status.
+See [project_status.md](project_status.md) for the full status of every template.
 
 ## CLI tools
 
