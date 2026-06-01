@@ -92,7 +92,7 @@ This checks out the runner tag → checks out the legoESM commit → applies pat
 | Category | Templates | Run status |
 |----------|-----------|------------|
 | `1d/` | `ocean_scm_convective`, `ocean_scm_ekman`, `ocean_scm_surface_heating`, `ocean_scm_kpp_wind`, `ocean_scm` | **Run-tested** |
-| `global_ocean/` | `omip_tripole` | **Smoke-tested** (patch 001 + 002: NEMO-identical eORCA1 tripolar OMIP with domain_cfg grid, WOCE ICs, integrated forcing, Jerlov SW, SSS restoring, Dai-Trenberth runoff, NEMO-compatible output) |
+| `global_ocean/` | `omip_tripole` | **5-day run completed** (CPU, idealized ICs, synthetic forcing; NEMO ICs cause cold-start blowup — use `--idealized-ic` for spinup; patch 001 + 002: NEMO-identical eORCA1 tripolar OMIP with domain_cfg grid, integrated forcing, Jerlov SW, SSS restoring, Dai-Trenberth runoff, NEMO-compatible output) |
 | `global_ocean/` | `omip_jra55`, `omip_global`, `omip_cubed_sphere`, `global_overturning`, `neverworld2_lite` | Init-only |
 | `2d/`, `3d_idealized/`, `coupled/` | See `templates/` | Init-only or structurally validated |
 

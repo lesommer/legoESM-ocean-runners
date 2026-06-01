@@ -45,7 +45,7 @@ template + overrides  →  config.yaml  →  experiment.tag  →  reproduce.py
 
 **Version control as reproducibility contract.** `main` always targets the latest legoESM. Git tags (`legoesm-<hash>-<date>[<letter>]`) mark validated compatibility points — every time `legoESM_version.txt` is updated and templates pass validation, a tag is created. If the same legoESM pin gets multiple tags (e.g., due to runner/template/patch changes), a letter suffix is appended: `b`, `c`, etc. Past experiments are reproduced by checking out the tag recorded in their `experiment.tag` file. Never create branches for different legoESM versions; use tags instead.
 
-**Every commit to `main` must be tagged.** Changes to `patches/`, `templates/`, or `runners/` affect reproducibility just as much as legoESM pin updates. After merging such changes, run `bash scripts/sync_legoesm.sh --tag-only` to validate and tag HEAD without updating the pin. CI enforces this: pushes to `main` fail if HEAD is not covered by a `legoesm-*` tag.
+**Reproducibility-affecting changes must be tagged.** Changes to `patches/`, `templates/`, `runners/`, `scripts/`, `legoESM_version.txt`, or `data_catalog.yaml` affect reproducibility and require a `legoesm-*` tag. Documentation-only changes (README, project_status, AGENTS.md, etc.) do not require a tag. CI enforces this: pushes to `main` fail if reproducibility-affecting files have changed since the last `legoesm-*` tag. After merging such changes, run `bash scripts/sync_legoesm.sh --tag-only` to validate and tag HEAD.
 
 **Machine-agnostic templates.** Templates contain no machine-specific paths or scheduler settings. Machine configuration lives in the experiments repo's `machines/*.yaml`, passed to the runners via `--machine <path>`.
 
@@ -212,7 +212,7 @@ These tag files are intended to be archived alongside experiment output in a sep
 2. This validates templates and creates a `legoesm-*` tag at HEAD
 3. If the base tag already exists for the same legoESM pin, a letter suffix is appended automatically
 4. To also push: `bash scripts/sync_legoesm.sh --tag-only --push`
-5. CI will fail pushes to `main` that aren't covered by a `legoesm-*` tag
+5. CI will fail pushes to `main` if reproducibility-affecting files (`patches/`, `templates/`, `runners/`, `scripts/`, `legoESM_version.txt`, `data_catalog.yaml`) have changed since the last tag
 
 ## 7. What Agents Must NOT Do
 
@@ -225,7 +225,7 @@ These tag files are intended to be archived alongside experiment output in a sep
 - **Never bypass validation.** Always run `python scripts/validate_templates.py` after modifying templates.
 - **Never create branches for different legoESM versions.** Use tags (`legoesm-<hash>-<date>`) for reproducibility. The `main` branch always tracks the latest legoESM.
 - **Never modify `legoESM_version.txt` without tagging.** Every pin update should be accompanied by a `legoesm-<hash>-<date>` tag after validation passes.
-- **Never merge changes to `patches/`, `templates/`, or `runners/` without tagging.** These affect reproducibility just as much as pin updates. Run `bash scripts/sync_legoesm.sh --tag-only` after merging.
+- **Never merge changes to `patches/`, `templates/`, `runners/`, `scripts/`, `legoESM_version.txt`, or `data_catalog.yaml` without tagging.** These affect reproducibility just as much as pin updates. Run `bash scripts/sync_legoesm.sh --tag-only` after merging.
 - **Never assume runner capabilities without checking `project_status.md`.** The runners support init + provenance tagging for all modes, but run path availability varies. Consult `project_status.md` for what's currently implemented and tested before assuming a template can be executed through the runners.
 - **Never modify runners or templates without updating `project_status.md`.** Any change that affects runner capabilities or template test status must be reflected in `project_status.md` before committing:
   - New runner functionality (e.g., implementing the `3d_ocean` run path) → update the "Runner implementation status" table and move affected templates from "structurally validated" to "run tested"

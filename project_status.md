@@ -10,7 +10,7 @@ Only `ocean_scm` mode has a working native run path (YAML → model object → o
 |------|----------------------------------|-------------------------------------|-------|
 | `ocean_scm` | Working | **Working** | Constructs `OceanColumnModel`, runs, saves NetCDF. 5 templates tested end-to-end. |
 | `3d_ocean` | Working | **Stub** | Prints note to use `run_ocean_test_matrix.py` or legoESM scripts directly. No model object constructed. |
-| `3d_ocean_realistic` | Working | **Working for tripolar only** | Script delegation: calls `run_omip_tripole.py` (patches `001` + `002`) which reads NEMO domain_cfg, WOCE ICs, applies CORE2 NYF via integrated forcing with Jerlov SW, SSS restoring, Dai-Trenberth runoff, writes NEMO-compatible grid_T/U/V output. Other grid types still stub. |
+| `3d_ocean_realistic` | Working | **Working for tripolar only** | Script delegation: calls `run_omip_tripole.py` (patches `001` + `002`) which reads NEMO domain_cfg, WOCE ICs, applies CORE2 NYF via integrated forcing with Jerlov SW, SSS restoring, Dai-Trenberth runoff, writes NEMO-compatible grid_T/U/V output. **Caveat**: NEMO WOCE/EN4 ICs cause cold-start blowup at ~day 2 due to pressure gradient imbalance; use `--idealized-ic` for initial spinup. Other grid types still stub. |
 | `barotropic_ocean` | Working | **Not implemented** | Raises `NotImplementedError`. |
 | `coupled` | Working | **Partially implemented** | Constructs `CoupledESMDriver` but untested. |
 
@@ -44,7 +44,7 @@ Only `ocean_scm` mode has a working native run path (YAML → model object → o
 | `global_ocean/` | `neverworld2_lite` | structurally validated only | no |
 | `global_ocean/` | `omip_global` | structurally validated only | no |
 | `global_ocean/` | `omip_cubed_sphere` | structurally validated only | no |
-| `global_ocean/` | `omip_tripole` | yes | smoke tested (CPU, synthetic forcing) |
+| `global_ocean/` | `omip_tripole` | yes | 5-day run (CPU, idealized ICs, synthetic forcing); NEMO ICs blow up at ~day 2 |
 
 ## Definitions
 
@@ -54,6 +54,6 @@ Only `ocean_scm` mode has a working native run path (YAML → model object → o
 
 ## Current 3D / coupled workflow
 
-For `3d_ocean_realistic` on tripolar grids, the runner delegates to `run_omip_tripole.py` (delivered as patches `001-omip-tripole-script.patch` + `002-omip-tripole-physics.patch`). Patch 001 added the initial script with CORE2 NYF forcing. Patch 002 extends it with NEMO-identical Phase 0 configuration: reads `domain_cfg.nc` for grid + partial cells, loads WOCE/EN4 ICs, uses `compute_omip2_surface_forcing` for energetically consistent forcing with Jerlov shortwave penetration (water type II), applies SSS restoring from NEMO's `presalt` climatology, adds Dai-Trenberth runoff, and writes yearly NEMO-compatible grid_T/U/V NetCDF output via `NemoOutputWriter`. The integrated forcing approach (not operator-split `apply_omip2_surface_fluxes`) is used for energetic consistency and to enable Jerlov SW penetration. Tidal mixing, sea ice, and TEOS-10 are deferred to later phases. The template exposes `fold_convention`, `smag_cfl_safety`, `adaptive_implicit_vertadv`, `water_type`, `sss_restoring.enabled`, and `runoff.enabled` as configurable fields.
+For `3d_ocean_realistic` on tripolar grids, the runner delegates to `run_omip_tripole.py` (delivered as patches `001-omip-tripole-script.patch` + `002-omip-tripole-physics.patch`). Patch 001 added the initial script with CORE2 NYF forcing. Patch 002 extends it with NEMO-identical Phase 0 configuration: reads `domain_cfg.nc` for grid + partial cells, loads WOCE/EN4 ICs, uses `compute_omip2_surface_forcing` for energetically consistent forcing with Jerlov shortwave penetration (water type II), applies SSS restoring from NEMO's `presalt` climatology, adds Dai-Trenberth runoff, and writes yearly NEMO-compatible grid_T/U/V NetCDF output via `NemoOutputWriter`. The integrated forcing approach (not operator-split `apply_omip2_surface_fluxes`) is used for energetic consistency and to enable Jerlov SW penetration. Patch 002 also adds `--idealized-ic` (exponentially stratified, hydrostatically balanced), `--forcing-scale` (amplitude multiplier for cold-start spinup), and `--no-gm-redi` (disable GM/Redi during spinup). **Known issue**: NEMO WOCE/EN4 ICs are not in hydrostatic balance on the legoESM grid and cause NaN blowup at ~day 2 regardless of timestep, forcing amplitude, or GM/Redi setting. Use `--idealized-ic` for initial spinup, then restart with NEMO ICs overlaid once the flow field has adjusted. Tidal mixing, sea ice, and TEOS-10 are deferred to later phases. The template exposes `fold_convention`, `smag_cfl_safety`, `adaptive_implicit_vertadv`, `water_type`, `sss_restoring.enabled`, and `runoff.enabled` as configurable fields.
 
 For all other 3D/coupled modes, experiments are executed by calling legoESM's own Python scripts directly (e.g., `legoESM/scripts/run_omip.py`). The runners still handle init and provenance tagging for these modes — the generated `config.yaml` and `experiment.tag` are valid even though `run_experiment run` does not execute a simulation.

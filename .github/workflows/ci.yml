@@ -72,19 +72,31 @@ jobs:
 
       - name: Check for reproducibility tag
         run: |
-          UNTAGGED=$(git log --oneline HEAD --not --tags='legoesm-*' | head -1)
-          if [ -n "$UNTAGGED" ]; then
-            echo "::warning::HEAD is not covered by a legoesm-* tag. Untagged commit(s) found."
-            echo "  First untagged: $UNTAGGED"
-            echo "  Run: bash scripts/sync_legoesm.sh --tag-only"
+          LAST_TAG=$(git describe --tags --abbrev=0 --match='legoesm-*' HEAD 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            echo "::warning::No legoesm-* tag found at all. Run: bash scripts/sync_legoesm.sh --tag"
             if [ "${{ github.event_name }}" = "push" ]; then
-              echo ""
-              echo "ERROR: Pushes to main must be covered by a legoesm-* tag."
-              echo "Reproducibility chain is broken — experiment.tag would record runner_tag=untagged."
+              echo "ERROR: No legoesm-* tag exists. Reproducibility chain is broken."
               exit 1
             fi
           else
-            echo "HEAD is covered by a legoesm-* tag."
+            REPRO_CHANGES=$(git diff --name-only "$LAST_TAG"...HEAD -- \
+              'patches/' 'templates/' 'runners/' 'scripts/' \
+              'legoESM_version.txt' 'data_catalog.yaml' 2>/dev/null || true)
+            if [ -n "$REPRO_CHANGES" ]; then
+              echo "::warning::Reproducibility-affecting changes since $LAST_TAG require a new tag."
+              echo "  Changed files:"
+              echo "$REPRO_CHANGES" | while read -r f; do echo "    $f"; done
+              echo "  Run: bash scripts/sync_legoesm.sh --tag-only [--push]"
+              if [ "${{ github.event_name }}" = "push" ]; then
+                echo ""
+                echo "ERROR: Reproducibility-affecting changes on main without a new legoesm-* tag."
+                echo "Reproducibility chain is broken — experiment.tag would record runner_tag=untagged."
+                exit 1
+              fi
+            else
+              echo "No reproducibility-affecting changes since $LAST_TAG. Tag not required."
+            fi
           fi
 
       - name: Remind to tag on reproducibility-affecting changes
