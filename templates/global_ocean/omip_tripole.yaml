@@ -25,11 +25,15 @@ ocean:
   smag_cfl_safety: 0.125
   adaptive_implicit_vertadv: true
 
+initial_conditions:
+  type: nemo_woce
+
 physics:
   vertical_mixing:
     scheme: kpp
   lateral_mixing:
     scheme: gm_redi
+    enabled: true
   shortwave_penetration:
     water_type: "II"
   sss_restoring:
@@ -37,6 +41,8 @@ physics:
 
 forcing:
   mode: core2_nyf
+  synthetic: false
+  scale: 1.0
   runoff:
     enabled: true
 

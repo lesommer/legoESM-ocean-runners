@@ -617,6 +617,7 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
     forcing_cfg = config.get("forcing", {})
     physics_cfg = config.get("physics", {})
     output_cfg = config.get("output", {})
+    ic_cfg = config.get("initial_conditions", {})
 
     script = str(legoesm_path / "scripts" / "run_omip_tripole.py")
     data_root = resolve_data_root()
@@ -628,11 +629,25 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
         "--nlev", str(grid_cfg.get("nlev", 75)),
         "--domain-cfg", str(data_root / "grids" / "domain_cfg.nc"),
         "--fold-convention", str(grid_cfg.get("fold_convention", "n_lon-1-i")),
-        "--ic-t", str(data_root / "ic" / "woce_temp_monthly_init_4p2.nc"),
-        "--ic-s", str(data_root / "ic" / "woce_salt_monthly_init_4p2.nc"),
         "--core2-cache", str(data_root / "core2_nyf"),
         "--output", str(output_cfg.get("path", "results/omip_tripole")),
     ]
+
+    ic_type = ic_cfg.get("type", "nemo_woce")
+    if ic_type == "idealized":
+        cmd.append("--idealized-ic")
+    else:
+        cmd.extend([
+            "--ic-t", str(data_root / "ic" / "woce_temp_monthly_init_4p2.nc"),
+            "--ic-s", str(data_root / "ic" / "woce_salt_monthly_init_4p2.nc"),
+        ])
+
+    if forcing_cfg.get("synthetic", False):
+        cmd.append("--synthetic-forcing")
+
+    forcing_scale = forcing_cfg.get("scale", 1.0)
+    if forcing_scale != 1.0:
+        cmd.extend(["--forcing-scale", str(forcing_scale)])
 
     smag_safety = ocean_cfg.get("smag_cfl_safety", 0.0)
     if smag_safety > 0:
@@ -645,6 +660,10 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
     water_type = sw_cfg.get("water_type", "II")
     if water_type and water_type != "none":
         cmd.extend(["--water-type", water_type])
+
+    lateral_cfg = physics_cfg.get("lateral_mixing", {})
+    if not lateral_cfg.get("enabled", True):
+        cmd.append("--no-gm-redi")
 
     sss_target = data_root / "sss" / "sss_climatology_for_restoring.nc"
     sss_cfg = physics_cfg.get("sss_restoring", {})
