@@ -533,11 +533,32 @@ def _generate_run_script(config: dict, exp_dir: Path, machine: str | None = None
     lines.append('export PYTHONPATH="$LEGOESM_DIR/src:$PYTHONPATH"')
     lines.append("")
 
-    lines += [
-        "# Run the experiment",
-        'python -m runners.run_experiment run "$CONFIG"',
-        "",
-    ]
+    mpi_cfg = config.get("mpi", {})
+    mpi_enabled = mpi_cfg.get("enabled", False)
+
+    if mpi_enabled:
+        lines.append("# ---------- MPI environment ----------")
+        lines.append("export OMP_NUM_THREADS=1")
+        lines.append('export XLA_FLAGS="--xla_cpu_multi_thread_eigen=false"')
+        lines.append("")
+        mpi_ranks = mpi_cfg.get("ranks", 1)
+        mpi_launcher = mpi_cfg.get("launcher", "mpirun")
+        mpi_extra = mpi_cfg.get("extra_args", "")
+        mpi_cmd_parts = [mpi_launcher, "-np", str(mpi_ranks)]
+        if mpi_extra:
+            mpi_cmd_parts.extend(mpi_extra.split())
+        mpi_prefix = " ".join(mpi_cmd_parts)
+        lines += [
+            "# Run the experiment (MPI)",
+            f'{mpi_prefix} python -m runners.run_experiment run "$CONFIG"',
+            "",
+        ]
+    else:
+        lines += [
+            "# Run the experiment",
+            'python -m runners.run_experiment run "$CONFIG"',
+            "",
+        ]
 
     if mode.startswith("3d_ocean") or mode == "barotropic_ocean" or mode == "ocean_scm":
         lines += [
@@ -610,6 +631,7 @@ def _run_ocean(config: dict, legoesm_path: Path, config_path: Path | None = None
 def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | None = None):
     """Run a tripolar OMIP experiment via script delegation to run_omip_tripole.py."""
     import subprocess
+    from runners.mpi_utils import get_mpi_config, build_mpi_launch_command
 
     grid_cfg = config.get("grid", {})
     ocean_cfg = config.get("ocean", {})
@@ -619,7 +641,11 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
     output_cfg = config.get("output", {})
     ic_cfg = config.get("initial_conditions", {})
 
-    script = str(legoesm_path / "scripts" / "run_omip_tripole.py")
+    mpi_cfg = get_mpi_config(config)
+    if mpi_cfg["enabled"]:
+        script = str(legoesm_path / "scripts" / "run_omip_tripole_mpi.py")
+    else:
+        script = str(legoesm_path / "scripts" / "run_omip_tripole.py")
     data_root = resolve_data_root()
 
     cmd = [
@@ -677,8 +703,21 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
     exp_name = config.get("experiment", {}).get("name", "ORCA1_LEGO")
     cmd.extend(["--exp-name", exp_name])
 
+    if mpi_cfg["enabled"]:
+        cmd = build_mpi_launch_command(mpi_cfg, cmd)
+
+    run_env = {**os.environ, "JAX_ENABLE_X64": "1"}
+    if mpi_cfg["enabled"]:
+        run_env.update({
+            "OMP_NUM_THREADS": "1",
+            "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false",
+            "JAX_PLATFORMS": "cpu",
+        })
+
     print(f"Running tripolar OMIP via: {' '.join(cmd)}")
-    result = subprocess.run(cmd, env={**os.environ, "JAX_ENABLE_X64": "1"})
+    if mpi_cfg["enabled"]:
+        print(f"  MPI: {mpi_cfg['ranks']} ranks, launcher={mpi_cfg['launcher']}")
+    result = subprocess.run(cmd, env=run_env)
     if result.returncode != 0:
         raise RuntimeError(f"run_omip_tripole.py exited with code {result.returncode}")
 

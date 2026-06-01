@@ -14,6 +14,15 @@ requires:
 requires_patches:
   - 001-omip-tripole-script.patch
   - 002-omip-tripole-physics.patch
+  - 003-tripolar-mpi-halo.patch
+  - 004-omip-tripole-mpi.patch
+  - 005-mpi-boundary-ops.patch
+
+mpi:
+  enabled: false
+  ranks: 1
+  launcher: mpirun
+  extra_args: ""
 
 grid:
   type: tripole

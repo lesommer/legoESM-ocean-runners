@@ -1,0 +1,373 @@
+diff --git a/scripts/run_omip_tripole_mpi.py b/scripts/run_omip_tripole_mpi.py
+new file mode 100644
+index 00000000..b0235679
+--- /dev/null
++++ b/scripts/run_omip_tripole_mpi.py
+@@ -0,0 +1,367 @@
++#!/usr/bin/env python3
++from __future__ import annotations
++
++"""MPI-enabled tripolar OMIP runner for eORCA1.
++
++Latitude-band domain decomposition: each MPI rank owns a contiguous band
++of latitude rows; every rank owns all longitudes. The northernmost rank
++handles the tripolar fold using FoldDescriptor.perm_T-based halo exchange
++instead of the regular 180° geographic pole-fold.
++
++Usage:
++    mpirun -np N python scripts/run_omip_tripole_mpi.py [OPTIONS]
++
++All CLI arguments match run_omip_tripole.py exactly.
++"""
++
++import os
++os.environ["OMP_NUM_THREADS"] = "1"
++os.environ["XLA_FLAGS"] = "--xla_cpu_multi_thread_eigen=false"
++os.environ["JAX_PLATFORMS"] = "cpu"
++
++import sys
++import time as _time
++import json
++from pathlib import Path
++
++sys.stdout.reconfigure(line_buffering=True)
++
++_PROJECT_ROOT = str(Path(__file__).resolve().parents[1])
++if _PROJECT_ROOT not in sys.path:
++    sys.path.insert(0, _PROJECT_ROOT)
++
++import jax
++jax.config.update("jax_enable_x64", True)
++
++import jax.numpy as jnp
++import numpy as np
++
++from legoesm.core.precision import PrecisionPolicy, set_policy
++set_policy(PrecisionPolicy.fp64())
++
++from run_omip_tripole import (
++    parse_args,
++    build_zcoord_from_domain_cfg,
++    init_from_nemo_ic,
++    NemoOutputWriter,
++)
++
++
++def main():
++    from mpi4py import MPI
++    comm = MPI.COMM_WORLD
++    rank = comm.Get_rank()
++    n_ranks = comm.Get_size()
++
++    args = parse_args()
++    dt = args.dt
++    n_steps = int(args.days * 86400.0 / dt)
++    ckpt_steps = max(1, int(args.checkpoint_days * 86400.0 / dt))
++
++    if rank == 0:
++        print(f"=== Tripolar eORCA1 OMIP (MPI, {n_ranks} ranks, CORE2 NYF, NEMO-identical) ===")
++        print(f"  Duration: {args.days} days, dt={dt}s, {n_steps} steps")
++        print(f"  {args.nlev} levels")
++        print(f"  Domain cfg: {args.domain_cfg}")
++        print(f"  Fold convention: {args.fold_convention}")
++        print(f"  ICs: {args.ic_t}, {args.ic_s} (month={args.ic_month})")
++        print(f"  CORE2 cache: {args.core2_cache}")
++        print(f"  Jerlov water type: {args.water_type}")
++        print(f"  SSS restoring: {'yes' if args.sss_target else 'no'}")
++        print(f"  Runoff: {'yes' if args.runoff else 'no'}")
++        print(f"  smag_cfl_safety={args.smag_cfl_safety}, "
++              f"adaptive_implicit_vertadv={not args.no_adaptive_vertadv}")
++        print(f"  Exp name: {args.exp_name}")
++
++    from legoesm.grids.tripole import create_tripole_grid
++    geom = create_tripole_grid(
++        args.domain_cfg,
++        fold_convention=args.fold_convention,
++    )
++
++    z_ref, z_coord, land_mask_2d, H_bathy_2d = build_zcoord_from_domain_cfg(args.domain_cfg, args.nlev)
++
++    from legoesm.parallel.distributed import initialize_distributed_latlon
++    layout = initialize_distributed_latlon(
++        global_n_lat=geom.n_lat,
++        global_n_lon=geom.n_lon,
++        fold=geom.fold,
++    )
++
++    if rank == 0:
++        print(f"  MPI layout: {n_ranks} ranks, lat [{layout.lat_start}:{layout.lat_end}), "
++              f"n_lat_local={layout.n_lat_local}")
++
++    from legoesm.parallel.latlon_mpi import (
++        slice_cgrid_geometry_to_band,
++        slice_zcoord_to_band,
++        scatter_state_latlon_cgrid_ocean,
++        gather_state_latlon_cgrid_ocean,
++    )
++    local_geom = slice_cgrid_geometry_to_band(geom, layout)
++    local_z_coord = slice_zcoord_to_band(z_coord, layout)
++    local_land_mask = land_mask_2d[layout.lat_start:layout.lat_end]
++    local_H_bathy = H_bathy_2d[layout.lat_start:layout.lat_end]
++
++    from legoesm.ocean.dynamics.ocean_model_latlon_cgrid import (
++        LatLonCGridOceanModel,
++    )
++    from legoesm.ocean.state import LatLonCGridOceanConfig
++    from legoesm.ocean.physics.combined import OceanPhysicsConfig
++    from legoesm.ocean.physics.surface_forcing.config import SurfaceForcingConfig
++    from legoesm.ocean.physics.vertical_mixing.config import (
++        VerticalMixingConfig, KPPConfig,
++    )
++    from legoesm.ocean.physics.convection.config import (
++        OceanConvectionConfig, EnhancedDiffusionConfig,
++    )
++    from legoesm.ocean.physics.bottom_drag.config import BottomDragConfig
++    from legoesm.ocean.physics.lateral_mixing.config import (
++        LateralMixingConfig, GMRediConfig, VisbeckConfig,
++    )
++    from legoesm.ocean.physics.shortwave_penetration import (
++        ShortwavePenetrationConfig,
++    )
++
++    sw_config = None
++    if args.water_type != "none":
++        sw_config = ShortwavePenetrationConfig(water_type=args.water_type)
++
++    physics = OceanPhysicsConfig(
++        surface_forcing=SurfaceForcingConfig(scheme="none"),
++        vertical_mixing=VerticalMixingConfig(
++            scheme="kpp",
++            kpp=KPPConfig(K_conv=1.0),
++        ),
++        lateral_mixing=LateralMixingConfig(scheme="none"),
++        bottom_drag=BottomDragConfig(scheme="none"),
++        convection=OceanConvectionConfig(
++            scheme="enhanced_diffusion",
++            enhanced_diffusion=EnhancedDiffusionConfig(K_conv=1.0),
++        ),
++        shortwave_penetration=sw_config,
++    )
++
++    config = LatLonCGridOceanConfig(
++        A_h=1.0e5,
++        A_v=1.0e-4,
++        K_v=1.0e-5,
++        B_h=0.0,
++        C_smag_lap=0.33,
++        n_barotropic_substeps=30,
++        barotropic_solver="implicit_cn",
++        barotropic_implicit_pcg_tol=1e-10,
++        barotropic_implicit_pcg_maxiter=300,
++        pgf_scheme="adcroft",
++        implicit_vertical_mixing=True,
++        smag_cfl_safety=args.smag_cfl_safety,
++        adaptive_implicit_vertadv=not args.no_adaptive_vertadv,
++        tracer_advection="tvd",
++        bottom_drag_r=1e-3,
++        bottom_drag_bbl_thickness=100.0,
++        bottom_drag_bg_velocity=0.1,
++        freshwater_closure="virtual_salt_flux",
++        gm_redi=None if args.no_gm_redi else GMRediConfig(
++            kappa_GM=600.0, kappa_Redi=600.0,
++            S_max=0.005,
++            visbeck=VisbeckConfig(enabled=False),
++            slope_scheme="centered",
++        ),
++        physics=physics,
++    )
++
++    model = LatLonCGridOceanModel(local_geom, local_z_coord, config)
++
++    if args.idealized_ic:
++        from legoesm.ocean.init_latlon_cgrid import rest_state_latlon_cgrid_ocean
++        global_state = rest_state_latlon_cgrid_ocean(
++            geom, z_coord, H_max=float(z_coord.H_max),
++            land_mask_override=jnp.asarray(land_mask_2d),
++            H_bathy_override=jnp.asarray(H_bathy_2d),
++        )
++    else:
++        if not args.ic_t or not args.ic_s:
++            raise ValueError("Must provide --ic-t and --ic-s, or use --idealized-ic")
++        global_state = init_from_nemo_ic(
++            geom, z_coord, args.ic_t, args.ic_s,
++            land_mask_2d=land_mask_2d, H_bathy_2d=H_bathy_2d,
++            month=args.ic_month,
++        )
++
++    local_state = scatter_state_latlon_cgrid_ocean(global_state, layout)
++
++    if rank == 0:
++        print(f"  Initial state: T shape={local_state.T.data.shape}, "
++              f"u shape={local_state.u.data.shape}")
++        _mask = np.asarray(global_state.land_mask.data)
++        _T = np.asarray(global_state.T.data)
++        _S = np.asarray(global_state.S.data)
++        _wet = _mask > 0.5
++        _is_active = np.asarray(z_coord.is_active, dtype=bool)
++        _T_ocean = _T[_is_active]
++        _S_ocean = _S[_is_active]
++        print(f"  IC check: T range [{_T_ocean.min():.3f}, {_T_ocean.max():.3f}], "
++              f"S range [{_S_ocean.min():.3f}, {_S_ocean.max():.3f}]")
++        print(f"  Land mask: {int(_wet.sum())} ocean cells "
++              f"(NEMO domain_cfg: {int(land_mask_2d.sum())})")
++        _nemo_mask_cells = int(land_mask_2d.sum())
++        _lego_mask_cells = int(_wet.sum())
++        if _lego_mask_cells != _nemo_mask_cells:
++            print(f"  WARNING: legoESM mask ({_lego_mask_cells}) != NEMO mask "
++                  f"({_nemo_mask_cells}) — {abs(_lego_mask_cells - _nemo_mask_cells)} "
++                  f"cells differ")
++
++    if args.restart:
++        rst = np.load(args.restart)
++        from legoesm.ocean.state import Field
++        local_state = local_state._replace(
++            T=local_state.T.replace(data=jnp.asarray(rst["T"], dtype=local_state.T.data.dtype)),
++            S=local_state.S.replace(data=jnp.asarray(rst["S"], dtype=local_state.S.data.dtype)),
++            u=local_state.u.replace(data=jnp.asarray(rst["u"], dtype=local_state.u.data.dtype)),
++            v=local_state.v.replace(data=jnp.asarray(rst["v"], dtype=local_state.v.data.dtype)),
++            eta=local_state.eta.replace(data=jnp.asarray(rst["eta"], dtype=local_state.eta.data.dtype)),
++        )
++        if rank == 0:
++            print(f"  Restart loaded from {args.restart}")
++
++    from legoesm.ocean.forcing import load_core2_nyf
++    from legoesm.ocean.coupler import compute_omip2_surface_forcing
++    allow_synthetic = args.synthetic_forcing or not args.core2_cache
++    forcing = load_core2_nyf(
++        cache_dir=args.core2_cache if args.core2_cache else None,
++        allow_synthetic=allow_synthetic,
++    )
++    n_forc = forcing.u10.shape[0]
++    if rank == 0:
++        print(f"  CORE2 NYF: {n_forc} time records (synthetic={allow_synthetic})")
++
++    sss_target_monthly = None
++    sss_config = None
++    if args.sss_target:
++        import xarray as xr
++        from legoesm.ocean.forcing.sss_restoring import SSSRestoringConfig
++        sss_ds = xr.open_dataset(args.sss_target)
++        sss_target_monthly = np.asarray(sss_ds.presalt.values, dtype=np.float64)
++        sss_ds.close()
++        sss_config = SSSRestoringConfig(enabled=True)
++        if rank == 0:
++            print(f"  SSS restoring: {sss_target_monthly.shape[0]} monthly fields")
++
++    runoff_R = None
++    if args.runoff:
++        from legoesm.ocean.forcing.dai_trenberth import (
++            load_dai_trenberth, project_runoff_to_grid,
++        )
++        runoff_data = load_dai_trenberth(allow_synthetic=False)
++        runoff_R = project_runoff_to_grid(runoff_data, local_geom)
++        if rank == 0:
++            print(f"  Runoff: loaded Dai-Trenberth ({runoff_R.shape})")
++
++    output_dir = Path(args.output)
++    writer = None
++    if rank == 0:
++        writer = NemoOutputWriter(
++            args.exp_name, args.domain_cfg, output_dir, nlev=args.nlev,
++        )
++
++    diag = []
++    wall_t0 = _time.time()
++    for step in range(n_steps):
++        day = step * dt / 86400.0
++        idx_t = (step * n_forc) // max(1, n_steps)
++
++        sfc = compute_omip2_surface_forcing(
++            local_state, forcing=forcing, idx_t=idx_t,
++            grid=local_geom, grid_type="tripole",
++        )
++        if args.forcing_scale != 1.0:
++            from legoesm.ocean.state import OceanSurfaceForcing
++            sfc = OceanSurfaceForcing(
++                tau_x=sfc.tau_x * args.forcing_scale,
++                tau_y=sfc.tau_y * args.forcing_scale,
++                q_net=sfc.q_net * args.forcing_scale,
++                sw_down=sfc.sw_down * args.forcing_scale,
++            )
++        local_state = model.step(local_state, dt, surface_forcing=sfc)
++
++        if step < 10 or (step + 1) % ckpt_steps == 0:
++            _T_check = np.asarray(local_state.T.data)
++            _u_check = np.asarray(local_state.u.data)
++            if not (np.all(np.isfinite(_T_check)) and np.all(np.isfinite(_u_check))):
++                _mask_chk = np.asarray(local_state.land_mask.data) > 0.5
++                _is_active_chk = np.asarray(local_z_coord.is_active, dtype=bool)
++                _T_ocean = _T_check[_is_active_chk]
++                if rank == 0:
++                    print(f"  *** NaN/Inf detected at step {step}! ***")
++                    print(f"      T range (active): [{np.nanmin(_T_ocean):.3f}, {np.nanmax(_T_ocean):.3f}]")
++                    print(f"      NaN in T: {np.any(np.isnan(_T_check))}, Inf in T: {np.any(np.isinf(_T_check))}")
++                    print(f"      NaN in u: {np.any(np.isnan(_u_check))}, Inf in u: {np.any(np.isinf(_u_check))}")
++                break
++
++        if sss_target_monthly is not None and sss_config is not None:
++            from legoesm.ocean.forcing.sss_restoring import compute_sss_restoring_flux
++            month_idx = int((day // 30.44)) % 12
++            S_target = sss_target_monthly[month_idx]
++            S_target_local = jnp.asarray(S_target[layout.lat_start:layout.lat_end, :])
++            S_top = np.asarray(local_state.S.data[..., 0], dtype=np.float64)
++            lat2d = np.degrees(np.asarray(local_geom.lat_T))
++            lon2d = np.degrees(np.asarray(local_geom.lon_T))
++            out = compute_sss_restoring_flux(
++                S_model_top=jnp.asarray(S_top),
++                S_target=S_target_local,
++                lat_deg=jnp.asarray(lat2d),
++                lon_deg=jnp.asarray(lon2d),
++                ice_concentration=jnp.zeros_like(S_target_local),
++                config=sss_config,
++            )
++            dS_dt = np.asarray(out["dS_dt_top"], dtype=np.float64)
++            land_mask = np.asarray(local_state.land_mask.data, dtype=np.float64)
++            S_arr = np.asarray(local_state.S.data, dtype=np.float64).copy()
++            S_arr[..., 0] = S_top + dt * dS_dt * land_mask
++            local_state = local_state._replace(
++                S=local_state.S.replace(data=jnp.asarray(S_arr, dtype=local_state.S.data.dtype)),
++            )
++
++        if runoff_R is not None:
++            from legoesm.ocean.coupler.runoff_apply import apply_runoff_step
++            local_state = apply_runoff_step(local_state, R_kg_m2_s=runoff_R, z_coord=local_z_coord, dt=dt)
++
++        if (step + 1) % ckpt_steps == 0 or step == n_steps - 1:
++            day_now = (step + 1) * dt / 86400.0
++            T_top = np.asarray(local_state.T.data[..., 0])
++            mask = np.asarray(local_state.land_mask.data) > 0.5
++            sst = float(T_top[mask].mean()) if mask.any() else float("nan")
++            max_u = float(jnp.max(jnp.abs(local_state.u.data[..., 0])))
++            elapsed = _time.time() - wall_t0
++            if rank == 0:
++                print(f"  Day {day_now:7.1f}/{args.days}  SST={sst:6.2f} C  "
++                      f"max|u|={max_u:.4f} m/s  wall={elapsed:.0f}s  rank={rank}")
++            diag.append(dict(day=day_now, sst=sst, max_u=max_u, wall=elapsed, rank=rank))
++
++            ckpt_path = output_dir / f"restart_day{day_now:.0f}_rank{rank}.npz"
++            np.savez(ckpt_path,
++                     T=np.asarray(local_state.T.data),
++                     S=np.asarray(local_state.S.data),
++                     u=np.asarray(local_state.u.data),
++                     v=np.asarray(local_state.v.data),
++                     eta=np.asarray(local_state.eta.data))
++
++        next_day = (step + 1) * dt / 86400.0
++        if next_day >= 365.0 and abs(next_day - round(next_day / 365.0) * 365.0) < dt / 86400.0:
++            global_state = gather_state_latlon_cgrid_ocean(local_state, layout)
++            if rank == 0 and writer is not None:
++                writer.accumulate(global_state, z_coord)
++                writer.write_yearly(global_state, next_day)
++
++    if rank == 0 and writer is not None:
++        writer.close()
++
++    if rank == 0:
++        output_dir.mkdir(parents=True, exist_ok=True)
++        with open(output_dir / "diagnostics.json", "w") as f:
++            json.dump(diag, f, indent=2)
++        print(f"=== Done. Output in {output_dir} ===")
++
++
++if __name__ == "__main__":
++    main()
