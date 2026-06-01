@@ -109,32 +109,6 @@ files:
     citation: "Zweng et al. 2018, NOAA Atlas NESDIS 82"
 
   # ===========================================================================
-  # Ocean Grids: Tripolar / MPAS Meshes
-  # ===========================================================================
-  eorca1_mesh:
-    description: "eORCA1.2 tripolar mesh mask (NEMO format, 1° resolution)"
-    path: grids/eORCA1.2_mesh_mask.nc
-    url: "https://zenodo.org/records/4436658/files/eORCA1.2_mesh_mask.nc"
-    access: public
-    sha256: pending
-    size_mb: 484
-    format: NetCDF4
-    variables: [glamt, gphit, e1t, e2t, tmask, nav_lon, nav_lat, gdept_0]
-    citation: "Vancoppenolle et al. 2023, doi:10.5285/f9833022hf493f12da5a84e5e6de4"
-    note: "Downloaded automatically by legoESM if not present; also downloadable via scripts/download_grids.sh"
-
-  eorca025_mesh:
-    description: "eORCA025 tripolar mesh mask (1/4° resolution)"
-    path: grids/eORCA025_mesh_mask.nc
-    url: "https://zenodo.org/records/4436658/files/eORCA025_mesh_mask.nc"
-    access: public
-    sha256: pending
-    size_mb: 7200
-    format: NetCDF4
-    variables: [glamt, gphit, e1t, e2t, tmask, nav_lon, nav_lat, gdept_0]
-    note: "Large file (~7 GB). Only needed for 1/4° global ocean runs."
-
-  # ===========================================================================
   # Surface Forcing: AMIP SST / Sea Ice
   # ===========================================================================
   hadisst_sst:
@@ -232,7 +206,7 @@ files:
   # Ocean Grids: Tripolar
   # ===========================================================================
   eorca1_mesh:
-    description: "eORCA1.2 tripolar mesh mask (NEMO format)"
+    description: "eORCA1.2 tripolar mesh mask (NEMO format, 1° resolution)"
     path: grids/eORCA1.2_mesh_mask.nc
     url: "https://zenodo.org/records/4436658/files/eORCA1.2_mesh_mask.nc"
     access: public
@@ -240,20 +214,19 @@ files:
     size_mb: 484
     format: NetCDF4
     variables: [glamt, gphit, glamu, gphiu, glamv, gphiv, tmask, umask, vmask, e1t, e2t, e1u, e2u, e1v, e2v]
-    citation: "NEMO ocean model eORCA1.2 configuration"
+    citation: "Vancoppenolle et al. 2023, doi:10.5285/f9833022hf493f12da5a84e5e6de4"
+    note: "Downloaded automatically by legoESM if not present; also downloadable via scripts/download_grids.sh"
 
-  domain_cfg:
-    description: "NEMO ORCA1 domain configuration (grid + bathymetry + partial cells)"
-    path: grids/domain_cfg.nc
-    access: institutional
-    instructions: |
-      Copy from NEMO ORCA1 INPUTS directory or download from Zenodo:
-      https://doi.org/10.5281/zenodo.14041098
-      Place at DATA_ROOT/grids/domain_cfg.nc
-    size_mb: 520
+  eorca025_mesh:
+    description: "eORCA025 tripolar mesh mask (1/4° resolution)"
+    path: grids/eORCA025_mesh_mask.nc
+    url: "https://zenodo.org/records/4436658/files/eORCA025_mesh_mask.nc"
+    access: public
+    sha256: pending
+    size_mb: 7200
     format: NetCDF4
-    variables: [nav_lat, nav_lon, nav_lev, e3t_0, e3u_0, e3v_0, bottom_level, bathy_meter]
-    citation: "NEMO ORCA1 reference configuration"
+    variables: [glamt, gphit, e1t, e2t, tmask, nav_lon, nav_lat, gdept_0]
+    note: "Large file (~7 GB). Only needed for 1/4° global ocean runs."
 
   # ===========================================================================
   # Initial Conditions: NEMO WOCE/EN4 on eORCA1

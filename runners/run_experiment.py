@@ -629,7 +629,7 @@ def _run_ocean(config: dict, legoesm_path: Path, config_path: Path | None = None
 
 
 def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | None = None):
-    """Run a tripolar OMIP experiment via script delegation to run_omip_tripole.py."""
+    """Run a tripolar OMIP experiment via script delegation to run_omip_core2.py."""
     import subprocess
     from runners.mpi_utils import get_mpi_config, build_mpi_launch_command
 
@@ -640,29 +640,47 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
     physics_cfg = config.get("physics", {})
     output_cfg = config.get("output", {})
     ic_cfg = config.get("initial_conditions", {})
+    scan_cfg = config.get("scan", {})
 
     mpi_cfg = get_mpi_config(config)
     if mpi_cfg["enabled"]:
-        script = str(legoesm_path / "scripts" / "run_omip_tripole_mpi.py")
+        script = str(legoesm_path / "scripts" / "run_omip_core2_mpi.py")
     else:
-        script = str(legoesm_path / "scripts" / "run_omip_tripole.py")
+        script = str(legoesm_path / "scripts" / "run_omip_core2.py")
     data_root = resolve_data_root()
 
+    duration_days = time_cfg.get("duration_days", 3650)
     cmd = [
         sys.executable, script,
-        "--days", str(time_cfg.get("duration_days", 3650)),
-        "--dt", str(time_cfg.get("dt_seconds", 3600)),
+        "--dt", str(time_cfg.get("dt_seconds", 1200)),
         "--nlev", str(grid_cfg.get("nlev", 75)),
-        "--domain-cfg", str(data_root / "grids" / "domain_cfg.nc"),
-        "--fold-convention", str(grid_cfg.get("fold_convention", "n_lon-1-i")),
-        "--core2-cache", str(data_root / "core2_nyf"),
+        "--mesh", str(data_root / "grids" / grid_cfg.get("mesh_file", "eORCA1.2_mesh_mask.nc")),
         "--output", str(output_cfg.get("path", "results/omip_tripole")),
     ]
 
-    ic_type = ic_cfg.get("type", "nemo_woce")
-    if ic_type == "idealized":
-        cmd.append("--idealized-ic")
+    if duration_days > 0 and duration_days < 365:
+        cmd.extend(["--days", str(duration_days)])
     else:
+        cmd.extend(["--years", str(duration_days / 365.0)])
+
+    if grid_cfg.get("partial_cells", False):
+        cmd.append("--partial-cell")
+
+    convection = physics_cfg.get("convection", "none")
+    if convection and convection != "none":
+        cmd.extend(["--convection", convection])
+
+    scan_block = scan_cfg.get("block_size", 0)
+    if scan_block > 0 and not mpi_cfg["enabled"]:
+        cmd.extend(["--scan-block", str(scan_block)])
+
+    ic_type = ic_cfg.get("type", "woce")
+    if ic_type == "woa":
+        cmd.append("--ic-type")
+        cmd.append("woa")
+    elif ic_type == "woce":
+        cmd.append("--ic-type")
+        cmd.append("woce")
         cmd.extend([
             "--ic-t", str(data_root / "ic" / "woce_temp_monthly_init_4p2.nc"),
             "--ic-s", str(data_root / "ic" / "woce_salt_monthly_init_4p2.nc"),
@@ -679,29 +697,24 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
     if smag_safety > 0:
         cmd.extend(["--smag-cfl-safety", str(smag_safety)])
 
-    if not ocean_cfg.get("adaptive_implicit_vertadv", False):
-        cmd.append("--no-adaptive-vertadv")
+    C_smag_lap = ocean_cfg.get("C_smag_lap", 0.0)
+    if C_smag_lap > 0:
+        cmd.extend(["--C-smag-lap", str(C_smag_lap)])
 
-    sw_cfg = physics_cfg.get("shortwave_penetration", {})
-    water_type = sw_cfg.get("water_type", "II")
-    if water_type and water_type != "none":
-        cmd.extend(["--water-type", water_type])
+    A_h = ocean_cfg.get("A_h", 0.0)
+    if A_h > 0:
+        cmd.extend(["--A-h", str(A_h)])
 
-    lateral_cfg = physics_cfg.get("lateral_mixing", {})
-    if not lateral_cfg.get("enabled", True):
-        cmd.append("--no-gm-redi")
+    if ocean_cfg.get("adaptive_implicit_vertadv", False):
+        cmd.append("--adaptive-implicit-vertadv")
 
     sss_target = data_root / "sss" / "sss_climatology_for_restoring.nc"
     sss_cfg = physics_cfg.get("sss_restoring", {})
     if sss_cfg.get("enabled", False) and sss_target.exists():
         cmd.extend(["--sss-target", str(sss_target)])
-
-    runoff_cfg = forcing_cfg.get("runoff", {})
-    if runoff_cfg.get("enabled", False):
-        cmd.append("--runoff")
-
-    exp_name = config.get("experiment", {}).get("name", "ORCA1_LEGO")
-    cmd.extend(["--exp-name", exp_name])
+        sss_tau = sss_cfg.get("tau_days", 60.0)
+        if sss_tau != 60.0:
+            cmd.extend(["--sss-tau-days", str(sss_tau)])
 
     if mpi_cfg["enabled"]:
         cmd = build_mpi_launch_command(mpi_cfg, cmd)
@@ -719,7 +732,7 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
         print(f"  MPI: {mpi_cfg['ranks']} ranks, launcher={mpi_cfg['launcher']}")
     result = subprocess.run(cmd, env=run_env)
     if result.returncode != 0:
-        raise RuntimeError(f"run_omip_tripole.py exited with code {result.returncode}")
+        raise RuntimeError(f"run_omip_core2.py exited with code {result.returncode}")
 
 
 def _run_coupled(config: dict, legoesm_path: Path):

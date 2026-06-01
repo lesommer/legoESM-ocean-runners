@@ -1,0 +1,315 @@
+diff --git a/scripts/run_omip_core2_mpi.py b/scripts/run_omip_core2_mpi.py
+new file mode 100644
+index 00000000..92fb006c
+--- /dev/null
++++ b/scripts/run_omip_core2_mpi.py
+@@ -0,0 +1,309 @@
++#!/usr/bin/env python3
++"""MPI-enabled tripolar OMIP runner using latitude-band decomposition.
++
++Each MPI rank owns a contiguous band of latitude rows; every rank owns all
++longitudes.  The northernmost rank handles the tripolar fold via
++``FoldDescriptor.perm_T``-based halo exchange (issue #353 / PR #355)
++instead of the regular 180-degree geographic pole-fold.
++
++The MPI halo exchange happens automatically through the ``pad_ns_zero``
++calls in the boundary operators (patch 003) — no explicit halo
++management in this script.
++
++Usage:
++    mpirun -np N python scripts/run_omip_core2_mpi.py [OPTIONS]
++
++All CLI arguments match run_omip_core2.py exactly (tripole mode only;
++--grid latlon_bathy is not supported under MPI).
++"""
++
++import os
++os.environ["OMP_NUM_THREADS"] = "1"
++os.environ["XLA_FLAGS"] = "--xla_cpu_multi_thread_eigen=false"
++os.environ["JAX_PLATFORMS"] = "cpu"
++
++import sys
++import time as _time
++from pathlib import Path
++
++sys.stdout.reconfigure(line_buffering=True)
++
++_PROJECT_ROOT = str(Path(__file__).resolve().parents[1])
++if _PROJECT_ROOT not in sys.path:
++    sys.path.insert(0, _PROJECT_ROOT)
++
++import jax
++jax.config.update("jax_enable_x64", True)
++
++import jax.numpy as jnp
++import numpy as np
++
++from run_omip_core2 import (
++    build_tripole,
++    read_mesh_mask_bathy,
++    _diag,
++    _save_snapshot,
++    compute_omip2_surface_forcing,
++    _idx_t,
++)
++
++from legoesm.parallel.distributed import initialize_distributed_latlon
++from legoesm.parallel.latlon_mpi import (
++    scatter_state_latlon_cgrid_ocean,
++    gather_state_latlon_cgrid_ocean,
++    slice_cgrid_geometry_to_band,
++    slice_zcoord_to_band,
++)
++from mpi4py import MPI
++
++_SEC_PER_DAY = 86400.0
++_SEC_PER_6H = 21600.0
++_YEAR_S = 365.0 * _SEC_PER_DAY
++
++
++def main() -> int:
++    import argparse
++    p = argparse.ArgumentParser(
++        description="MPI tripolar OMIP runner (latitude-band decomposition)",
++        formatter_class=argparse.RawDescriptionHelpFormatter,
++    )
++    p.add_argument("--years", type=float, default=5.0)
++    p.add_argument("--smoke", action="store_true",
++                    help="Short 10-day benchmark run (reports steps/s).")
++    p.add_argument("--dt", type=float, default=3600.0,
++                    help="Timestep [s] (default 3600 = NEMO ORCA1).")
++    p.add_argument("--nlev", type=int, default=20)
++    p.add_argument("--H-max", type=float, default=5500.0)
++    p.add_argument("--mesh", type=str,
++                    default="data/grids/eORCA1.2_mesh_mask.nc")
++    p.add_argument("--partial-cell", action="store_true",
++                    help="Use OceanPartialCellCoordinate (z-level + partial "
++                         "bottom steps, NEMO-faithful).")
++    p.add_argument("--adaptive-implicit-vertadv", action="store_true",
++                    help="Enable adaptive-implicit vertical momentum advection.")
++    p.add_argument("--convection", type=str, default="none",
++                    choices=["none", "enhanced_diffusion"],
++                    help="Grid-agnostic convective adjustment.")
++    p.add_argument("--convection-K-conv", type=float, default=1.0,
++                    help="Convective diffusivity K_conv [m^2/s].")
++    p.add_argument("--convection-K-bg", type=float, default=1e-5,
++                    help="Background diffusivity K_bg [m^2/s].")
++    p.add_argument("--scan-block", type=int, default=0,
++                    help="NOT YET SUPPORTED in MPI mode. "
++                         "Issue #354: wrap the time loop in jax.lax.scan. "
++                         "0 (default) = the bit-identical Python loop.")
++    p.add_argument("--output", type=str,
++                    default="results/omip_core2_mpi")
++    p.add_argument("--diag-every-days", type=float, default=30.0)
++    p.add_argument("--pgf-scheme", type=str, default=None,
++                    choices=[None, "adcroft", "smc03"])
++    p.add_argument("--A-h", type=float, default=None)
++    p.add_argument("--B-h", type=float, default=None)
++    p.add_argument("--K-bih", type=float, default=None)
++    p.add_argument("--flat-bottom", action="store_true")
++    p.add_argument("--A-h-eq-boost", type=float, default=None)
++    p.add_argument("--ke-gradient-scheme", type=str, default=None,
++                    choices=["centered", "hollingsworth"])
++    p.add_argument("--C-smag", type=float, default=None)
++    p.add_argument("--C-leith", type=float, default=None)
++    p.add_argument("--C-smag-lap", type=float, default=None)
++    p.add_argument("--bottom-drag-r", type=float, default=None)
++    p.add_argument("--barotropic-solver", default=None,
++                    choices=[None, "explicit_substep", "implicit_cn"])
++    p.add_argument("--barotropic-diffusion-alpha", type=float, default=None)
++    p.add_argument("--n-barotropic-substeps", type=int, default=None)
++    p.add_argument("--barotropic-time-filter", default=None,
++                    choices=[None, "box", "cosine"])
++    p.add_argument("--momentum-advection", default=None,
++                    choices=[None, "vector_invariant", "weno5", "weno7"])
++    p.add_argument("--slope-foot-alpha", type=float, default=None)
++    p.add_argument("--slope-foot-n-levels", type=int, default=None)
++    p.add_argument("--slope-foot-threshold", type=float, default=None)
++    p.add_argument("--min-levels", type=int, default=1)
++    p.add_argument("--div-damp-2", type=float, default=None)
++    p.add_argument("--div-damp-4", type=float, default=None)
++    p.add_argument("--smag-cfl-safety", type=float, default=None)
++    p.add_argument("--bathy-smoothing-passes", type=int, default=0)
++    p.add_argument("--momentum-rk3", action="store_true")
++    p.add_argument("--snapshot-every-days", type=float, default=0.0)
++    p.add_argument("--forcing-ramp-days", type=float, default=0.0)
++    args = p.parse_args()
++
++    if args.scan_block and args.scan_block > 0:
++        print("[warn] --scan-block is not yet supported in MPI mode; "
++              "ignoring.", flush=True)
++
++    comm = MPI.COMM_WORLD
++    rank = comm.Get_rank()
++    n_ranks = comm.Get_size()
++
++    from legoesm.core.precision import PrecisionPolicy, set_policy
++    set_policy(PrecisionPolicy.fp64())
++
++    if rank == 0:
++        print(f"[MPI] {n_ranks} ranks, dt={args.dt}s, nlev={args.nlev}",
++              flush=True)
++
++    grid, z_coord, model, state, H_bathy = build_tripole(
++        args.nlev, args.H_max, args.mesh,
++        partial_cell=args.partial_cell,
++        adaptive_implicit_vertadv=(
++            True if args.adaptive_implicit_vertadv else None
++        ),
++        convection=args.convection,
++        convection_K_conv=args.convection_K_conv,
++        convection_K_bg=args.convection_K_bg,
++        pgf_scheme=args.pgf_scheme,
++        A_h=args.A_h, B_h=args.B_h, K_bih=args.K_bih,
++        flat_bottom=args.flat_bottom,
++        A_h_eq_boost=args.A_h_eq_boost,
++        ke_gradient_scheme=args.ke_gradient_scheme,
++        C_smag=args.C_smag, C_leith=args.C_leith,
++        C_smag_lap=args.C_smag_lap,
++        bottom_drag_r=args.bottom_drag_r,
++        barotropic_solver=args.barotropic_solver,
++        barotropic_diffusion_alpha=args.barotropic_diffusion_alpha,
++        n_barotropic_substeps=args.n_barotropic_substeps,
++        barotropic_time_filter=args.barotropic_time_filter,
++        momentum_advection=args.momentum_advection,
++        slope_foot_alpha=args.slope_foot_alpha,
++        slope_foot_n_levels=args.slope_foot_n_levels,
++        slope_foot_threshold=args.slope_foot_threshold,
++        min_levels=args.min_levels,
++        div_damp_2=args.div_damp_2, div_damp_4=args.div_damp_4,
++        smag_cfl_safety=args.smag_cfl_safety,
++        bathy_smoothing_passes=args.bathy_smoothing_passes,
++        momentum_time_integrator=(
++            "rk3" if args.momentum_rk3 else None
++        ),
++    )
++
++    n_lat = grid.n_lat
++    n_lon = grid.n_lon
++
++    layout = initialize_distributed_latlon(
++        global_n_lat=n_lat,
++        global_n_lon=n_lon,
++        fold=grid.fold,
++    )
++
++    if rank == 0:
++        print(f"[MPI] layout: lat [{layout.lat_start}:{layout.lat_end}), "
++              f"n_lat_local={layout.n_lat_local}", flush=True)
++
++    local_grid = slice_cgrid_geometry_to_band(grid, layout)
++    local_z_coord = slice_zcoord_to_band(z_coord, layout)
++    local_state = scatter_state_latlon_cgrid_ocean(state, layout)
++
++    from legoesm.ocean.dynamics.ocean_model_latlon_cgrid import (
++        LatLonCGridOceanModel,
++    )
++    local_model = LatLonCGridOceanModel(local_grid, local_z_coord,
++                                         model.config)
++
++    from legoesm.ocean.forcing import load_core2_nyf
++    forcing = load_core2_nyf(allow_synthetic=False)
++    n_rec = int(forcing.u10.shape[0])
++
++    dt = float(args.dt)
++    ramp_s = float(args.forcing_ramp_days) * _SEC_PER_DAY
++    total_days = 10.0 if args.smoke else args.years * 365.0
++    n_steps = int(total_days * _SEC_PER_DAY / dt)
++    diag_every = max(1, int(args.diag_every_days * _SEC_PER_DAY / dt))
++    steps_per_year = int(365.0 * _SEC_PER_DAY / dt)
++    out_dir = Path(args.output)
++
++    if rank == 0:
++        lat2d = np.rad2deg(np.asarray(grid.lat_T))
++        lon2d = np.rad2deg(np.asarray(grid.lon_T))
++    else:
++        lat2d = lon2d = None
++
++    snap_every = (int(args.snapshot_every_days * _SEC_PER_DAY / dt)
++                  if args.snapshot_every_days > 0 else 0)
++
++    if rank == 0:
++        print(f"[run] {total_days:.0f} days = {n_steps} steps "
++              f"(diag every {diag_every} steps)", flush=True)
++
++    t_wall = _time.time()
++
++    for step in range(1, n_steps + 1):
++        it = _idx_t(step, dt, n_rec)
++        ramp = min(1.0, (step * dt) / ramp_s) if ramp_s > 0 else 1.0
++        sf = compute_omip2_surface_forcing(
++            local_state, forcing=forcing, idx_t=it,
++            grid=local_grid, grid_type="tripole",
++        )
++        if ramp < 1.0:
++            sf = sf._replace(
++                tau_x=sf.tau_x * ramp,
++                tau_y=sf.tau_y * ramp,
++                q_net=sf.q_net * ramp,
++                sw_down=sf.sw_down * ramp,
++            )
++        local_state = local_model.step(local_state, dt,
++                                       surface_forcing=sf)
++
++        if step % diag_every == 0 or step == n_steps:
++            local_state = jax.block_until_ready(local_state)
++            if rank == 0:
++                full_state = gather_state_latlon_cgrid_ocean(
++                    local_state, layout)
++                d = _diag(full_state, lat2d, lon2d)
++                elapsed = _time.time() - t_wall
++                rate = step / elapsed
++                day = step * dt / _SEC_PER_DAY
++                print(f"[diag] step {step} (day {day:.0f}): {d} | "
++                      f"{rate:.2f} steps/s", flush=True)
++                if not d["finite"]:
++                    print("[ABORT] non-finite state", flush=True)
++                    _save_snapshot(out_dir, f"blowup_step{step}",
++                                  full_state, lat2d, lon2d)
++                    return 1
++            else:
++                gather_state_latlon_cgrid_ocean(local_state, layout)
++
++        if snap_every > 0 and step % snap_every == 0 and step != n_steps:
++            if rank == 0:
++                full_state = gather_state_latlon_cgrid_ocean(
++                    local_state, layout)
++                day = step * dt / _SEC_PER_DAY
++                _save_snapshot(out_dir, f"day{int(round(day)):04d}",
++                              full_state, lat2d, lon2d)
++                print(f"[snapshot] day {day:.0f} saved", flush=True)
++            else:
++                gather_state_latlon_cgrid_ocean(local_state, layout)
++
++        if (not args.smoke and steps_per_year > 0
++                and step % steps_per_year == 0):
++            if rank == 0:
++                full_state = gather_state_latlon_cgrid_ocean(
++                    local_state, layout)
++                yr = step // steps_per_year
++                _save_snapshot(out_dir, f"year{yr:03d}",
++                              full_state, lat2d, lon2d)
++                print(f"[snapshot] year {yr} saved", flush=True)
++            else:
++                gather_state_latlon_cgrid_ocean(local_state, layout)
++
++    local_state = jax.block_until_ready(local_state)
++    if rank == 0:
++        full_state = gather_state_latlon_cgrid_ocean(
++            local_state, layout)
++        _save_snapshot(out_dir, "final", full_state, lat2d, lon2d)
++        rate = n_steps / (_time.time() - t_wall)
++        print(f"[done] {n_steps} steps @ {rate:.2f} steps/s (MPI, "
++              f"{n_ranks} ranks); final: {_diag(full_state, lat2d, lon2d)}")
++        if args.smoke:
++            yr_est = steps_per_year / rate / 3600.0
++            print(f"[smoke] projected wall-time: {yr_est:.2f} h/yr  "
++                  f"({args.years:.0f}yr -> {yr_est*args.years:.1f} h)")
++    else:
++        gather_state_latlon_cgrid_ocean(local_state, layout)
++
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())

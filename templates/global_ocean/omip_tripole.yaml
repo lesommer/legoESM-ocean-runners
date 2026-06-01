@@ -4,19 +4,16 @@ experiment:
   description: "OMIP on tripolar grid (eORCA1) with COREv2 NYF forcing"
 
 requires:
-  - domain_cfg
+  - eorca1_mesh
   - woce_ic_t
   - woce_ic_s
   - sss_climatology
   - core2_nyf
-  - eorca1_mesh
 
 requires_patches:
-  - 001-omip-tripole-script.patch
-  - 002-omip-tripole-physics.patch
-  - 003-tripolar-mpi-halo.patch
-  - 004-omip-tripole-mpi.patch
-  - 005-mpi-boundary-ops.patch
+  - 002-omip-core2-extensions.patch
+  - 003-mpi-boundary-ops.patch
+  - 004-omip-core2-mpi.patch
 
 mpi:
   enabled: false
@@ -27,17 +24,22 @@ mpi:
 grid:
   type: tripole
   resolution: eORCA1
-  fold_convention: n_lon-1-i
+  mesh_file: eORCA1.2_mesh_mask.nc
   nlev: 75
+  partial_cells: true
 
 ocean:
   smag_cfl_safety: 0.125
   adaptive_implicit_vertadv: true
 
+scan:
+  block_size: 0
+
 initial_conditions:
-  type: nemo_woce
+  type: woce
 
 physics:
+  convection: enhanced_diffusion
   vertical_mixing:
     scheme: kpp
   lateral_mixing:
@@ -47,13 +49,12 @@ physics:
     water_type: "II"
   sss_restoring:
     enabled: true
+    tau_days: 60.0
 
 forcing:
   mode: core2_nyf
   synthetic: false
   scale: 1.0
-  runoff:
-    enabled: true
 
 time:
   duration_days: 3650

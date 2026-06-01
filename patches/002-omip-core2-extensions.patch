@@ -1,0 +1,265 @@
+diff --git a/scripts/run_omip_core2.py b/scripts/run_omip_core2.py
+index 5da75b71..34f1b6fd 100644
+--- a/scripts/run_omip_core2.py
++++ b/scripts/run_omip_core2.py
+@@ -195,6 +195,32 @@ def smooth_woa_ts(state, grid, passes):
+     )
+ 
+ 
++def init_ocean_from_woce(state, ic_t_path, ic_s_path, land_mask):
++    """Read WOCE/EN4 initial conditions from NetCDF and set T/S in the state.
++
++    The WOCE files use the same eORCA1 grid as the mesh file, so they can be
++    directly assigned.  Reads ``contemp`` (temperature) and ``presalt``
++    (salinity) variables, masks land points, and replaces state.T.data and
++    state.S.data.
++    """
++    import xarray as xr
++    ds_t = xr.open_dataset(ic_t_path)
++    ds_s = xr.open_dataset(ic_s_path)
++    T_data = np.asarray(ds_t["contemp"].values, dtype=np.float64)
++    S_data = np.asarray(ds_s["presalt"].values, dtype=np.float64)
++    m2 = np.asarray(land_mask) > 0.5
++    m3 = m2[..., None]
++    T_data = np.where(m3, T_data, 0.0)
++    S_data = np.where(m3, S_data, 0.0)
++    state = state._replace(
++        T=state.T.replace(data=jnp.asarray(T_data)),
++        S=state.S.replace(data=jnp.asarray(S_data)),
++    )
++    print(f"[setup] T/S initialised from WOCE/EN4 "
++          f"({Path(ic_t_path).name}, {Path(ic_s_path).name})")
++    return state
++
++
+ def apply_balanced_init(state, grid, z_coord, config,
+                         taper_lat_deg=8.0, ref_depth_m=1500.0,
+                         max_speed=2.5, with_ssh=True):
+@@ -936,8 +962,41 @@ def main() -> int:
+                         "the nonlinear advective blowup) while the stratification "
+                         "settles. 0=off.")
+     p.add_argument("--spinup-drag-days", type=float, default=0.0,
+-                   help="Duration [days] of the spin-up velocity-damping phase "
+-                        "(drag removed afterwards -> free run).")
++                    help="Duration [days] of the spin-up velocity-damping phase "
++                         "(drag removed afterwards -> free run).")
++    p.add_argument("--synthetic-forcing", action="store_true",
++                    help="Allow synthetic CORE-II forcing when the Zarr cache "
++                         "is missing. Without this flag, a missing cache is a "
++                         "hard error (the NEMO-faithful pipeline requires real "
++                         "6-hourly data). Use for smoke tests without real data.")
++    p.add_argument("--forcing-scale", type=float, default=1.0,
++                    help="Scale surface forcing fields by this factor. "
++                         "tau_x, tau_y, q_net, sw_down are all multiplied "
++                         "by the factor. Only applied when != 1.0.")
++    p.add_argument("--days", type=float, default=0,
++                    help="Run duration in days (alternative to --years). "
++                         "If > 0, overrides --years. Useful for short "
++                         "experiments: --days 5 instead of --years 0.0137.")
++    p.add_argument("--ic-type", type=str, default="rest",
++                    choices=["rest", "woa", "woce"],
++                    help="Initial condition type. 'rest' = rest state (default), "
++                         "'woa' = WOA18 climatology (same as --woa-init), "
++                         "'woce' = WOCE/EN4 on the eORCA1 grid. If --woa-init "
++                         "is also set, it is treated as --ic-type woa.")
++    p.add_argument("--ic-t", type=str,
++                    default="data/woce/eORCA1_woce_T.nc",
++                    help="Path to WOCE temperature file (for --ic-type woce).")
++    p.add_argument("--ic-s", type=str,
++                    default="data/woce/eORCA1_woce_S.nc",
++                    help="Path to WOCE salinity file (for --ic-type woce).")
++    p.add_argument("--sss-target", type=str, default=None,
++                    help="Path to SSS climatology file for salinity restoring. "
++                         "When provided, applies surface salinity restoring: "
++                         "S_surf += dt/tau * (SSS_clim - S_surf). "
++                         "Incompatible with --scan-block.")
++    p.add_argument("--sss-tau-days", type=float, default=60.0,
++                    help="SSS restoring timescale [days] (default 60). "
++                         "Only used with --sss-target.")
+     args = p.parse_args()
+ 
+     from legoesm.core.precision import PrecisionPolicy, set_policy
+@@ -946,12 +1005,14 @@ def main() -> int:
+     from legoesm.ocean.coupler import compute_omip2_surface_forcing
+     from legoesm.core.field import Field
+ 
++    ic_type = "woa" if args.woa_init else args.ic_type
++
+     print(f"[setup] building {args.grid} (nlev={args.nlev}, "
+-          f"woa_init={args.woa_init}) ...")
++          f"ic_type={ic_type}) ...")
+     if args.grid == "tripole":
+         grid, z_coord, model, state, H_bathy = build_tripole(
+             args.nlev, args.H_max, args.mesh,
+-            woa_init=args.woa_init, woa_t=args.woa_t, woa_s=args.woa_s,
++            woa_init=(ic_type == "woa"), woa_t=args.woa_t, woa_s=args.woa_s,
+             pgf_scheme=args.pgf_scheme, A_h=args.A_h, B_h=args.B_h, K_bih=args.K_bih,
+             flat_bottom=args.flat_bottom, A_h_eq_boost=args.A_h_eq_boost,
+             ke_gradient_scheme=args.ke_gradient_scheme,
+@@ -981,7 +1042,7 @@ def main() -> int:
+         _nlat, _nlon = (int(x) for x in args.latlon_res.split("x"))
+         grid, z_coord, model, state, H_bathy = build_latlon_bathy(
+             args.nlev, args.H_max, args.mesh, n_lat=_nlat, n_lon=_nlon,
+-            woa_init=args.woa_init, woa_t=args.woa_t, woa_s=args.woa_s,
++            woa_init=(ic_type == "woa"), woa_t=args.woa_t, woa_s=args.woa_s,
+             pgf_scheme=args.pgf_scheme, A_h=args.A_h, B_h=args.B_h, K_bih=args.K_bih,
+             flat_bottom=args.flat_bottom, A_h_eq_boost=args.A_h_eq_boost,
+             ke_gradient_scheme=args.ke_gradient_scheme,
+@@ -1005,14 +1066,19 @@ def main() -> int:
+         )
+         app_grid_type = "latlon"
+ 
++    if ic_type == "woce":
++        state = init_ocean_from_woce(state, args.ic_t, args.ic_s,
++                                     state.land_mask.data)
++
+     if args.woa_smoothing_passes and args.woa_smoothing_passes > 0:
+-        if not args.woa_init:
+-            raise ValueError("--woa-smoothing-passes requires --woa-init.")
++        if ic_type != "woa":
++            raise ValueError("--woa-smoothing-passes requires --ic-type woa (or --woa-init).")
+         state = smooth_woa_ts(state, grid, args.woa_smoothing_passes)
+ 
+     if args.balanced_init:
+-        if not args.woa_init:
+-            raise ValueError("--balanced-init requires --woa-init (it balances the WOA IC).")
++        if ic_type != "woa":
++            raise ValueError("--balanced-init requires --ic-type woa (or --woa-init) "
++                             "(it balances the WOA IC).")
+         state = apply_balanced_init(
+             state, grid, z_coord, model.config,
+             taper_lat_deg=args.balanced_init_taper_lat,
+@@ -1020,16 +1086,13 @@ def main() -> int:
+         )
+ 
+     lat2d, lon2d = _grid_lat2d_deg(grid, args.grid)
+-    # allow_synthetic=False: this NEMO-faithful pipeline MUST use the real
+-    # 6-hourly CORE-II nyf.zarr; a silent fallback to 365 daily synthetic forcing
+-    # would corrupt the comparison invisibly.
+-    forcing = load_core2_nyf(allow_synthetic=False)
++    forcing = load_core2_nyf(allow_synthetic=args.synthetic_forcing)
+     n_rec = int(forcing.u10.shape[0])
+     print(f"[setup] grid {lat2d.shape}, forcing records {n_rec}, dt={args.dt}s")
+ 
+     dt = float(args.dt)
+     ramp_s = float(args.forcing_ramp_days) * _SEC_PER_DAY
+-    total_days = 10.0 if args.smoke else args.years * 365.0
++    total_days = args.days if args.days > 0 else (10.0 if args.smoke else args.years * 365.0)
+     n_steps = int(total_days * _SEC_PER_DAY / dt)
+     diag_every = max(1, int(args.diag_every_days * _SEC_PER_DAY / dt))
+     steps_per_year = int(365.0 * _SEC_PER_DAY / dt)
+@@ -1052,6 +1115,24 @@ def main() -> int:
+         print(f"[setup] nudging T,S -> WOA: tau={args.nudge_woa_tau_days}d, "
+               f"release day={args.nudge_release_day or 'never'}")
+ 
++    forcing_scale = float(args.forcing_scale)
++    if forcing_scale != 1.0:
++        print(f"[setup] forcing scale factor: {forcing_scale}")
++
++    sss_clim = None
++    sss_tau_s = 0.0
++    if args.sss_target is not None:
++        import xarray as _xr
++        _ds_sss = _xr.open_dataset(args.sss_target)
++        _sss_var = [v for v in _ds_sss.data_vars if "sal" in v.lower() or "sss" in v.lower()]
++        _sss_name = _sss_var[0] if _sss_var else list(_ds_sss.data_vars)[0]
++        sss_clim = jnp.asarray(_ds_sss[_sss_name].values, dtype=jnp.float64)
++        while sss_clim.ndim > 2:
++            sss_clim = sss_clim[0]
++        sss_tau_s = float(args.sss_tau_days) * _SEC_PER_DAY
++        print(f"[setup] SSS restoring: target={args.sss_target}, "
++              f"tau={args.sss_tau_days}d")
++
+     snap_every = (int(args.snapshot_every_days * _SEC_PER_DAY / dt)
+                   if args.snapshot_every_days > 0 else 0)
+ 
+@@ -1091,12 +1172,14 @@ def main() -> int:
+                    "tracer_time_integrator", "euler")
+     use_scan = (int(args.scan_block) > 0 and app_grid_type == "tripole"
+                 and nudge_tau_s == 0.0 and drag_tau_s == 0.0
++                and sss_clim is None
+                 and _tti != "ab2")
+     if int(args.scan_block) > 0 and not use_scan:
+         why = ("AB2 tracer time integrator (None->Field carry breaks "
+                "lax.scan)" if _tti == "ab2"
+-               else "grid!=tripole or WOA-nudging / spin-up-drag enabled "
+-                    "(those need per-step host updates)")
++               else "grid!=tripole or WOA-nudging / spin-up-drag / "
++                     "SSS-restoring enabled "
++                     "(those need per-step host updates)")
+         print(f"[scan] --scan-block ignored: {why}.", flush=True)
+     if use_scan:
+         from legoesm.ocean.coupler.omip2_applicator import (
+@@ -1104,7 +1187,8 @@ def main() -> int:
+         )
+         f_stack, nn_i, nn_j, gshape = build_core2_forcing_device_stack(
+             forcing, grid, "tripole")
+-        block_fn = build_omip2_scan_block_fn(model, dt, gshape, ramp_s=ramp_s)
++        block_fn = build_omip2_scan_block_fn(model, dt, gshape, ramp_s=ramp_s,
++                                              forcing_scale=forcing_scale)
+         bsz = int(args.scan_block)
+         print(f"[run] lax.scan block-stepping: block<={bsz} steps, split at "
+               f"diag/snapshot/year boundaries so output cadence matches the "
+@@ -1177,6 +1261,11 @@ def main() -> int:
+         if ramp < 1.0:
+             sf = sf._replace(tau_x=sf.tau_x * ramp, tau_y=sf.tau_y * ramp,
+                              q_net=sf.q_net * ramp, sw_down=sf.sw_down * ramp)
++        if forcing_scale != 1.0:
++            sf = sf._replace(tau_x=sf.tau_x * forcing_scale,
++                             tau_y=sf.tau_y * forcing_scale,
++                             q_net=sf.q_net * forcing_scale,
++                             sw_down=sf.sw_down * forcing_scale)
+         state = model.step(state, dt, surface_forcing=sf)
+         if nudge_tau_s > 0 and (nudge_release_s <= 0 or step * dt < nudge_release_s):
+             a = dt / nudge_tau_s
+@@ -1198,6 +1287,16 @@ def main() -> int:
+                 v=Field(jnp.asarray(np.asarray(state.v.data) * df),
+                         name=state.v.name, dims=state.v.dims, units=state.v.units),
+             )
++        if sss_clim is not None:
++            S_data = np.asarray(state.S.data)
++            S_surf = S_data[..., 0]
++            a_sss = dt / sss_tau_s
++            m2 = np.asarray(state.land_mask.data) > 0.5
++            S_data[..., 0] = np.where(m2, S_surf + a_sss * (np.asarray(sss_clim) - S_surf), S_surf)
++            state = state._replace(
++                S=Field(jnp.asarray(S_data), name=state.S.name,
++                        dims=state.S.dims, units=state.S.units),
++            )
+         if step % diag_every == 0 or step == n_steps:
+             state = jax.block_until_ready(state)
+             d = _diag(state, lat2d, lon2d)
+diff --git a/src/legoesm/ocean/coupler/omip2_applicator.py b/src/legoesm/ocean/coupler/omip2_applicator.py
+index 0ac4e8a2..7c904d95 100644
+--- a/src/legoesm/ocean/coupler/omip2_applicator.py
++++ b/src/legoesm/ocean/coupler/omip2_applicator.py
+@@ -648,6 +648,7 @@ def compute_omip2_surface_forcing_jax(
+ 
+ def build_omip2_scan_block_fn(
+     model, dt, grid_shape, *, rho_air=1.225, ramp_s=0.0,
++    forcing_scale=1.0,
+ ):
+     """Build a JIT-compiled ``lax.scan`` block-step function for the tripole
+     OMIP time loop (issue #354).
+@@ -675,6 +676,7 @@ def build_omip2_scan_block_fn(
+     from jax import lax
+ 
+     apply_ramp = ramp_s > 0.0  # static gate (CLAUDE.md feature-gating)
++    apply_fscale = forcing_scale != 1.0
+ 
+     @jax.jit
+     def block_fn(state, forcing_stack, nn_i, nn_j, idx_t_block, step0):
+@@ -691,6 +693,13 @@ def build_omip2_scan_block_fn(
+                     tau_x=sf.tau_x * ramp, tau_y=sf.tau_y * ramp,
+                     q_net=sf.q_net * ramp, sw_down=sf.sw_down * ramp,
+                 )
++            if apply_fscale:
++                sf = sf._replace(
++                    tau_x=sf.tau_x * forcing_scale,
++                    tau_y=sf.tau_y * forcing_scale,
++                    q_net=sf.q_net * forcing_scale,
++                    sw_down=sf.sw_down * forcing_scale,
++                )
+             st = model._step_impl(st, dt, surface_forcing=sf)
+             return (st, step + 1), None
+ 
