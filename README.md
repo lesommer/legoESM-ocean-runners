@@ -4,7 +4,7 @@ Experiment templates, runners, and reproducibility tools for ocean simulations w
 
 ## Why use this repo?
 
-Running legoESM directly means editing `scripts/run_omip.py` (3687 lines) by hand — no versioned configurations, no provenance trail, no way to reproduce past runs.
+Running legoESM directly means editing `scripts/run/run_omip_core2.py` by hand — no versioned configurations, no provenance trail, no way to reproduce past runs.
 
 This repo gives you:
 
@@ -71,10 +71,10 @@ Every run produces an `experiment.tag` (INI format) recording the full software 
 ```ini
 [legoESM]
 ref = main
-commit = 6056a0d0402968d952089209098c5990ed7d53fa
+commit = 69287951b423ddf77d74a53746d4b649ec1dbfcc
 
 [reproducibility]
-runner_tag = legoesm-6056a0d04029-20260530
+runner_tag = legoesm-69287951b423-20260606
 python_version = 3.11.14
 jax_version = 0.4.38
 ```
@@ -92,7 +92,7 @@ This checks out the runner tag → checks out the legoESM commit → applies pat
 | Category | Templates | Run status |
 |----------|-----------|------------|
 | `1d/` | `ocean_scm_convective`, `ocean_scm_ekman`, `ocean_scm_surface_heating`, `ocean_scm_kpp_wind`, `ocean_scm` | **Run-tested** |
-| `global_ocean/` | `omip_tripole` | **5-day run completed** (CPU, idealized ICs, synthetic forcing; NEMO ICs cause cold-start blowup — use `--idealized-ic` for spinup; patch 001 + 002: NEMO-identical eORCA1 tripolar OMIP with domain_cfg grid, integrated forcing, Jerlov SW, SSS restoring, Dai-Trenberth runoff, NEMO-compatible output) |
+| `global_ocean/` | `omip_tripole` | **5-day run completed** (CPU, rest ICs, synthetic forcing; patches 002 + 003: eORCA1 tripolar OMIP with CORE-II forcing, `--synthetic-forcing` for smoke tests, `--days` for short runs, `--forcing-scale` for sensitivity; MPI support via `mpi.enabled: true`) |
 | `global_ocean/` | `omip_jra55`, `omip_global`, `omip_cubed_sphere`, `global_overturning`, `neverworld2_lite` | Init-only |
 | `2d/`, `3d_idealized/`, `coupled/` | See `templates/` | Init-only or structurally validated |
 
