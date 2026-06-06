@@ -105,7 +105,7 @@ def run_quick_test(case: TestCase, legoesm_path: Path, verbose: bool = False):
 
     This runs legoesm directly via Python for `quick_days` timesteps.
     """
-    env = {"PYTHONPATH": f"{legoesm_path / 'src'}"}
+    env = None
     cmd = [
         sys.executable, "-m", "runners.run_experiment", "init",
         case.template,

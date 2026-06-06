@@ -176,7 +176,6 @@ def detect_mode(config: dict) -> str:
 
 def build_atmosphere_config(config: dict, legoesm_path: Path):
     """Build an ExperimentConfig from an atmosphere-mode template."""
-    sys.path.insert(0, str(legoesm_path / "src"))
     from legoesm.driver.config import (
         DycoreConfig,
         ExperimentConfig,
@@ -222,7 +221,6 @@ def build_ocean_config(config: dict, legoesm_path: Path):
 
     Returns (model, grid, coord, ocean_config, initial_conditions) ready to run.
     """
-    sys.path.insert(0, str(legoesm_path / "src"))
 
     from legoesm.ocean.state import LatLonCGridOceanConfig
     from legoesm.ocean.physics import (
@@ -530,7 +528,7 @@ def _generate_run_script(config: dict, exp_dir: Path, machine: str | None = None
     else:
         lines.append("# Resolve legoESM")
         lines.append(f"LEGOESM_DIR={os.environ.get('LEGOESM_DIR', str(Path(__file__).resolve().parent.parent.parent / 'legoESM'))}")
-    lines.append('export PYTHONPATH="$LEGOESM_DIR/src:$PYTHONPATH"')
+    lines.append("# legoESM must be installed (uv sync or pip install -e .)")
     lines.append("")
 
     mpi_cfg = config.get("mpi", {})
@@ -593,7 +591,6 @@ def run_experiment(config_path: Path, legoesm_path: Path | None = None):
 
 def _run_ocean(config: dict, legoesm_path: Path, config_path: Path | None = None):
     """Run an ocean experiment using the legoesm ocean model directly."""
-    sys.path.insert(0, str(legoesm_path / "src"))
 
     mode = config.get("experiment", {}).get("mode", "3d_ocean")
 
@@ -644,9 +641,9 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
 
     mpi_cfg = get_mpi_config(config)
     if mpi_cfg["enabled"]:
-        script = str(legoesm_path / "scripts" / "run_omip_core2_mpi.py")
+        script = str(legoesm_path / "scripts" / "run" / "run_omip_core2_mpi.py")
     else:
-        script = str(legoesm_path / "scripts" / "run_omip_core2.py")
+        script = str(legoesm_path / "scripts" / "run" / "run_omip_core2.py")
     data_root = resolve_data_root()
 
     duration_days = time_cfg.get("duration_days", 3650)
@@ -737,7 +734,6 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
 
 def _run_coupled(config: dict, legoesm_path: Path):
     """Run a coupled ESM experiment."""
-    sys.path.insert(0, str(legoesm_path / "src"))
 
     from legoesm.driver.coupled_config import (
         preset_aquaplanet,

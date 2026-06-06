@@ -120,8 +120,6 @@ def validate_legoesm_import(legoesm_path: Path, verbose: bool = False) -> list[s
     errors = []
     import importlib
 
-    sys.path.insert(0, str(legoesm_path / "src"))
-
     try:
         import legoesm
         if verbose:

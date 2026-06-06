@@ -12,8 +12,7 @@ requires:
 
 requires_patches:
   - 002-omip-core2-extensions.patch
-  - 003-mpi-boundary-ops.patch
-  - 004-omip-core2-mpi.patch
+  - 003-omip-core2-mpi.patch
 
 mpi:
   enabled: false

@@ -10,7 +10,7 @@ Only `ocean_scm` mode has a working native run path (YAML → model object → o
 |------|----------------------------------|-------------------------------------|-------|
 | `ocean_scm` | Working | **Working** | Constructs `OceanColumnModel`, runs, saves NetCDF. 5 templates tested end-to-end. |
 | `3d_ocean` | Working | **Stub** | Prints note to use `run_ocean_test_matrix.py` or legoESM scripts directly. No model object constructed. |
-| `3d_ocean_realistic` | Working | **Working for tripolar only** | Script delegation: calls `run_omip_core2.py` (upstream + patch `002` extensions) which reads eORCA1 mesh mask, loads WOCE/EN4 ICs, applies CORE2 NYF forcing, supports `--scan-block` for `lax.scan`, `--convection enhanced_diffusion`, `--partial-cell`, `--synthetic-forcing`, `--forcing-scale`, `--days`, `--ic-type {rest,woa,woce}`, `--sss-target`. **MPI support** (patches `003` + `004`): when `mpi.enabled: true`, dispatches to `run_omip_core2_mpi.py` with latitude-band decomposition and MPI-aware boundary operators. Other grid types still stub. |
+| `3d_ocean_realistic` | Working | **Working for tripolar only** | Script delegation: calls `scripts/run/run_omip_core2.py` (upstream + patch `002` extensions) which reads eORCA1 mesh mask, loads WOCE/EN4 ICs, applies CORE2 NYF forcing, supports `--scan-block` for `lax.scan`, `--convection enhanced_diffusion`, `--partial-cell`, `--synthetic-forcing`, `--forcing-scale`, `--days`. **MPI support** (patch `003`): when `mpi.enabled: true`, dispatches to `scripts/run/run_omip_core2_mpi.py` with latitude-band decomposition. Other grid types still stub. |
 | `barotropic_ocean` | Working | **Not implemented** | Raises `NotImplementedError`. |
 | `coupled` | Working | **Partially implemented** | Constructs `CoupledESMDriver` but untested. |
 
@@ -54,21 +54,21 @@ Only `ocean_scm` mode has a working native run path (YAML → model object → o
 
 ## Current 3D / coupled workflow
 
-For `3d_ocean_realistic` on tripolar grids, the runner delegates to `run_omip_core2.py` (upstream in legoESM, extended by patch `002-omip-core2-extensions.patch`). The upstream script provides `build_tripole()` for eORCA1 mesh mask reading, `load_core2_nyf()` for CORE-II Normal Year Forcing, `--scan-block` for `lax.scan` stepping, `--convection enhanced_diffusion`, and `--partial-cell` for partial bottom cells. Patch 002 adds: `--synthetic-forcing` (smoke tests without real Zarr data), `--forcing-scale` (amplitude multiplier), `--days` (short experiments), `--ic-type {rest,woa,woce}` (initial conditions selection), and `--sss-target` (salinity restoring from climatology). The template now uses `--mesh` (eORCA1.2 mesh mask) instead of `--domain-cfg`, and defaults to `--ic-type woce` with WOCE/EN4 v4.2 initial conditions.
+For `3d_ocean_realistic` on tripolar grids, the runner delegates to `scripts/run/run_omip_core2.py` (upstream in legoESM, extended by patch `002-omip-core2-extensions.patch`). The upstream script provides `build_tripole()` for eORCA1 mesh mask reading, `load_core2_nyf()` for CORE-II Normal Year Forcing, `--scan-block` for `lax.scan` stepping, `--convection enhanced_diffusion`, and `--partial-cell` for partial bottom cells. Patch 002 adds: `--synthetic-forcing` (smoke tests without real Zarr data), `--forcing-scale` (amplitude multiplier), `--days` (short experiments).
 
-For all other 3D/coupled modes, experiments are executed by calling legoESM's own Python scripts directly (e.g., `legoESM/scripts/run_omip.py`). The runners still handle init and provenance tagging for these modes — the generated `config.yaml` and `experiment.tag` are valid even though `run_experiment run` does not execute a simulation.
+For all other 3D/coupled modes, experiments are executed by calling legoESM's own Python scripts directly (e.g., `legoESM/scripts/run/run_omip.py`). The runners still handle init and provenance tagging for these modes — the generated `config.yaml` and `experiment.tag` are valid even though `run_experiment run` does not execute a simulation.
 
 ## MPI support for tripolar grids
 
-Patches `003-mpi-boundary-ops.patch` and `004-omip-core2-mpi.patch` add multi-CPU MPI support for the `omip_tripole` template. When `mpi.enabled: true` is set in the config (via overrides), the runner dispatches to `run_omip_core2_mpi.py` which uses latitude-band domain decomposition across MPI ranks.
+Patch `003-omip-core2-mpi.patch` adds the MPI runner `scripts/run/run_omip_core2_mpi.py`. When `mpi.enabled: true` is set in the config (via overrides), the runner dispatches to this script which uses latitude-band domain decomposition across MPI ranks.
 
-**Patch 003** makes the C-grid boundary operators and barotropic solver MPI-aware at partition boundaries:
-- Adds `_fold_is_local(fold)` helper that checks `fold.fold_j >= 0` instead of `fold.is_active` (which is True on all ranks for consistent MPI call counts)
-- Updates `pad_ns_scalar`, `pad_ns_vector_u/v`, `pad_ns_vector_pair`, `min_cell_to_vface`, `fold_vface_row` in `latlon_cgrid_operators.py` to use `pad_ns_zero` (MPI halo exchange) first, then override the north row with fold data only on the fold-local rank
-- Updates `_depth_average_to_faces` and `_h_total_at_faces` in `barotropic_implicit_latlon_cgrid.py` with the same pattern
-- Adds NaN guard in `_apply_implicit_vertical_mixing` that replaces NaN in K_v/A_v with background values
+The upstream legoESM (PRs #357 and #358) now includes the MPI-correct boundary operators:
+- `_fold_is_local(grid)` checks `fold.fold_j >= 0` instead of `fold.is_active`, ensuring consistent MPI call counts across all ranks
+- `slice_cgrid_geometry_to_band` uses `fold_j=-1` sentinel on non-northernmost ranks (keeps `is_active=True` for consistency)
+- `_interp_to_v_points` uses "pad-first-then-average" pattern for correct v-face interpolation at partition boundaries
+- All meridional operators (`pad_ns_scalar`, `pad_ns_vector_v`, `gradient_y_cgrid`, `curl_vertex_cgrid`, etc.) use `pad_ns_zero` first, then override the fold row only on the fold-local rank
 
-**Patch 004** adds `scripts/run_omip_core2_mpi.py` which imports `build_tripole` and forcing functions from the patched `run_omip_core2.py`, uses `initialize_distributed_latlon` for MPI setup, `scatter_state_latlon_cgrid_ocean`/`gather_state_latlon_cgrid_ocean` for state distribution, and `slice_cgrid_geometry_to_band`/`slice_zcoord_to_band` for per-rank grid slicing.
+These fixes eliminated the `MPI_ERR_TRUNCATE` bug (np>=2) and the NaN blowup at partition boundaries (np>=4) that were present before PRs #357/#358.
 
 **To enable MPI**: set overrides `mpi.enabled=true` and `mpi.ranks=N` in your `run.yaml`:
 ```yaml
@@ -77,6 +77,15 @@ overrides:
   mpi.ranks: 4
 ```
 
-**Environment**: MPI runs require `mpi4py` and `mpi4jax` installed, plus an MPI launcher (`mpirun`/`mpiexec`). The runner automatically sets `OMP_NUM_THREADS=1`, `XLA_FLAGS=--xla_cpu_multi_thread_eigen=false`, and `JAX_PLATFORMS=cpu` when MPI is enabled.
+**Environment**: MPI runs require `mpi4py` and `mpi4jax` installed, plus an MPI launcher (`mpirun`/`mpiexec`). The runner automatically sets `OMP_NUM_THREADS=1`, `XLA_FLAGS=--xla_cpu_multi_thread_eigen=false`, and `JAX_PLATFORMS=cpu` when MPI is enabled. legoESM must be installed via `uv sync` or `pip install -e .` in the legoESM checkout.
 
-**Known issues**: KPP vertical mixing and enhanced diffusion convection produce NaN in A_v/K_v at MPI partition boundaries. The NaN guard in patch 003 replaces these with background values, but this means the vertical mixing at boundary rows is not physically correct. A proper fix requires making KPP/convection MPI-aware (using halo data for boundary-adjacent columns). `--scan-block` is not yet supported in MPI mode.
+**Known issues**: `--scan-block` is not yet supported in MPI mode.
+
+## Installation (federation refactor)
+
+legoESM uses a uv workspace federation layout (`packages/core/`, `packages/ocean/`, etc.). Import paths are unchanged (`legoesm.ocean.dynamics.*` still works via PEP-420 namespace), but the source files are no longer under `src/legoesm/`. The runners no longer set `PYTHONPATH=$LEGOESM_DIR/src` — instead, legoESM must be installed:
+
+```bash
+cd ../legoESM && uv sync
+# or: pip install -e ".[dev]"
+```
