@@ -647,12 +647,27 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
     data_root = resolve_data_root()
 
     duration_days = time_cfg.get("duration_days", 3650)
+    # Upstream build_tripole (pin c986cb989) asserts that --mesh resolves to
+    # the canonical repo-relative data/grids/<file> path: it derives the
+    # resolution from the mesh filename and builds the grid from the SAME
+    # canonical path via run_omip._parse_resolution, then requires
+    # Path.resolve() equality on both sides. Any $LEGOESM_DATA_DIR-rooted
+    # absolute path fails that assert. So: run the delegated script with
+    # cwd=legoesm_path and pass the repo-rooted mesh path — both sides then
+    # resolve identically. The mesh must exist at <legoesm>/data/grids/
+    # (a symlink to a data_root copy is fine: both sides resolve through it).
+    mesh_arg = str(legoesm_path / "data" / "grids"
+                   / grid_cfg.get("mesh_file", "eORCA1.2_mesh_mask.nc"))
+    # The subprocess cwd becomes the legoESM repo, so a relative --output
+    # would relocate: absolutize against the experiment directory.
+    out_dir = config_path.parent if config_path else Path.cwd()
+    output_arg = str(out_dir / output_cfg.get("path", "results/omip_tripole"))
     cmd = [
         sys.executable, script,
         "--dt", str(time_cfg.get("dt_seconds", 1200)),
         "--nlev", str(grid_cfg.get("nlev", 75)),
-        "--mesh", str(data_root / "grids" / grid_cfg.get("mesh_file", "eORCA1.2_mesh_mask.nc")),
-        "--output", str(output_cfg.get("path", "results/omip_tripole")),
+        "--mesh", mesh_arg,
+        "--output", output_arg,
     ]
 
     if duration_days > 0 and duration_days < 365:
@@ -726,7 +741,7 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
     print(f"Running tripolar OMIP via: {' '.join(cmd)}")
     if mpi_cfg["enabled"]:
         print(f"  MPI: {mpi_cfg['ranks']} ranks, launcher={mpi_cfg['launcher']}")
-    result = subprocess.run(cmd, env=run_env)
+    result = subprocess.run(cmd, env=run_env, cwd=str(legoesm_path))
     if result.returncode != 0:
         raise RuntimeError(f"run_omip_core2.py exited with code {result.returncode}")
 
