@@ -274,6 +274,107 @@ files:
     citation: "NEMO ORCA1 reference configuration"
 
   # ===========================================================================
+  # NEMO ORCA1 faithful card: NEMO INPUTS, ice IC, references
+  # (template global_ocean/omip_faithful_card; README in the run notes)
+  # ===========================================================================
+  nemo_domain_cfg:
+    description: "NEMO ORCA1 domain_cfg.nc: grid geometry, partial cells (e3t/e3u/e3v_0), bottom_level — source of the --nemo-vertical 75-level column and runoff cell areas"
+    path: input_fields/domain_cfg.nc
+    access: institutional
+    instructions: |
+      Copy from the NEMO ORCA1 data repository (local checkout
+      ~/data/models/orca1_data_repository/input_fields/domain_cfg.nc) or
+      ahead from the ORCA1 deploy: https://doi.org/10.5281/zenodo.14041098
+      Place at DATA_ROOT/input_fields/domain_cfg.nc
+    size_mb: 520
+    format: NetCDF4
+    citation: "de Lavergne et al. 2024, JAMES doi:10.1029/2024MS004824 (ORCA1 config)"
+
+  zdfiwm_forcing_TRA:
+    description: "de Lavergne et al. 2020 improved internal-wave/tidal mixing power fields (4 sources) on eORCA1 — --iwm input"
+    path: input_fields/zdfiwm_forcing_TRA.nc
+    access: institutional
+    instructions: |
+      Copy from the NEMO ORCA1 data repository
+      (input_fields/zdfiwm_forcing_TRA.nc). Place at
+      DATA_ROOT/input_fields/zdfiwm_forcing_TRA.nc
+    size_mb: 40
+    format: NetCDF4
+    citation: "de Lavergne et al. 2020, JPO doi:10.1175/JPO-D-19-0243.1"
+
+  runoff_icb_daitrenberth_depoorter:
+    description: "NEMO ORCA1 runoff-icb Dai-Trenberth-Depoorter eORCA1 runoff file (sorunoff/sornfisf/Icb_flux) — --runoff (patch 004 --runoff-file) and --isf source"
+    path: input_fields/runoff-icb_DaiTrenberth_Depoorter.nc
+    access: institutional
+    instructions: |
+      Copy from the NEMO ORCA1 data repository
+      (input_fields/runoff-icb_DaiTrenberth_Depoorter.nc). Place at
+      DATA_ROOT/input_fields/runoff-icb_DaiTrenberth_Depoorter.nc
+    size_mb: 30
+    format: NetCDF4
+    citation: "Dai & Trenberth 2002/2009; Depoorter et al. 2013 (icebergs)"
+
+  chl_biomer_reg05:
+    description: "Monthly ESACCI/BIOMER chlorophyll climatology on a 0.5° regular grid — --sw-rgb-chl input (NEMO ln_qsr_rgb/nn_chldta=1)"
+    path: input_fields/merged_ESACCI_BIOMER4V1R1_CHL_REG05.nc
+    access: institutional
+    instructions: |
+      Copy from the NEMO ORCA1 data repository
+      (input_fields/merged_ESACCI_BIOMER4V1R1_CHL_REG05.nc). Place at
+      DATA_ROOT/input_fields/merged_ESACCI_BIOMER4V1R1_CHL_REG05.nc
+    size_mb: 20
+    format: NetCDF4
+    citation: "ESA CCI Ocean Colour; BiOMER4 v1.1 (NEMO ORCA1 INPUTS)"
+
+  ice_init_nemo:
+    description: "NEMO SI3 Ice_initialization.nc cold start on eORCA1 — --ice-init for --prognostic-sea-ice"
+    path: ice/Ice_initialization.nc
+    access: institutional
+    instructions: |
+      From the ORCA1 repository (github.com/alexis-barge/ORCA1, deploy.sh
+      fetch) or the campaign NEMOIN staging on bigfoot. Place at
+      DATA_ROOT/ice/Ice_initialization.nc
+    size_mb: 30
+    format: NetCDF4
+    citation: "NEMO ORCA1 reference configuration"
+
+  woa57_annual_t:
+    description: "WOA/WAGHC (Gouretski) annual temperature on eORCA1 — --woa-t for --woa-init"
+    path: woa/woce_t_woa57_annual.nc
+    access: institutional
+    instructions: |
+      From the campaign staging (bigfoot data/woce_gouretski/) or rebuild
+      from the public WOA/WAGHC annual. Place at
+      DATA_ROOT/woa/woce_t_woa57_annual.nc
+    size_mb: 80
+    format: NetCDF4
+    citation: "Gouretski 2019, WAGHC v1 (WOA57)"
+
+  woa57_annual_s:
+    description: "WOA/WAGHC (Gouretski) annual salinity on eORCA1 — --woa-s for --woa-init"
+    path: woa/woce_s_woa57_annual.nc
+    access: institutional
+    instructions: |
+      From the campaign staging (bigfoot data/woce_gouretski/) or rebuild
+      from the public WOA/WAGHC annual. Place at
+      DATA_ROOT/woa/woce_s_woa57_annual.nc
+    size_mb: 80
+    format: NetCDF4
+    citation: "Gouretski 2019, WAGHC v1 (WOA57)"
+
+  nemo_run_ref_icemod:
+    description: "NEMO ORCA1 RUN_REF annual mean siconc (SI3) on eORCA1 — --siconc-file override for the SSS-restoring ice gate under the faithful card"
+    path: ref/ORCA1_1y_20000101_20041231_icemod.nc
+    access: institutional
+    instructions: |
+      From the ORCA1 5-yr RUN_REF output on the campaign staging (bigfoot,
+      EXP00/RUN_REF/ORCA1_1y_20000101_20041231_icemod.nc). Place at
+      DATA_ROOT/ref/ORCA1_1y_20000101_20041231_icemod.nc
+    size_mb: 120
+    format: NetCDF4
+    citation: "NEMO ORCA1 RUN_REF (de Lavergne et al. 2024 config)"
+
+  # ===========================================================================
   # Radiation: RRTMGP Optics
   # ===========================================================================
   rrtmgp_gas_lw:

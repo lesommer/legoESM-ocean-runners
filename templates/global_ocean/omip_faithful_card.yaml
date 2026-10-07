@@ -1,0 +1,159 @@
+# NEMO-faithful standard card, recorded in the runners (2026-10-08).
+#
+# This template encodes, flag-for-flag, the STANDARD NEMO-FAITHFUL 1-degree
+# card declared in legoESM `scripts/cluster/omip_nemo/run_standard_faithful_1deg.sbatch`
+# (user-declared standard 2026-08-25; byte-identical card of the validated
+# 180-day run `results/omip_nemo/nemolev_trp_long180` on the omip-faithful-
+# nemo-comparison campaign; scored d90 vs NEMO's matched GATEWAY cold start:
+# SST rmse 0.456 C EXCELLENT, SSS rmse 0.697, with pre-registered revalidation
+# conditions — see legoESM docs/dev-notes/OMIP_faithful.md).
+#
+# The card's *machine* portion (SLURM directives, bigfoot /burg NEMOIN paths,
+# conda env) is replaced by the runners' machine-config mechanism: every NEMO
+# INPUTS path becomes {data_root}/... (substituted by the delegation at run
+# time) and the experiment.tag records the resolved paths.
+#
+# A/B DISCIPLINE (from the standard card header): never edit this template in
+# place after it has been run — any change is a NEW configuration and must be
+# A/B'd against the validated card, one variable at a time. Duration and
+# output cadence are per-experiment overrides (time.duration_days /
+# output.snapshot_every_days), identical physics throughout.
+
+experiment:
+  name: omip_faithful_card
+  mode: 3d_ocean_realistic
+  description: "NEMO ORCA1-faithful eORCA1 tripole OMIP: the validated standard card (CORE2-NYF _MOD, WOCE/EN4 ICs, TKE+geothermal+runoff+ISF+IWM+MLE+sea ice)"
+
+requires:
+  - eorca1_mesh
+  - woce_ic_t
+  - woce_ic_s
+  - sss_climatology
+  - core2_nyf
+  - nemo_domain_cfg
+  - zdfiwm_forcing_TRA
+  - runoff_icb_daitrenberth_depoorter
+  - chl_biomer_reg05
+  - ice_init_nemo
+  - woa57_annual_t
+  - woa57_annual_s
+  - nemo_run_ref_icemod
+
+requires_patches:
+  - 004-runoff-file-override.patch
+
+mpi:
+  enabled: false
+  ranks: 1
+  launcher: mpirun
+  extra_args: ""
+
+grid:
+  type: tripole
+  resolution: eORCA1
+  mesh_file: eORCA1.2_mesh_mask.nc
+  nlev: 75
+  partial_cells: true
+
+ocean:
+  C_smag_lap: 3.0
+  smag_cfl_safety: 0.125
+  adaptive_implicit_vertadv: true
+
+time:
+  duration_days: 365          # per-experiment override; card default window 180
+  duration_overshoot_days: 0.05  # standard card cadence-snapshot overshoot
+  dt_seconds: 150
+
+initial_conditions:
+  type: woce                  # --nemo-monthly-init: WOCE/EN4 v4.2 monthly T/S
+
+physics:
+  vertical_mixing:
+    scheme: tke               # --tripole-vmix tke
+  lateral_mixing:
+    scheme: gm_redi
+    enabled: true             # upstream tripole default ON (Treguier-style kappa)
+  bottom_drag:
+    scheme: nemo_quadratic    # --bottom-drag-scheme nemo_quadratic
+  sss_restoring:
+    enabled: true
+    tau_days: 45.5            # --sss-restore-tau-days 45.5
+
+forcing:
+  mode: core2_nyf
+  synthetic: false
+  scale: 1.0
+  runoff:
+    enabled: true             # --runoff (+ --runoff-file in extra_args, patch 004)
+
+output:
+  path: results/omip_faithful_card
+  snapshot_every_days: 15
+  diag_every_days: 5
+
+run:
+  # Verbatim remainder of the standard card, in card order. {data_root} is
+  # substituted with the machine data_root at run time. Everything here is a
+  # physics or instrument flag the delegation does not (must not) reinterpret.
+  # Provenance note: exactly one card port, bigfoot->runners; only *paths* and
+  # the SLURM envelope changed relative to the bigfoot sbatch.
+  extra_args:
+    - "--min-levels"
+    - "2"
+    - "--ew-cyclic-overlap"
+    - "--nemo-vertical"
+    - "--nemo-vertical-file"
+    - "{data_root}/input_fields/domain_cfg.nc"
+    - "--nemo-domain-cfg"
+    - "{data_root}/input_fields/domain_cfg.nc"
+    - "--pgf-scheme"
+    - "smc03"
+    - "--momentum-rk3"
+    - "--geothermal"
+    - "--runoff-file"
+    - "{data_root}/input_fields/runoff-icb_DaiTrenberth_Depoorter.nc"
+    - "--runoff-depth-nemo-ini"
+    - "--river-mouth-restoring-gate"
+    - "--sss-restore-bound-mmday"
+    - "4"
+    - "--sss-ice-gate-nemo"
+    - "--prognostic-sea-ice"
+    - "--prognostic-ice-dynamics"
+    - "free_drift"
+    - "--tracer-advection"
+    - "superbee"
+    - "--iwm"
+    - "--iwm-forcing-file"
+    - "{data_root}/input_fields/zdfiwm_forcing_TRA.nc"
+    - "--dm2dc"
+    - "--isf"
+    - "--isf-forcing-file"
+    - "{data_root}/input_fields/runoff-icb_DaiTrenberth_Depoorter.nc"
+    - "--bbl-adv"
+    - "--woa-init"
+    - "--woa-t"
+    - "{data_root}/woa/woce_t_woa57_annual.nc"
+    - "--woa-s"
+    - "{data_root}/woa/woce_s_woa57_annual.nc"
+    - "--ice-init"
+    - "{data_root}/ice/Ice_initialization.nc"
+    - "--tke-surface-bc"
+    - "nemo_dirichlet"
+    - "--tke-mxl-choice"
+    - "3"
+    - "--tke-prognostic"
+    - "--tke-kappa-convention"
+    - "veros_sqrte"
+    - "--sw-rgb-chl"
+    - "--ice-ocean-heat-coeff"
+    - "70"
+    - "--gateway-transports"
+    - "--mle"
+    - "--mle-ce"
+    - "0.06"
+    # SSS-restoring ice gate loads the NEMO RUN_REF annual siconc even under
+    # prognostic ice (byte-parity with the bigfoot card); override the
+    # hardcoded /burg path with the staged RUN_REF icemod.
+    - "--siconc-file"
+    - "{data_root}/ref/ORCA1_1y_20000101_20041231_icemod.nc"

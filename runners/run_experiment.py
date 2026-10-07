@@ -652,6 +652,12 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
     data_root = resolve_data_root()
 
     duration_days = time_cfg.get("duration_days", 3650)
+    # +0.05 d overshoot on the standard faithful card: the driver SKIPS the
+    # cadence snapshot at the exact final step, so the advertised day-N
+    # snapshot only lands as a normal cadence write with a small overshoot
+    # (codex HIGH finding on the standard card). Default 0.0 = exactly like
+    # a hand-built --years invocation.
+    duration_overshoot_days = float(time_cfg.get("duration_overshoot_days", 0.0))
     # Upstream build_tripole (pin c986cb989) asserts that --mesh resolves to
     # the canonical repo-relative data/grids/<file> path: it derives the
     # resolution from the mesh filename and builds the grid from the SAME
@@ -676,9 +682,23 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
     ]
 
     if duration_days > 0 and duration_days < 365:
-        cmd.extend(["--days", str(duration_days)])
+        cmd.extend(["--days", str(duration_days + duration_overshoot_days)])
     else:
-        cmd.extend(["--years", str(duration_days / 365.0)])
+        cmd.extend(["--years",
+                    str((duration_days + duration_overshoot_days) / 365.0)])
+
+    # Output cadence (upstream --snapshot-every-days / --diag-every-days).
+    # NOTE: the+0.05 d duration overshoot above exists because the driver
+    # SKIPS the cadence snapshot at the exact final step (codex HIGH on the
+    # standard card: an exact-length run wrote only snapshot_final), so a
+    # cadence-gridded snapshot at the advertised day always needs the
+    # overshoot even when the number of steps is more than the cadence.
+    snap_days = output_cfg.get("snapshot_every_days")
+    if snap_days:
+        cmd.extend(["--snapshot-every-days", str(snap_days)])
+    diag_days = output_cfg.get("diag_every_days")
+    if diag_days:
+        cmd.extend(["--diag-every-days", str(diag_days)])
 
     if grid_cfg.get("partial_cells", False):
         cmd.append("--partial-cell")
@@ -771,6 +791,16 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
     # until an env-override patch lands (Phase-3 item).
     if (forcing_cfg.get("runoff", {}) or {}).get("enabled", False):
         cmd.append("--runoff")
+
+    # Verbatim passthrough (cards): `run.extra_args` list appended AFTER all
+    # mapped args, in order, with only the {data_root} token substituted.
+    # This is how the NEMO-faithful standard card is recorded: the flag list
+    # is verbatim content of config.yaml + experiment.tag, and any flag the
+    # mapping above (or patch extensions) adds forwards upstream flags
+    # (_RUNOFF_NC override etc.) without reinterpreting them.
+    extra_args = config.get("run", {}).get("extra_args") or []
+    for raw in extra_args:
+        cmd.append(str(raw).replace("{data_root}", str(data_root)))
 
     if mpi_cfg["enabled"]:
         cmd = build_mpi_launch_command(mpi_cfg, cmd)

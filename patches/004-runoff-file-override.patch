@@ -1,0 +1,83 @@
+diff --git a/scripts/run/run_omip_core2.py b/scripts/run/run_omip_core2.py
+index 4e40f2bf8..fa3137905 100644
+--- a/scripts/run/run_omip_core2.py
++++ b/scripts/run/run_omip_core2.py
+@@ -3118,7 +3118,7 @@ def run_fesom_forced_loop(args, grid, z_coord, model, state) -> None:
+                               dtype=np.float64)
+         runoff_monthly = load_runoff_monthly(
+             grid, "fesom", lat_deg, lon_deg, args.mesh,
+-            land_mask=_wet_top, spread_passes=_spread,
++            land_mask=_wet_top, spread_passes=_spread, runoff_file=args.runoff_file,
+             # --isf is not wired on the fesom lane (gate-rejected), so the
+             # surface runoff keeps the ice-shelf-melt component.
+             exclude_isf=False)
+@@ -3923,7 +3923,8 @@ def _runoff_component_vars(exclude_isf: bool):
+ 
+ 
+ def load_runoff_monthly(grid, grid_type, lat2d_deg, lon2d_deg, mesh_path,
+-                        land_mask=None, spread_passes=2, exclude_isf=False):
++                        land_mask=None, spread_passes=2, exclude_isf=False,
++                        runoff_file=None):
+     """Load NEMO's Dai-Trenberth runoff (the SAME file NEMO ORCA1 uses) and regrid
+     each climatological month onto the model grid. Total freshwater = rivers
+     (sorunoff) + ice-shelf melt (sornfisf) + icebergs (Icb_flux) [kg/m²/s, +INTO
+@@ -3931,11 +3932,14 @@ def load_runoff_monthly(grid, grid_type, lat2d_deg, lon2d_deg, mesh_path,
+     (see :func:`_runoff_component_vars`). Returns (12, *lat2d_deg.shape). Ungates
+     the SSS comparison (runoff=0 made SSS only informational). Curvilinear ->
+     model grid via the same IDW used for bathy; eORCA1 nav_lat/lon are the runoff
+-    file's own coords."""
++    file's own coords.
++
++    ``runoff_file`` overrides the source path (``--runoff-file``); the default
++    resolves to the ORCA1 INPUTS file at the ``_RUNOFF_NC`` path below."""
+     import xarray as xr
+     from legoesm.ocean.bathymetry import (
+         laplacian_smooth_2d, laplacian_smooth_voronoi)
+-    ds = xr.open_dataset(_RUNOFF_NC, decode_times=False)
++    ds = xr.open_dataset(runoff_file or _RUNOFF_NC, decode_times=False)
+     src_lat = _squeeze2d(ds["nav_lat"].values)
+     src_lon = _squeeze2d(ds["nav_lon"].values)
+     components = _runoff_component_vars(exclude_isf)
+@@ -6858,6 +6862,12 @@ def _build_arg_parser() -> argparse.ArgumentParser:
+                    help="Apply NEMO's Dai-Trenberth river+ice-shelf+iceberg runoff "
+                         "(the SAME file ORCA1 uses) as a per-step freshwater/virtual-salt "
+                         "flux -> ungates the SSS comparison (tripole/latlon only).")
++    p.add_argument("--runoff-file", type=str, default=None,
++                   help="Override the runoff NetCDF read by --runoff (default "
++                        "= the ORCA1 INPUTS runoff-icb_DaiTrenberth_Depoorter.nc "
++                        "at the _RUNOFF_NC path; same file ORCA1's deploy.sh "
++                        "downloads). Must carry the sornfisf/sorunoff/Icb_flux "
++                        "fields on the eORCA1 grid.")
+     p.add_argument("--no-emp", dest="emp_freshwater", action="store_false",
+                    default=True,
+                    help="DISABLE the atmospheric P - E surface freshwater flux "
+@@ -8587,16 +8597,17 @@ def main() -> int:
+                 "--isf requires --isf-forcing-file (the NEMO "
+                 "runoff-icb_DaiTrenberth_Depoorter.nc layout with sornfisf/"
+                 "sodepmin_isf/sodepmax_isf)")
++        _runoff_src = args.runoff_file or _RUNOFF_NC
+         if args.runoff and (Path(args.isf_forcing_file).resolve()
+-                            != Path(_RUNOFF_NC).resolve()):
+-            # The --runoff loader dropped sornfisf from _RUNOFF_NC on the
+-            # assumption --isf deposits the SAME field at depth (double-count
++                            != Path(_runoff_src).resolve()):
++            # The --runoff loader dropped sornfisf from the surface-runoff source
++            # on the assumption --isf deposits the SAME field at depth (double-count
+             # fix); with a different ISF source the totals may not correspond
+             # (codex r1 #4).  Not fatal — excluding the surface copy is still
+             # the right call — but make the mismatch loud.
+             warnings.warn(
+                 f"--isf-forcing-file {args.isf_forcing_file!r} differs from "
+-                f"the surface-runoff source {_RUNOFF_NC!r}: the surface "
++                f"the surface-runoff source {_runoff_src!r}: the surface "
+                 "sornfisf was excluded from --runoff assuming --isf re-injects "
+                 "the SAME ice-shelf melt at depth; verify the two files carry "
+                 "the same sornfisf climatology.", RuntimeWarning)
+@@ -8842,6 +8853,7 @@ def main() -> int:
+         runoff_monthly = load_runoff_monthly(
+             grid, app_grid_type, lat2d, lon2d, args.mesh,
+             land_mask=np.asarray(state.land_mask.data), spread_passes=_spread,
++            runoff_file=args.runoff_file,
+             # --isf deposits the SAME file's sornfisf at depth -> drop it from
+             # the surface runoff or the ice-shelf melt is counted twice.
+             exclude_isf=args.isf)
