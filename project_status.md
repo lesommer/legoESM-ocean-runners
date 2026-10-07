@@ -10,7 +10,7 @@ Only `ocean_scm` mode has a working native run path (YAML → model object → o
 |------|----------------------------------|-------------------------------------|-------|
 | `ocean_scm` | Working | **Working** | Constructs `OceanColumnModel`, runs, saves NetCDF. 5 templates tested end-to-end. |
 | `3d_ocean` | Working | **Stub** | Prints note to use `run_ocean_test_matrix.py` or legoESM scripts directly. No model object constructed. |
-| `3d_ocean_realistic` | Working | **Working for tripolar only** | Script delegation: calls `scripts/run/run_omip_core2.py` (upstream + patch `002` extensions) which reads eORCA1 mesh mask, loads WOCE/EN4 ICs, applies CORE2 NYF forcing, supports `--scan-block` for `lax.scan`, `--convection enhanced_diffusion`, `--partial-cell`, `--synthetic-forcing`, `--forcing-scale`, `--days`. **MPI support** (patch `003`): when `mpi.enabled: true`, dispatches to `scripts/run/run_omip_core2_mpi.py` with latitude-band decomposition. Other grid types still stub. |
+| `3d_ocean_realistic` | Working | **Working for tripolar only** | Script delegation: calls `scripts/run/run_omip_core2.py` (upstream + patch `002` extensions) which reads eORCA1 mesh mask, loads WOCE ICs, applies CORE2 NYF forcing, supports `--scan-block` for `lax.scan`, `--convection enhanced_diffusion`, `--partial-cell`, `--synthetic-forcing`, `--forcing-scale`, `--days`. **MPI support** (patch `003`): when `mpi.enabled: true`, dispatches to `scripts/run/run_omip_core2_mpi.py` with latitude-band decomposition. Other grid types still stub. **2026-10-07 (pin `c986cb989`)**: patch 002 regenerated against the rewritten upstream script (same three flags); IC/SSS delegation flags remapped to the new upstream CLI (`--nemo-monthly-init`, `--sss-restore` + `--sss-restore-file` + `--sss-restore-tau-days`) — templates/patches validate and the suite passes, but the delegation path is **not yet re-run-tested** at this pin. |
 | `barotropic_ocean` | Working | **Not implemented** | Raises `NotImplementedError`. |
 | `coupled` | Working | **Partially implemented** | Constructs `CoupledESMDriver` but untested. |
 
@@ -26,7 +26,6 @@ Only `ocean_scm` mode has a working native run path (YAML → model object → o
 | `2d/` | `barotropic_gyre` | structurally validated only | no |
 | `2d/` | `stommel_gyre_tracer` | structurally validated only | no |
 | `2d/` | `inertia_gravity_wave` | structurally validated only | no |
-| `2d/` | `williamson_test2` | structurally validated only | no |
 | `3d_idealized/` | `baroclinic_gyre` | structurally validated only | no |
 | `3d_idealized/` | `lock_exchange` | structurally validated only | no |
 | `3d_idealized/` | `overflow` | structurally validated only | no |
@@ -44,7 +43,7 @@ Only `ocean_scm` mode has a working native run path (YAML → model object → o
 | `global_ocean/` | `neverworld2_lite` | structurally validated only | no |
 | `global_ocean/` | `omip_global` | structurally validated only | no |
 | `global_ocean/` | `omip_cubed_sphere` | structurally validated only | no |
-| `global_ocean/` | `omip_tripole` | yes | 5-day run (CPU, rest ICs, synthetic forcing); WOCE ICs under testing |
+| `global_ocean/` | `omip_tripole` | yes | 5-day run tested at pin `69287951` (2026-06, synthetic forcing); delegation remapped for pin `c986cb989` — re-run pending |
 
 ## Definitions
 
@@ -54,7 +53,7 @@ Only `ocean_scm` mode has a working native run path (YAML → model object → o
 
 ## Current 3D / coupled workflow
 
-For `3d_ocean_realistic` on tripolar grids, the runner delegates to `scripts/run/run_omip_core2.py` (upstream in legoESM, extended by patch `002-omip-core2-extensions.patch`). The upstream script provides `build_tripole()` for eORCA1 mesh mask reading, `load_core2_nyf()` for CORE-II Normal Year Forcing, `--scan-block` for `lax.scan` stepping, `--convection enhanced_diffusion`, and `--partial-cell` for partial bottom cells. Patch 002 adds: `--synthetic-forcing` (smoke tests without real Zarr data), `--forcing-scale` (amplitude multiplier), `--days` (short experiments).
+For `3d_ocean_realistic` on tripolar grids, the runner delegates to `scripts/run/run_omip_core2.py` (upstream in legoESM, extended by patch `002-omip-core2-extensions.patch`). The upstream script provides `build_tripole()` for eORCA1 mesh mask reading, `load_core2_nyf()` for CORE-II Normal Year Forcing, `--scan-block` for `lax.scan` stepping, `--convection enhanced_diffusion`, and `--partial-cell` for partial bottom cells. Patch 002 (regenerated against the rewritten upstream script at pin `c986cb989`) adds: `--synthetic-forcing` (explicit opt-in smoke tests without real Zarr data), `--forcing-scale` (amplitude multiplier), `--days` (short experiments). Since the upstream CLI changed at this pin, the delegation maps WOCE ICs to `--nemo-monthly-init <temp> <salt>` and SSS restoring to `--sss-restore --sss-restore-file <clim> --sss-restore-tau-days <tau>`.
 
 For all other 3D/coupled modes, experiments are executed by calling legoESM's own Python scripts directly (e.g., `legoESM/scripts/run/run_omip.py`). The runners still handle init and provenance tagging for these modes — the generated `config.yaml` and `experiment.tag` are valid even though `run_experiment run` does not execute a simulation.
 

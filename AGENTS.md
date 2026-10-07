@@ -64,6 +64,7 @@ runners/             Python package: experiment init, run, tag generation
 scripts/             CLI tools: fetch_data, validate_templates, init_experiment, etc.
 patches/             Pre-merge patches for legoESM
 legoESM_version.txt  Pinned legoESM commit hash
+docs/                Per-upgrade measured notes and how-tos (e.g. upgrade-2026-10-v1.0.0-jump.md)
 ```
 
 ## 4. Boundaries

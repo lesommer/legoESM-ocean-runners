@@ -1,0 +1,103 @@
+diff --git a/packages/core/legoesm/core/transcendentals.py b/packages/core/legoesm/core/transcendentals.py
+index 07a157591..47bc6e297 100644
+--- a/packages/core/legoesm/core/transcendentals.py
++++ b/packages/core/legoesm/core/transcendentals.py
+@@ -26,14 +26,22 @@ import numpy as np
+ from legoesm.core.precision import get_policy
+ 
+ _LIBM_SONAME = "libm.so.6"
+-_LIBM = ctypes.CDLL(_LIBM_SONAME)
++_LIBM = None
++
++
++def _libm():
++    """Load ``libm.so.6`` on first use so non-glibc hosts can import the module."""
++    global _LIBM
++    if _LIBM is None:
++        _LIBM = ctypes.CDLL(_LIBM_SONAME)
++    return _LIBM
+ 
+ 
+ def _scalar_libm(name: str, values: np.ndarray) -> np.ndarray:
+     source = np.asarray(values)
+     if source.dtype not in (np.dtype(np.float32), np.dtype(np.float64)):
+         raise TypeError(f"libm {name} requires float32/float64, got {source.dtype}")
+-    function = getattr(_LIBM, name)
++    function = getattr(_libm(), name)
+     function.argtypes = (ctypes.c_double,)
+     function.restype = ctypes.c_double
+     result = np.empty_like(source)
+diff --git a/packages/ocean/legoesm/ocean/forcing/nemo_fld_read.py b/packages/ocean/legoesm/ocean/forcing/nemo_fld_read.py
+index 82f035284..a26e6bb81 100644
+--- a/packages/ocean/legoesm/ocean/forcing/nemo_fld_read.py
++++ b/packages/ocean/legoesm/ocean/forcing/nemo_fld_read.py
+@@ -24,27 +24,45 @@ import numpy as np
+ 
+ from legoesm.core.source_rounding import nemo_source_round as _sr
+ 
+-_LIBM = ctypes.CDLL("libm.so.6")
+-_LIBM_SINCOS = _LIBM.sincos
+-_LIBM_SINCOS.argtypes = (
+-    ctypes.c_double,
+-    ctypes.POINTER(ctypes.c_double),
+-    ctypes.POINTER(ctypes.c_double),
+-)
+-_LIBM_SINCOS.restype = None
+-_LIBM_TAN = _LIBM.tan
+-_LIBM_TAN.argtypes = (ctypes.c_double,)
+-_LIBM_TAN.restype = ctypes.c_double
++_LIBM_SONAME = "libm.so.6"
++_LIBM = None
++_LIBM_SINCOS = None
++_LIBM_TAN = None
++
++
++def _load_libm():
++    """Load glibc ``libm.so.6`` on first use so non-glibc hosts can import."""
++    global _LIBM, _LIBM_SINCOS, _LIBM_TAN
++    if _LIBM is None:
++        _LIBM = ctypes.CDLL(_LIBM_SONAME)
++        _LIBM_SINCOS = _LIBM.sincos
++        _LIBM_SINCOS.argtypes = (
++            ctypes.c_double,
++            ctypes.POINTER(ctypes.c_double),
++            ctypes.POINTER(ctypes.c_double),
++        )
++        _LIBM_SINCOS.restype = None
++        _LIBM_TAN = _LIBM.tan
++        _LIBM_TAN.argtypes = (ctypes.c_double,)
++        _LIBM_TAN.restype = ctypes.c_double
++    return _LIBM
+ 
+ 
+ def _scalar_sincos(value: float) -> tuple[float, float]:
+     """The glibc scalar ``sincos`` call emitted by the oracle compiler."""
++    _load_libm()
+     sine = ctypes.c_double()
+     cosine = ctypes.c_double()
+     _LIBM_SINCOS(value, ctypes.byref(sine), ctypes.byref(cosine))
+     return sine.value, cosine.value
+ 
+ 
++def _scalar_tan(value: float) -> float:
++    """The glibc scalar ``tan`` call emitted by the oracle compiler."""
++    _load_libm()
++    return float(_LIBM_TAN(value))
++
++
+ def decode_source_indices(src_tables: np.ndarray) -> np.ndarray:
+     """Convert NEMO weight-file ``srcNN`` values to zero-based flat indices."""
+     source = np.asarray(src_tables, dtype=np.float64)
+@@ -154,9 +172,9 @@ def nemo_t_rotation_from_domain(
+             sin_lam, cos_lam = _scalar_sincos(float(rad) * lam)
+             sin_v, cos_v = _scalar_sincos(float(rad) * lam_v)
+             sin_b, cos_b = _scalar_sincos(float(rad) * lam_b)
+-            tan_lam = _LIBM_TAN(float(rpi) / 4.0 - float(rad) * phi / 2.0)
+-            tan_v = _LIBM_TAN(float(rpi) / 4.0 - float(rad) * phi_v / 2.0)
+-            tan_b = _LIBM_TAN(float(rpi) / 4.0 - float(rad) * phi_b / 2.0)
++            tan_lam = _scalar_tan(float(rpi) / 4.0 - float(rad) * phi / 2.0)
++            tan_v = _scalar_tan(float(rpi) / 4.0 - float(rad) * phi_v / 2.0)
++            tan_b = _scalar_tan(float(rpi) / 4.0 - float(rad) * phi_b / 2.0)
+             xn = 0.0 - (cos_lam + cos_lam) * tan_lam
+             yn = 0.0 - (sin_lam + sin_lam) * tan_lam
+             xv = (cos_v + cos_v) * tan_v - (cos_b + cos_b) * tan_b

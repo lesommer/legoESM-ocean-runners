@@ -1,14 +1,16 @@
 diff --git a/scripts/run/run_omip_core2.py b/scripts/run/run_omip_core2.py
-index 7e4b5109d..5a7ffb4ae 100644
+index 50479db24..4e40f2bf8 100644
 --- a/scripts/run/run_omip_core2.py
 +++ b/scripts/run/run_omip_core2.py
-@@ -923,6 +923,15 @@ def main() -> int:
+@@ -7566,6 +7566,17 @@ def _build_arg_parser() -> argparse.ArgumentParser:
                          "Lets --C-smag-lap "
                          "be cranked high to damp WBC jets WITHOUT self-CFL at the "
                          "sharp jet. ~0.125 is a safe 2-D Laplacian cap.")
 +    p.add_argument("--synthetic-forcing", action="store_true",
 +                   help="Use synthetic forcing (no real CORE-II data needed). "
-+                        "For testing and development only — not physically meaningful.")
++                        "Explicit opt-in for testing and development only — "
++                        "never the default (a silent fallback would corrupt "
++                        "the NEMO comparison invisibly).")
 +    p.add_argument("--forcing-scale", type=float, default=1.0,
 +                   help="Scale surface forcing by this factor (default 1.0). "
 +                        "Useful for sensitivity tests or reducing cold-start shock.")
@@ -18,14 +20,27 @@ index 7e4b5109d..5a7ffb4ae 100644
      p.add_argument("--nudge-woa-tau-days", type=float, default=0.0,
                     help="Nudge T,S toward WOA with this timescale [days] from a "
                          "rest start -- gradual cold-start spinup that avoids the "
-@@ -1023,13 +1032,16 @@ def main() -> int:
-     # allow_synthetic=False: this NEMO-faithful pipeline MUST use the real
-     # 6-hourly CORE-II nyf.zarr; a silent fallback to 365 daily synthetic forcing
-     # would corrupt the comparison invisibly.
--    forcing = load_core2_nyf(allow_synthetic=False)
-+    forcing = load_core2_nyf(allow_synthetic=args.synthetic_forcing)
+@@ -9010,13 +9021,13 @@ def main() -> int:
+         chl_clim = load_nemo_chl_monthly(
+             grid, app_grid_type, lat2d, lon2d, chl_file=args.chl_file,
+                                          chl_remap=args.chl_remap)
+-    # allow_synthetic=False: this NEMO-faithful pipeline MUST use the real
+-    # 6-hourly CORE-II nyf.zarr; a silent fallback to 365 daily synthetic forcing
+-    # would corrupt the comparison invisibly. --forcing-path (set via --config
+-    # forcing.path) threads the staged data dir into the loader's cache_dir so a
+-    # fetch-then-run workflow finds it (#376).
++    # allow_synthetic=False by default: this NEMO-faithful pipeline MUST use the
++    # real 6-hourly CORE-II nyf.zarr; a silent fallback to 365 daily synthetic
++    # forcing would corrupt the comparison invisibly. --forcing-path (set via
++    # --config forcing.path) threads the staged data dir into the loader's
++    # cache_dir so a fetch-then-run workflow finds it (#376).
+     forcing = load_core2_nyf(
+-        allow_synthetic=False,
++        allow_synthetic=args.synthetic_forcing,
+         cache_dir=(Path(args.forcing_path) if args.forcing_path else None),
+     )
      n_rec = int(forcing.u10.shape[0])
-     print(f"[setup] grid {lat2d.shape}, forcing records {n_rec}, dt={args.dt}s")
+@@ -9150,7 +9161,10 @@ def main() -> int:
  
      dt = float(args.dt)
      ramp_s = float(args.forcing_ramp_days) * _SEC_PER_DAY
@@ -37,7 +52,7 @@ index 7e4b5109d..5a7ffb4ae 100644
      n_steps = int(total_days * _SEC_PER_DAY / dt)
      diag_every = max(1, int(args.diag_every_days * _SEC_PER_DAY / dt))
      steps_per_year = int(365.0 * _SEC_PER_DAY / dt)
-@@ -1177,6 +1189,11 @@ def main() -> int:
+@@ -10300,6 +10314,11 @@ def main() -> int:
          if ramp < 1.0:
              sf = sf._replace(tau_x=sf.tau_x * ramp, tau_y=sf.tau_y * ramp,
                               q_net=sf.q_net * ramp, sw_down=sf.sw_down * ramp)
@@ -46,6 +61,6 @@ index 7e4b5109d..5a7ffb4ae 100644
 +                             tau_y=sf.tau_y * args.forcing_scale,
 +                             q_net=sf.q_net * args.forcing_scale,
 +                             sw_down=sf.sw_down * args.forcing_scale)
-         state = model.step(state, dt, surface_forcing=sf)
-         if nudge_tau_s > 0 and (nudge_release_s <= 0 or step * dt < nudge_release_s):
-             a = dt / nudge_tau_s
+         # Surface chlorophyll for THIS step (calendar-month slice); attaching it
+         # switches the PE step to NEMO's RGB penetration.  NOT ramped — Chl is a
+         # fixed optical climatology, independent of the dynamical spin-up ramp.

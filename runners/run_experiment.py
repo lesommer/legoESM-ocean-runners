@@ -673,14 +673,12 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
 
     ic_type = ic_cfg.get("type", "woce")
     if ic_type == "woa":
-        cmd.append("--ic-type")
-        cmd.append("woa")
+        cmd.append("--woa-init")
     elif ic_type == "woce":
-        cmd.append("--ic-type")
-        cmd.append("woce")
         cmd.extend([
-            "--ic-t", str(data_root / "ic" / "woce_temp_monthly_init_4p2.nc"),
-            "--ic-s", str(data_root / "ic" / "woce_salt_monthly_init_4p2.nc"),
+            "--nemo-monthly-init",
+            str(data_root / "ic" / "woce_temp_monthly_init_4p2.nc"),
+            str(data_root / "ic" / "woce_salt_monthly_init_4p2.nc"),
         ])
 
     if forcing_cfg.get("synthetic", False):
@@ -708,10 +706,11 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
     sss_target = data_root / "sss" / "sss_climatology_for_restoring.nc"
     sss_cfg = physics_cfg.get("sss_restoring", {})
     if sss_cfg.get("enabled", False) and sss_target.exists():
-        cmd.extend(["--sss-target", str(sss_target)])
+        cmd.append("--sss-restore")
+        cmd.extend(["--sss-restore-file", str(sss_target)])
         sss_tau = sss_cfg.get("tau_days", 60.0)
         if sss_tau != 60.0:
-            cmd.extend(["--sss-tau-days", str(sss_tau)])
+            cmd.extend(["--sss-restore-tau-days", str(sss_tau)])
 
     if mpi_cfg["enabled"]:
         cmd = build_mpi_launch_command(mpi_cfg, cmd)
