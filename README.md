@@ -2,19 +2,96 @@
 
 Experiment templates, runners, and reproducibility tools for ocean simulations with [legoESM](https://github.com/gentine/legoESM).
 
-## Why use this repo?
+## Why this repo exists
 
-Running legoESM directly means editing `scripts/run/run_omip_core2.py` by hand — no versioned configurations, no provenance trail, no way to reproduce past runs.
+legoESM is a model repository. It ships the model itself, run scripts such as
+`scripts/run/run_omip_core2.py` (a large command-line surface, plus a
+`--config` YAML lane and a `legoesm run` entry point), versioned example
+configurations under `config/`, a per-run `run_manifest.json` (resolved
+configuration, config hash, final state digest), and `legoesm reproduce
+--check` to re-run a manifest and bit-check the result.
 
-This repo gives you:
+That is enough to execute a single run on a single machine. A typical user,
+however, wants to run *experiments*: a series of configured runs, across
+several machines, revisited over months. Between the model and that workflow
+there is a gap:
 
-- **Named templates** — version-controlled YAML files instead of ad-hoc script edits
-- **Reproducibility tags** — every run produces an `experiment.tag` capturing the exact software environment (legoESM commit, patches, Python/JAX versions)
-- **One-command reproduction** — `reproduce.py` reconstructs any past experiment from its tag file
+- **Named configurations.** The upstream `--config` lane is deliberately
+  narrow: it applies only `ocean.*` fields, only on lat-lon C-grid lanes,
+  and grid, mesh and most run controls remain command-line flags. There is
+  no way to say "the baroclinic gyre experiment, at 128x256, for 2 years"
+  once and then vary one parameter at a time.
 
-For managing personal experiment directories across machines, see [my-legoESM-ocean-experiments](https://github.com/lesommer/my-legoESM-ocean-experiments).
+- **Reproducibility across environments.** The manifest describes one run,
+  but it cannot reconstruct an environment that involved features not yet
+  merged into legoESM, and it carries no notion of *which* configuration
+  template a run came from.
 
-See [project_status.md](project_status.md) for what's currently implemented and tested.
+- **Data.** Realistic runs need grids, bathymetry, forcing and initial
+  conditions. Upstream accepts a path to already-staged data; where the
+  files come from, how they are verified, and how they are shared between
+  machines is not upstream's concern.
+
+- **Machines.** Clusters differ in schedulers, accounts, storage paths and
+  GPU setup. Nothing upstream adapts a configuration to where it runs.
+
+This repo fills that gap. It provides:
+
+- **Templates** — 26 version-controlled YAML configurations across five
+  modes (`ocean_scm`, `barotropic_ocean`, `3d_ocean`, `3d_ocean_realistic`,
+  `coupled`), dispatched to the matching legoESM configuration classes, with
+  dot-notation parameter overrides at init (`-o grid.resolution=128x256`).
+
+- **A reproducibility chain anchored in git tags** — `legoESM_version.txt`
+  pins the model commit, validated `legoesm-<hash>-<date>` tags mark
+  compatibility points, and every run produces an `experiment.tag` whose
+  `runner_tag` lets `scripts/reproduce.py` reconstruct the full environment:
+  runner tag, legoESM commit, patches, data check. Upstream's manifest
+  verifies a rerun's digest; this chain reconstructs the run.
+
+- **A patch workflow** — `patches/` holds pre-merge changes that let
+  templates use features before they land in legoESM main; patches are
+  numbered, applied in order, and removed once merged upstream.
+
+- **A data catalog** — `data_catalog.yaml` is the single source of truth for
+  external files (URLs, checksums, sizes, access levels), and
+  `scripts/fetch_data.py` checks, fetches and verifies them per machine.
+
+- **Machine adaptation** — templates are machine-agnostic; machine
+  configuration (scheduler, accounts, paths, environment) is passed at init
+  via `--machine` and the generated `run.sh` matches the machine's scheduler
+  (slurm, pbs, lsf) or runs directly.
+
+- **Validation** — `scripts/validate_templates.py` checks templates against
+  the pinned legoESM, and CI blocks pushes to `main` when
+  reproducibility-affecting files change without a tag.
+
+### Position in the three-repo layout
+
+```
+legoESM (model, consumed read-only at a pinned commit)
+   ^
+   |  pinned commit (legoESM_version.txt)
+this repo (templates, runners, patches, data catalog)
+   ^
+   |  template + overrides
+my-legoESM-ocean-experiments (personal ledger: run declarations, machine
+configs, notes, analysis) — see link below
+```
+
+Use this repo to declare and execute reproducible experiment
+configurations; use
+[my-legoESM-ocean-experiments](https://github.com/lesommer/my-legoESM-ocean-experiments)
+to record what you ran, where, and what came of it.
+
+### Current capability status
+
+Init and provenance tagging work for all modes. The run path is implemented
+for `ocean_scm` (native; five templates run-tested) and for
+`3d_ocean_realistic` on tripole grids (delegation to the upstream OMIP
+script with patches 002/003). 2D, 3D-idealized and coupled templates are
+init-only. See [project_status.md](project_status.md) before assuming a
+template can be executed through the runners.
 
 ## Run an experiment
 
