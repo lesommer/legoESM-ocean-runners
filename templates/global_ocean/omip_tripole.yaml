@@ -44,6 +44,10 @@ physics:
   lateral_mixing:
     scheme: gm_redi
     enabled: true
+  bottom_drag:
+    scheme: nemo_quadratic   # NEMO zdfdrg np_non_lin (ORCA1 namelist)
+    cd0: 1.0e-3              # rn_Cd0
+    ke0: 2.5e-3              # rn_ke0 background bottom KE [m2/s2]
   shortwave_penetration:
     water_type: "II"
   sss_restoring:

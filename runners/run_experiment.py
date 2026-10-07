@@ -161,7 +161,12 @@ def apply_overrides(config: dict, overrides: list[str]) -> dict:
         try:
             value = ast.literal_eval(value_str)
         except (ValueError, SyntaxError):
-            value = value_str
+            # YAML-style scalars: ast.literal_eval only knows Python literals
+            # (True/False/None), so 'false'/'true' would otherwise stay
+            # strings and read as truthy downstream.
+            low = value_str.strip().lower()
+            value = {"true": True, "false": False, "null": None}.get(low,
+                                                                    value_str)
         d = config
         for k in keys[:-1]:
             d = d.setdefault(k, {})
@@ -682,6 +687,38 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
     if convection and convection != "none":
         cmd.extend(["--convection", convection])
 
+    # Vertical-mixing closure: upstream --tripole-vmix {none,tke,kpp} defaults
+    # to none, silently ignoring the template's physics.vertical_mixing.
+    vmix = (physics_cfg.get("vertical_mixing", {}) or {}).get("scheme", "none")
+    if vmix and vmix != "none":
+        cmd.extend(["--tripole-vmix", vmix])
+
+    # GM/Redi: upstream tripole recipe ships it ON (kappa=600) unless
+    # --no-gm-redi is passed, so an explicit disabled/none in the template
+    # must map to the flag or the override is silently ignored.
+    lateral = physics_cfg.get("lateral_mixing", {}) or {}
+    if lateral.get("enabled") is False or lateral.get("scheme") == "none":
+        cmd.append("--no-gm-redi")
+    elif lateral.get("kappa_GM"):
+        cmd.extend(["--gm-aei0", str(lateral["kappa_GM"])])
+
+    # Bottom drag: scheme in {legacy, nemo_quadratic, nemo_loglayer} (template
+    # 'linear' maps to the legacy linear-r path); the r/cd0/cdmax/z0/ke0
+    # params map 1:1. Upstream defaults to OFF when the section is absent.
+    bd = physics_cfg.get("bottom_drag", {}) or {}
+    bd_scheme = bd.get("scheme")
+    if bd_scheme and bd_scheme != "none":
+        cmd.extend(["--bottom-drag-scheme",
+                    "legacy" if bd_scheme == "linear" else bd_scheme])
+    if bd.get("r") is not None:
+        cmd.extend(["--bottom-drag-r", str(bd["r"])])
+    for key, flag in (("cd0", "--bottom-drag-cd0"),
+                      ("cdmax", "--bottom-drag-cdmax"),
+                      ("z0", "--bottom-drag-z0"),
+                      ("ke0", "--bottom-drag-ke0")):
+        if bd.get(key) is not None:
+            cmd.extend([flag, str(bd[key])])
+
     scan_block = scan_cfg.get("block_size", 0)
     if scan_block > 0 and not mpi_cfg["enabled"]:
         cmd.extend(["--scan-block", str(scan_block)])
@@ -726,6 +763,14 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
         sss_tau = sss_cfg.get("tau_days", 60.0)
         if sss_tau != 60.0:
             cmd.extend(["--sss-restore-tau-days", str(sss_tau)])
+
+    # Dai-Trenberth runoff (--runoff). NOTE: at pin c986cb989 upstream loads
+    # it from a hardcoded path (_RUNOFF_NC) plus domain_cfg cell areas
+    # (_NEMO_DOMAIN_CFG) — both /burg-archive/... — so this only works on
+    # machines that have the NEMO orca1_inputs repository at those paths
+    # until an env-override patch lands (Phase-3 item).
+    if (forcing_cfg.get("runoff", {}) or {}).get("enabled", False):
+        cmd.append("--runoff")
 
     if mpi_cfg["enabled"]:
         cmd = build_mpi_launch_command(mpi_cfg, cmd)
