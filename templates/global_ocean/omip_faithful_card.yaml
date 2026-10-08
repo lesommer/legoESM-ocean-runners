@@ -110,6 +110,14 @@ run:
     - "--pgf-scheme"
     - "smc03"
     - "--momentum-rk3"
+    # DECISION 90 (post-2026-10-04 consumer): an RK3 card must STATE the
+    # barotropic slow-forcing depth average. The validated bigfoot card
+    # predates the raise; the restatement here is the fidelity choice —
+    # NEMO's own stp2d.F90:177-186 statement (reference thicknesses +
+    # r1_hu_0), which on this eORCA1 NEMO-mesh card is the literal port.
+    # #card-restatement, not a physics change.
+    - "--bt-slow-depth-eval"
+    - "nemo_literal"
     - "--geothermal"
     - "--runoff-file"
     - "{data_root}/input_fields/runoff-icb_DaiTrenberth_Depoorter.nc"

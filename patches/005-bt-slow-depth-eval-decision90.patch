@@ -1,0 +1,52 @@
+diff --git a/scripts/run/run_omip_core2.py b/scripts/run/run_omip_core2.py
+index 9c1a75c25..6590d6877 100644
+--- a/scripts/run/run_omip_core2.py
++++ b/scripts/run/run_omip_core2.py
+@@ -1606,10 +1606,11 @@ def build_tripole(nlev: int, H_max: float, mesh_path: str,
+                   A_h_profile_file=None,
+                   gm_treguier=False, gm_aei0=_GM_AEI0_DEFAULT,
+                   gm_kappa_min=_GM_KAPPA_MIN_DEFAULT,
+-                  gm_slope_scheme=None, gm_bolus_advection=None,
+-                  gm_msc_stabilize=None, eos=None,
+-                  redi_coefficient=None, redi_aht0=None, gm_slope_positions=None,
+-                  store_mass_flux=False, store_salt_flux=False):
++                   gm_slope_scheme=None, gm_bolus_advection=None,
++                   gm_msc_stabilize=None, eos=None,
++                   redi_coefficient=None, redi_aht0=None, gm_slope_positions=None,
++                   store_mass_flux=False, store_salt_flux=False,
++                   barotropic_slow_depth_eval=None):
+     """Build the eORCA1 tripole grid + model + initial state with NEMO's mask/bathy.
+ 
+     Reuses run_omip's validated tripole setup. ``forcing_mode='jra55_do_tropical'``
+@@ -1684,6 +1685,8 @@ def build_tripole(nlev: int, H_max: float, mesh_path: str,
+                               ("barotropic_coriolis", barotropic_coriolis),
+                               ("adaptive_implicit_vertadv", adaptive_implicit_vertadv),
+                               ("momentum_time_integrator", momentum_time_integrator),
++                              ("barotropic_slow_forcing_depth_evaluation",
++                               barotropic_slow_depth_eval),
+                               ("barotropic_solver", barotropic_solver),
+                               ("barotropic_implicit_pcg_variant",
+                                barotropic_pcg_variant),
+@@ -6620,6 +6623,14 @@ def _build_arg_parser() -> argparse.ArgumentParser:
+                    help="Use 3-stage SSP-RK3 for the outer baroclinic momentum step "
+                         "(mirrors NEMO's RK3 / key_RK3) instead of forward-Euler -- the "
+                         "NEMO-faithful fix for the cold-start adjustment blowup. 3x tendency cost.")
++    p.add_argument("--bt-slow-depth-eval", default=None,
++                   choices=["min_rule_live", "nemo_literal"],
++                   help="DECISION 90: how the barotropic SLOW forcing is depth-averaged "
++                        "onto the barotropic faces on an RK3 momentum card -- NEMO's own "
++                        "stp2d.F90:177-186 statement (nemo_literal, reference thicknesses "
++                        "+ r1_hu_0) or legoESM's per-level minimum of the two LIVE face "
++                        "thicknesses (min_rule_live). No default: an RK3 card that omits "
++                        "it raises at the consumer; unset keeps a non-RK3 card's default.")
+     p.add_argument("--freeze-floor", action="store_true",
+                    help="Floor ocean T at the seawater freezing point (~-1.8 C) each "
+                         "step -- a sea-ice thermodynamic surrogate. legoESM has no "
+@@ -8158,6 +8169,7 @@ def main() -> int:
+             adaptive_implicit_vertadv=(True if args.adaptive_implicit_vertadv else None),
+             bathy_smoothing_passes=args.bathy_smoothing_passes,
+             momentum_time_integrator=("rk3" if args.momentum_rk3 else None),
++            barotropic_slow_depth_eval=args.bt_slow_depth_eval,
+             freeze_floor=(True if args.freeze_floor else None),
+             freezing=_freezing_ovr,
+             runoff_depth_spread_m=args.runoff_depth_spread_m,
