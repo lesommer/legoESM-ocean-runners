@@ -480,6 +480,9 @@ def _generate_run_script(config: dict, exp_dir: Path, machine: str | None = None
         gres = machine_cfg.get("scheduler_gres", "")
         if gres:
             slurm_lines.append(f"#SBATCH --gres={gres}")
+        constraint = machine_cfg.get("scheduler_constraint", "")
+        if constraint:
+            slurm_lines.append(f"#SBATCH -C {constraint}")
         qos = machine_cfg.get("scheduler_qos", "")
         if qos:
             slurm_lines.append(f"#SBATCH --qos={qos}")
