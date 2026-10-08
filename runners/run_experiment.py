@@ -313,7 +313,7 @@ def init_experiment(
     with open(tag_path, "w") as f:
         f.write(tag)
 
-    run_script = _generate_run_script(config, exp_dir, machine)
+    run_script = _generate_run_script(config, exp_dir, machine, template_name)
     run_path = exp_dir / "run.sh"
     with open(run_path, "w") as f:
         f.write(run_script)
@@ -434,7 +434,8 @@ def _load_machine_config(machine: str | None) -> dict | None:
     return None
 
 
-def _generate_run_script(config: dict, exp_dir: Path, machine: str | None = None) -> str:
+def _generate_run_script(config: dict, exp_dir: Path, machine: str | None = None,
+                         template_name: str | None = None) -> str:
     """Generate a shell launch script for the experiment."""
     mode = config.get("experiment", {}).get("mode", "unknown")
     template = config.get("experiment", {}).get("name", "unknown")
@@ -497,6 +498,7 @@ def _generate_run_script(config: dict, exp_dir: Path, machine: str | None = None
     lines += [
         'EXPERIMENT_DIR=$(cd "$(dirname "$0")" && pwd)',
         'CONFIG="$EXPERIMENT_DIR/config.yaml"',
+        f"CONFIG_TEMPLATE={template_name!r}",
         "",
     ]
 
