@@ -451,8 +451,49 @@ def _generate_run_script(config: dict, exp_dir: Path, machine: str | None = None
     template = config.get("experiment", {}).get("name", "unknown")
     machine_cfg = _load_machine_config(machine)
 
+    scheduler = machine_cfg.get("scheduler") if machine_cfg else None
+
+    # NOTE: #SBATCH directives MUST precede the first non-comment line
+    # (slurm stops parsing the directive header at the first command). The
+    # `set -euo pipefail` line therefore comes AFTER the whole SLURM block;
+    # putting it first made jean-zay submissions fall back to defaults
+    # ("Multiple accounts available", unfilled partition/qos, 2026-10-08).
+    slurm_lines: list[str] = []
+    if scheduler == "slurm":
+        slurm_lines += ["# ---------- SLURM directives ----------"]
+        slurm_lines.append(f"#SBATCH --job-name={template}")
+        partition = machine_cfg.get("scheduler_partition", "")
+        if partition:
+            slurm_lines.append(f"#SBATCH --partition={partition}")
+        account = machine_cfg.get("scheduler_account", "")
+        if account:
+            slurm_lines.append(f"#SBATCH --account={account}")
+        nodes = machine_cfg.get("scheduler_nodes", 1)
+        slurm_lines.append(f"#SBATCH --nodes={nodes}")
+        tasks_per_node = machine_cfg.get("scheduler_tasks_per_node", 1)
+        slurm_lines.append(f"#SBATCH --ntasks-per-node={tasks_per_node}")
+        walltime = machine_cfg.get("scheduler_walltime", "01:00:00")
+        slurm_lines.append(f"#SBATCH --time={walltime}")
+        mem = machine_cfg.get("scheduler_mem", "")
+        if mem:
+            slurm_lines.append(f"#SBATCH --mem={mem}")
+        gres = machine_cfg.get("scheduler_gres", "")
+        if gres:
+            slurm_lines.append(f"#SBATCH --gres={gres}")
+        qos = machine_cfg.get("scheduler_qos", "")
+        if qos:
+            slurm_lines.append(f"#SBATCH --qos={qos}")
+        out_pattern = machine_cfg.get("scheduler_output", "")
+        if out_pattern:
+            slurm_lines.append(f"#SBATCH --output={out_pattern}")
+        err_pattern = machine_cfg.get("scheduler_error", "")
+        if err_pattern:
+            slurm_lines.append(f"#SBATCH --error={err_pattern}")
+        slurm_lines.append("")
+
     lines = [
         "#!/usr/bin/env bash",
+        *slurm_lines,
         "set -euo pipefail",
         "",
         f"# Auto-generated run script for experiment: {template}",
@@ -461,55 +502,24 @@ def _generate_run_script(config: dict, exp_dir: Path, machine: str | None = None
         "",
     ]
 
+    body: list[str] = []
+
     machine_cfg_path = ""
     if machine:
         if Path(machine).is_absolute() or "/" in machine:
             machine_cfg_path = machine
         else:
             machine_cfg_path = str(Path(__file__).resolve().parent.parent / "machines" / f"{machine}.yaml")
-        lines.append(f"# Machine config: {machine_cfg_path}")
-        lines.append(f"LEGOESM_MACHINE_CONFIG={machine_cfg_path}")
-        lines.append("")
-
-    scheduler = machine_cfg.get("scheduler") if machine_cfg else None
-
-    if scheduler == "slurm":
-        lines.append("# ---------- SLURM directives ----------")
-        lines.append(f"#SBATCH --job-name={template}")
-        partition = machine_cfg.get("scheduler_partition", "")
-        if partition:
-            lines.append(f"#SBATCH --partition={partition}")
-        account = machine_cfg.get("scheduler_account", "")
-        if account:
-            lines.append(f"#SBATCH --account={account}")
-        nodes = machine_cfg.get("scheduler_nodes", 1)
-        lines.append(f"#SBATCH --nodes={nodes}")
-        tasks_per_node = machine_cfg.get("scheduler_tasks_per_node", 1)
-        lines.append(f"#SBATCH --ntasks-per-node={tasks_per_node}")
-        walltime = machine_cfg.get("scheduler_walltime", "01:00:00")
-        lines.append(f"#SBATCH --time={walltime}")
-        mem = machine_cfg.get("scheduler_mem", "")
-        if mem:
-            lines.append(f"#SBATCH --mem={mem}")
-        gres = machine_cfg.get("scheduler_gres", "")
-        if gres:
-            lines.append(f"#SBATCH --gres={gres}")
-        qos = machine_cfg.get("scheduler_qos", "")
-        if qos:
-            lines.append(f"#SBATCH --qos={qos}")
-        out_pattern = machine_cfg.get("scheduler_output", "")
-        if out_pattern:
-            lines.append(f"#SBATCH --output={out_pattern}")
-        err_pattern = machine_cfg.get("scheduler_error", "")
-        if err_pattern:
-            lines.append(f"#SBATCH --error={err_pattern}")
-        lines.append("")
+        body.append(f"# Machine config: {machine_cfg_path}")
+        body.append(f"LEGOESM_MACHINE_CONFIG={machine_cfg_path}")
+        body.append("")
 
     lines += [
         'EXPERIMENT_DIR=$(cd "$(dirname "$0")" && pwd)',
         'CONFIG="$EXPERIMENT_DIR/config.yaml"',
         f"CONFIG_TEMPLATE={template_name!r}",
         "",
+        *body,
     ]
 
     env_setup = machine_cfg.get("env_setup", []) if machine_cfg else []
