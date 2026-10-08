@@ -146,6 +146,11 @@ run:
     - "--tke-kappa-convention"
     - "veros_sqrte"
     - "--sw-rgb-chl"
+    # Card override (bigfoot port parity): the upstream chl loader falls back
+    # to the hardcoded _CHL_NC /burg path when --chl-file unset — the staged
+    # INPUTS copy keeps --sw-rgb-chl off upstream's machine.
+    - "--chl-file"
+    - "{data_root}/input_fields/merged_ESACCI_BIOMER4V1R1_CHL_REG05.nc"
     - "--ice-ocean-heat-coeff"
     - "70"
     - "--gateway-transports"
