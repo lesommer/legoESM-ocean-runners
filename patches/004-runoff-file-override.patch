@@ -1,35 +1,37 @@
 diff --git a/scripts/run/run_omip_core2.py b/scripts/run/run_omip_core2.py
-index 4e40f2bf8..fa3137905 100644
+index 4e40f2bf8..9c1a75c25 100644
 --- a/scripts/run/run_omip_core2.py
 +++ b/scripts/run/run_omip_core2.py
-@@ -3118,7 +3118,7 @@ def run_fesom_forced_loop(args, grid, z_coord, model, state) -> None:
+@@ -3118,7 +3118,8 @@ def run_fesom_forced_loop(args, grid, z_coord, model, state) -> None:
                                dtype=np.float64)
          runoff_monthly = load_runoff_monthly(
              grid, "fesom", lat_deg, lon_deg, args.mesh,
 -            land_mask=_wet_top, spread_passes=_spread,
 +            land_mask=_wet_top, spread_passes=_spread, runoff_file=args.runoff_file,
++            domain_cfg_file=args.nemo_domain_cfg,
              # --isf is not wired on the fesom lane (gate-rejected), so the
              # surface runoff keeps the ice-shelf-melt component.
              exclude_isf=False)
-@@ -3923,7 +3923,8 @@ def _runoff_component_vars(exclude_isf: bool):
+@@ -3923,7 +3924,8 @@ def _runoff_component_vars(exclude_isf: bool):
  
  
  def load_runoff_monthly(grid, grid_type, lat2d_deg, lon2d_deg, mesh_path,
 -                        land_mask=None, spread_passes=2, exclude_isf=False):
 +                        land_mask=None, spread_passes=2, exclude_isf=False,
-+                        runoff_file=None):
++                        runoff_file=None, domain_cfg_file=None):
      """Load NEMO's Dai-Trenberth runoff (the SAME file NEMO ORCA1 uses) and regrid
      each climatological month onto the model grid. Total freshwater = rivers
      (sorunoff) + ice-shelf melt (sornfisf) + icebergs (Icb_flux) [kg/m²/s, +INTO
-@@ -3931,11 +3932,14 @@ def load_runoff_monthly(grid, grid_type, lat2d_deg, lon2d_deg, mesh_path,
+@@ -3931,11 +3933,15 @@ def load_runoff_monthly(grid, grid_type, lat2d_deg, lon2d_deg, mesh_path,
      (see :func:`_runoff_component_vars`). Returns (12, *lat2d_deg.shape). Ungates
      the SSS comparison (runoff=0 made SSS only informational). Curvilinear ->
      model grid via the same IDW used for bathy; eORCA1 nav_lat/lon are the runoff
 -    file's own coords."""
 +    file's own coords.
 +
-+    ``runoff_file`` overrides the source path (``--runoff-file``); the default
-+    resolves to the ORCA1 INPUTS file at the ``_RUNOFF_NC`` path below."""
++    ``runoff_file`` overrides the runoff NetCDF (``--runoff-file``) and
++    ``domain_cfg_file`` overrides the area-conservation metric source
++    (``--nemo-domain-cfg``); both default to the ORCA1 INPUTS paths below."""
      import xarray as xr
      from legoesm.ocean.bathymetry import (
          laplacian_smooth_2d, laplacian_smooth_voronoi)
@@ -38,7 +40,16 @@ index 4e40f2bf8..fa3137905 100644
      src_lat = _squeeze2d(ds["nav_lat"].values)
      src_lon = _squeeze2d(ds["nav_lon"].values)
      components = _runoff_component_vars(exclude_isf)
-@@ -6858,6 +6862,12 @@ def _build_arg_parser() -> argparse.ArgumentParser:
+@@ -3959,7 +3965,7 @@ def load_runoff_monthly(grid, grid_type, lat2d_deg, lon2d_deg, mesh_path,
+     # domain_cfg (the runoff grid's metric), TARGET cell areas from the model grid
+     # (``areaCell`` on the MPAS VoronoiMesh, ``.area`` on the C-grid families).
+     # Both [m^2]; A_tgt.shape == lat2d_deg.shape == out[m].shape.
+-    A_src = _load_nemo_cell_area_m2()
++    A_src = _load_nemo_cell_area_m2(domain_cfg_file or _NEMO_DOMAIN_CFG)
+     if A_src.shape != total.shape[1:]:
+         raise ValueError(
+             f"runoff source area {A_src.shape} != runoff field {total.shape[1:]}: "
+@@ -6858,6 +6864,12 @@ def _build_arg_parser() -> argparse.ArgumentParser:
                     help="Apply NEMO's Dai-Trenberth river+ice-shelf+iceberg runoff "
                          "(the SAME file ORCA1 uses) as a per-step freshwater/virtual-salt "
                          "flux -> ungates the SSS comparison (tripole/latlon only).")
@@ -51,7 +62,7 @@ index 4e40f2bf8..fa3137905 100644
      p.add_argument("--no-emp", dest="emp_freshwater", action="store_false",
                     default=True,
                     help="DISABLE the atmospheric P - E surface freshwater flux "
-@@ -8587,16 +8597,17 @@ def main() -> int:
+@@ -8587,16 +8599,17 @@ def main() -> int:
                  "--isf requires --isf-forcing-file (the NEMO "
                  "runoff-icb_DaiTrenberth_Depoorter.nc layout with sornfisf/"
                  "sodepmin_isf/sodepmax_isf)")
@@ -73,11 +84,11 @@ index 4e40f2bf8..fa3137905 100644
                  "sornfisf was excluded from --runoff assuming --isf re-injects "
                  "the SAME ice-shelf melt at depth; verify the two files carry "
                  "the same sornfisf climatology.", RuntimeWarning)
-@@ -8842,6 +8853,7 @@ def main() -> int:
+@@ -8842,6 +8855,7 @@ def main() -> int:
          runoff_monthly = load_runoff_monthly(
              grid, app_grid_type, lat2d, lon2d, args.mesh,
              land_mask=np.asarray(state.land_mask.data), spread_passes=_spread,
-+            runoff_file=args.runoff_file,
++            runoff_file=args.runoff_file, domain_cfg_file=args.nemo_domain_cfg,
              # --isf deposits the SAME file's sornfisf at depth -> drop it from
              # the surface runoff or the ice-shelf melt is counted twice.
              exclude_isf=args.isf)
