@@ -518,6 +518,11 @@ def _generate_run_script(config: dict, exp_dir: Path, machine: str | None = None
         body.append("")
 
     lines += [
+        # sbatch runs a COPY of this script from /var/spool/slurmd/<job>/, so
+        # $0-relative resolution lands in the spool (job 761687). Embed the
+        # absolute init-time directory and fall back to $0 only if it moved.
+        f"EXPERIMENT_DIR={exp_dir.resolve()}",
+        '[ -f "$EXPERIMENT_DIR/config.yaml" ] || '
         'EXPERIMENT_DIR=$(cd "$(dirname "$0")" && pwd)',
         'CONFIG="$EXPERIMENT_DIR/config.yaml"',
         f"CONFIG_TEMPLATE={template_name!r}",
