@@ -427,10 +427,20 @@ def _load_machine_config(machine: str | None) -> dict | None:
         return None
     machine_path = Path(machine)
     if not machine_path.is_absolute() and "/" not in machine:
-        machine_path = Path(__file__).resolve().parent.parent / "machines" / f"{machine}.yaml"
+        # Bare name: search the runners' own machines/ dir first, then the
+        # sibling experiments repo (machine configs live in
+        # my-legoESM-ocean-experiments/machines/ per workspace conventions).
+        runners_dir = Path(__file__).resolve().parent.parent
+        machine_path = runners_dir / "machines" / f"{machine}.yaml"
+        experiments_dir = (runners_dir.parent / "my-legoESM-ocean-experiments"
+                           / "machines" / f"{machine}.yaml")
+        if not machine_path.is_file() and experiments_dir.is_file():
+            machine_path = experiments_dir
     if machine_path.is_file():
         with open(machine_path) as f:
             return yaml.safe_load(f)
+    print(f"WARNING: machine config {machine!r} not found "
+          f"(looked for {machine_path}); continuing without machine settings.")
     return None
 
 
