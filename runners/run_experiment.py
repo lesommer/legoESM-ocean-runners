@@ -472,6 +472,16 @@ def _generate_run_script(config: dict, exp_dir: Path, machine: str | None = None
         slurm_lines.append(f"#SBATCH --nodes={nodes}")
         tasks_per_node = machine_cfg.get("scheduler_tasks_per_node", 1)
         slurm_lines.append(f"#SBATCH --ntasks-per-node={tasks_per_node}")
+        # Memory on clusters that forbid --mem (jean-zay) derives per-CPU:
+        # MinMemoryPerCPU x cpus. A GPU card with 1 task and no cpus-per-task
+        # claims only ~2-7 GB host bound and gets OOM-killed by any big
+        # XLA compile (jean-zay forensics 2026-10-09: jobs 764059/782995/
+        # 801848/803209/808917, rc=137 pre-first-diag). scheduler_cpus_per_task
+        # claims whole-node CPUs for the single task; WITHOUT it the default
+        # is the cluster's MinMemoryPerCPU share only.
+        cpus_per_task = machine_cfg.get("scheduler_cpus_per_task")
+        if cpus_per_task:
+            slurm_lines.append(f"#SBATCH --cpus-per-task={cpus_per_task}")
         walltime = machine_cfg.get("scheduler_walltime", "01:00:00")
         slurm_lines.append(f"#SBATCH --time={walltime}")
         mem = machine_cfg.get("scheduler_mem", "")
