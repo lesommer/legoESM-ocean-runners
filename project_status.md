@@ -45,6 +45,7 @@ Only `ocean_scm` mode has a working native run path (YAML → model object → o
 | `global_ocean/` | `omip_cubed_sphere` | structurally validated only | no |
 | `global_ocean/` | `omip_tripole` | yes | 5-day run tested at pin `69287951` (2026-06, synthetic forcing); delegation remapped for pin `c986cb989` — re-run pending |
 | `global_ocean/` | `omip_faithful_card` | structurally validated only | no |
+| `global_ocean/` | `omip_core2_thin` | yes | The FAST thin-card CORE-II tripole lane (legoESM job `8089905`, 2026-08-18: pure-defaults `run_omip_core2.py --years 4 --dt 600`, 20 lev, rest-state IC, ~9.5 SYPD on one RTX 8000). Mac CPU 0.5-day startup smoke at pin `c986cb989` (2026-10-09, synthetic forcing fallback): grid (332,362), rest-state, pure-defaults physics (A_h=1e5 mesh-derived, GM/Redi upstream-ON), 72 steps finite at 1.90 steps/s. Real `_MOD` forcing resolves on machines with the staged cache (jean-zay). `initial_conditions.type: rest` = no IC flags (documented lane; `ic.type` values woce/woa map to flags, anything else is left alone) |
 
 ## Definitions
 

@@ -1,0 +1,85 @@
+# Fast thin-card CORE-II tripole lane, recorded in the runners (2026-10-09).
+#
+# This template encodes the FAST eORCA1 tripole lane of the omip-faithful
+# campaign: legoESM `scripts/cluster/omip_nemo/run_core2_tripole.sbatch`
+# (job 8089905, 2026-08-18, one RTX 8000): the PURE-DEFAULTS invocation of
+# `run_omip_core2.py --years 4 --dt 600 --diag-every-days 30` — 20 vertical
+# levels, REST-STATE IC (idealised T, uniform S=35), no sea ice, no TKE
+# closure (--tripole-vmix none), no RK3, no GM/Redi override (upstream
+# default ON), adcroft PGF, implicit vertical mixing. Measured receipt:
+# ~2.53 h/sim-year = 5.78 steps/s ~= 9.5 SYPD (legoESM
+# docs/dev-notes/OMIP_faithful.md, iteration log 2026-08-18/19).
+#
+# SCOPE (honest, from the campaign's own labels): this is the IC-caveated
+# pipeline-validation / throughput-anchor lane, NOT the NEMO-faithful card
+# (that one is `global_ocean/omip_faithful_card`: L75, WOCE ICs, TKE+ice+
+# RK3, measured 0.09-0.19 SYPD single-GPU). Purpose here: (a) replicate the
+# 9.5-SYPD receipt on jean-zay A100 and measure the current-main rate
+# (post-#1820 in-step forcing; argparse defaults drifted --nlev 40 /
+# --dt 3600, so this template PINS --nlev 20 --dt 600); (b) anchor the
+# faithfulness-increment pricing ladder (one variable per arm from this
+# baseline).
+#
+# Deliberate deltas vs the 8089905 invocation (documented in the experiment
+# notes.md, not here): diag-every-days 5 (rate visible at step 720) vs 30;
+# the corrected CORE-II `_MOD` nyf.zarr via the machine cache symlink (the
+# current default resolver, gated by
+# tests/ocean/unit/test_core2_corrected_cache_default.py) vs the raw nyf
+# of the receipt.
+#
+# A/B DISCIPLINE: never edit this template in place after it has been run —
+# any change is a NEW configuration and must be A/B'd against this lane,
+# one variable at a time.
+
+experiment:
+  name: omip_core2_thin
+  mode: 3d_ocean_realistic
+  description: "Fast thin eORCA1 tripole CORE-II lane (8089905 replication): pure-defaults physics, rest-state IC, dt=600, nlev=20 — the ~9.5 SYPD throughput anchor"
+
+requires:
+  - eorca1_mesh
+  - core2_nyf
+
+mpi:
+  enabled: false
+  ranks: 1
+  launcher: mpirun
+  extra_args: ""
+
+grid:
+  type: tripole
+  resolution: eORCA1
+  mesh_file: eORCA1.2_mesh_mask.nc
+  nlev: 20                      # the 8089905 lane was 20 levels (HEAD default drifted to 40 — pinned)
+
+# ocean/physics intentionally ABSENT: the 8089905 lane is pure defaults —
+# no smag/A_h/vertadv flags, no closure (--tripole-vmix none), no bottom
+# drag, no SSS restoring, GM/Redi at its upstream default (ON). Any field
+# added here is a deviation from the receipt lane and must be A/B'd.
+
+time:
+  duration_days: 1460           # 4 x 365 (the receipt's --years 4)
+  duration_overshoot_days: 0.05  # cadence-snapshot margin (standard-card convention)
+  dt_seconds: 600
+
+initial_conditions:
+  type: rest                    # rest-state: NO IC flags (not woce/woa — the delegation leaves 'rest' alone)
+
+forcing:
+  mode: core2_nyf
+  synthetic: false
+  scale: 1.0
+
+output:
+  path: results/omip_core2_thin
+  # snapshot_every_days deliberately UNSET: the driver writes yearly
+  # snapshots (snapshot_yearNNN.npz) automatically for multi-year runs —
+  # the 8089905 output behavior.
+  diag_every_days: 5            # delta vs receipt (30): measured rate lands at step 720, day 5
+
+run:
+  # Pure-defaults lane: NOTHING beyond the delegation's mapped args.
+  # The mapped command resolves to exactly:
+  #   run_omip_core2.py --dt 600 --nlev 20 --mesh <canonical eORCA1.2> \
+  #     --output <exp>/results/omip_core2_thin --years 4.0001 --diag-every-days 5
+  extra_args: []
