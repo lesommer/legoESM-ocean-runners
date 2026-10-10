@@ -79,6 +79,18 @@ jobs:
           print('All template requires reference valid catalog entries')
           "
 
+  # Reproducibility-tag contract: every change to reproducibility-affecting
+  # paths must be covered by a legoesm-* tag. Hard-fails on push/tag events;
+  # advisory on pull requests (the maintainer tags after merge — see
+  # CONTRIBUTING.md "The reproducibility-tag gate").
+  repro-tag-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the reproducibility-tag check needs git tags
+          fetch-tags: true
+
       - name: Check for reproducibility tag
         run: |
           LAST_TAG=$(git describe --tags --abbrev=0 --match='legoesm-*' HEAD 2>/dev/null || echo "")
