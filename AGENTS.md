@@ -231,6 +231,14 @@ These tag files are intended to be archived alongside experiment output in a sep
 3. Apply patches: `bash scripts/apply_patches.sh`
 4. When merged upstream: remove the override and patch, run `sync_legoesm.sh --tag`
 
+### Public-repo contribution rules
+
+This repository is public; external contributions follow the fork + PR flow described in `CONTRIBUTING.md`:
+
+- `legoesm-*` tags are created only by the maintainer, after merge, via `bash scripts/sync_legoesm.sh --tag-only`. Contributors cannot create them; a PR touching reproducibility-affecting paths (`templates/`, `runners/`, `scripts/`, `patches/`, `legoESM_version.txt`, `data_catalog.yaml`) shows a red reproducibility-tag check until the maintainer tags — this is by design. Never instruct a contributor to create a tag.
+- Bug reports must include the experiment's `experiment.tag` + `config.yaml` — not raw logs. Redirect incomplete reports to the bug report issue template (`.github/ISSUE_TEMPLATE/bug_report.md`).
+- Model bugs belong in the upstream legoESM issue tracker, not here.
+
 ### Tag after patches/templates/runners changes
 1. After committing changes to `patches/`, `templates/`, or `runners/`, run: `bash scripts/sync_legoesm.sh --tag-only`
 2. This validates templates and creates a `legoesm-*` tag at HEAD
@@ -242,7 +250,7 @@ These tag files are intended to be archived alongside experiment output in a sep
 
 - **Never edit `../legoESM/` directly.** If legoESM needs changes, create a patch in `patches/`.
 - **Never commit data files** (NetCDF, Zarr, large binaries) to this repository. The `data/` directory is git-ignored for a reason.
-- **Never commit machine-specific configs** that contain secrets or absolute paths. Only `_template.yaml` is committed; actual machine files are git-ignored.
+- **Never commit machine-specific configs** — real machine files, scheduler accounts, or usernames. Only `_template.yaml` is committed; actual machine files are git-ignored.
 - **Never hardcode absolute paths** in templates or runners. Use `$LEGOESM_DATA_DIR`, `$LEGOESM_DIR`, or relative paths.
 - **Never modify `data_catalog.yaml` checksums** without verifying them against actual downloaded files.
 - **Never remove the `requires` field** from a template. Even idealized templates have `requires: []` — this is intentional and validated by CI.
@@ -265,6 +273,9 @@ These tag files are intended to be archived alongside experiment output in a sep
 |------|-------|
 | Project status | `project_status.md` |
 | README status-block renderer | `scripts/render_readme_status.py` (`--check` gate in CI + `sync_legoesm.sh`) |
+| Contribution guide | `CONTRIBUTING.md` (fork + PR flow, validation checklist, tag-gate explanation) |
+| Code of conduct | `CODE_OF_CONDUCT.md` (Contributor Covenant v2.1) |
+| Issue + PR templates | `.github/ISSUE_TEMPLATE/`, `.github/PULL_REQUEST_TEMPLATE.md` |
 | Experiment templates | `templates/<category>/<name>.yaml` |
 | Data catalog | `data_catalog.yaml` |
 | Pinned legoESM version | `legoESM_version.txt` |

@@ -37,7 +37,7 @@ there is a gap:
 
 This repo fills that gap. It provides:
 
-- **Templates** — 26 version-controlled YAML configurations across five
+- **Templates** — 31 version-controlled YAML configurations across five
   modes (`ocean_scm`, `barotropic_ocean`, `3d_ocean`, `3d_ocean_realistic`,
   `coupled`), dispatched to the matching legoESM configuration classes, with
   dot-notation parameter overrides at init (`-o grid.resolution=128x256`).
@@ -83,9 +83,11 @@ configs, notes, analysis) — see link below
 ```
 
 Use this repo to declare and execute reproducible experiment
-configurations; use
-[my-legoESM-ocean-experiments](https://github.com/lesommer/my-legoESM-ocean-experiments)
-to record what you ran, where, and what came of it.
+configurations; use a personal experiment ledger to record what you ran,
+where, and what came of it. To start your own ledger,
+use the [experiment-ledger template repository](https://github.com/lesommer/legoESM-ocean-experiments-template)
+("Use this template" → private clone), which carries the run-declaration
+format, machine-config template, and the bin/ helpers.
 
 ### Current capability status
 
@@ -241,6 +243,28 @@ upstream licenses and citations (recorded per-entry in the catalog).
 | `bash scripts/sync_legoesm.sh --tag` | Update pinned legoESM version and tag |
 | `bash scripts/apply_patches.sh` | Apply patches to legoESM checkout |
 
+## Contributing
+
+Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for what
+belongs here vs upstream, the fork+PR flow, and the validation checklist.
+Bug reports should attach the experiment's `experiment.tag` and
+`config.yaml`, not raw logs. We follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## How to cite
+
+If these templates or runners support your work, cite the repository and
+the model:
+
+- J. Le Sommer et al., *legoESM-ocean-runners* (2026),
+  https://github.com/lesommer/legoESM-ocean-runners (MIT for repo content;
+  see License)
+- The legoESM model: https://github.com/climate-federation/legoESM
+  (cite the version/commit you ran — it is recorded in `experiment.tag`)
+- DINO experiments: see `docs/dino.md` for the paper reference
+  (Kamm et al. 2025)
+
+A DOI may be added at public release; until then, cite the commit hash.
+
 ## Further reading
 
-See [AGENTS.md](AGENTS.md) for full conventions, CI setup, data catalog schema, patch workflow, and version strategy.
+See [AGENTS.md](AGENTS.md) for full conventions, CI setup, data catalog schema, patch workflow, and version strategy. For per-directory detail, see the `README.md` in `templates/`, `runners/`, `scripts/`, and `patches/`.
