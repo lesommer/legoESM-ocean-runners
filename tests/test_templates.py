@@ -147,6 +147,58 @@ class TestRunner:
             load_template("nonexistent/template")
 
 
+class TestOceanCaseDispatch:
+    """Test the 3d_ocean case-dispatch table (which lane a case takes)."""
+
+    def test_dino_template_has_all_dispatch_fields(self):
+        from runners.run_experiment import load_template
+        cfg = load_template("3d_idealized/dino")
+        assert cfg["ocean"]["case"] == "dino"
+        assert cfg["grid"]["type"] == "latlon"
+        # The delegation lanes read these; assert the contract.
+        assert cfg["grid"]["n_lon"] == 50          # R1
+        assert cfg["time"]["dt_seconds"] == 2700   # paper dt
+        assert cfg["requires_patches"] == ["006-dino-spmd-restart-timing.patch"]
+
+    def test_dino_requires_patches_exist(self):
+        from runners.run_experiment import PATCHES_DIR
+        from runners.run_experiment import load_template
+        cfg = load_template("3d_idealized/dino")
+        for p in cfg.get("requires_patches", []):
+            assert (PATCHES_DIR / p).exists(), f"missing patch: {p}"
+
+    def test_matrix_lane_cases(self):
+        # The Tier-A idealized cases route through the matrix delegation
+        # (grid-type mapping asserted against the dispatch table).
+        dispatch = {
+            "baroclinic_gyre": {"latlon": "latlon_regional"},
+            "lock_exchange": {"latlon": "latlon"},
+            "overflow": {"latlon": "latlon"},
+            "acc_channel": {"latlon": "latlon_channel"},
+        }
+        from runners.run_experiment import load_template
+        for tmpl, grids in dispatch.items():
+            cfg = load_template(f"3d_idealized/{tmpl}")
+            case = cfg["ocean"]["case"]
+            grid = cfg["grid"]["type"]
+            assert case in dispatch, f"{tmpl}: case {case} not a matrix lane"
+            assert grid in grids, f"{tmpl}: grid {grid} not mapped"
+
+    def test_stub_case_falls_through(self):
+        # A 3d_ocean case WITHOUT a delegation lane hits the structural
+        # stub, not an error (e.g. eady_instability, phillips_two_layer).
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from runners.run_experiment import load_template
+        cfg = load_template("3d_idealized/eady_instability")
+        assert cfg["experiment"]["mode"] == "3d_ocean"
+        # case eady_uniform is NOT in the dispatch table (falls to stub)
+        assert cfg["ocean"]["case"] not in (
+            "dino", "baroclinic_gyre", "lock_exchange", "overflow",
+            "acc_channel")
+
+
 class TestOceanTestMatrix:
     """Test the ocean test matrix builder."""
 

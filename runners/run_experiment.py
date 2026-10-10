@@ -662,6 +662,20 @@ def _run_ocean(config: dict, legoesm_path: Path, config_path: Path | None = None
     if mode == "3d_ocean" and case == "dino" and grid_type == "latlon":
         _run_dino(config, legoesm_path, config_path)
         return
+    _MATRIX_CASES = {
+        # case -> (grid.type -> upstream matrix --grid value)
+        "baroclinic_gyre": {"latlon": "latlon_regional",
+                            "mpas": "mpas_regional"},
+        "lock_exchange": {"latlon": "latlon"},
+        "overflow": {"latlon": "latlon"},
+        "acc_channel": {"latlon": "latlon_channel",
+                         "mpas": "mpas_channel"},
+    }
+    if (mode == "3d_ocean" and case in _MATRIX_CASES
+            and grid_type in _MATRIX_CASES[case]):
+        _run_matrix_case(config, legoesm_path, config_path,
+                         _MATRIX_CASES[case][grid_type])
+        return
 
     from legoesm.ocean.experiments import AVAILABLE_EXPERIMENTS
 
@@ -983,6 +997,73 @@ def _run_dino(config: dict, legoesm_path: Path, config_path: Path | None = None)
     result = subprocess.run(cmd, env=run_env, cwd=str(legoesm_path))
     if result.returncode != 0:
         raise RuntimeError(f"run_dino.py exited with code {result.returncode}")
+
+
+def _run_matrix_case(config: dict, legoesm_path: Path,
+                     config_path: Path | None, matrix_grid: str):
+    """Run a 3D idealized case via delegation to the legoESM ocean test
+    matrix (``scripts/matrix/run_ocean_test_matrix.py --only <case>``).
+
+    The upstream matrix runner owns the scientifically-validated
+    configuration of each case (grid geometry, ICs, physics, stability-
+    verified dt/duration pairs — see legoESM
+    ``docs/dev-notes/ocean_experiments_reference.md``). This handler maps
+    the template's case + grid type onto the upstream baseline and
+    forwards only the knobs a template legitimately overrides: duration,
+    dt, vertical levels, resolution. Template physics fields are the
+    documented intent; the upstream baseline is what runs.
+
+    Output lands in ``<experiment-dir>/results/ocean/<case>/...``.
+    """
+    import subprocess
+
+    grid_cfg = config.get("grid", {})
+    time_cfg = config.get("time", {})
+    ocean_cfg = config.get("ocean", {})
+    case = ocean_cfg.get("case")
+
+    script = str(legoesm_path / "scripts" / "matrix"
+                 / "run_ocean_test_matrix.py")
+    if not Path(script).exists():
+        raise FileNotFoundError(
+            f"{script} not found — the matrix-case lane needs legoESM's "
+            f"scripts/matrix/run_ocean_test_matrix.py")
+
+    # The subprocess cwd becomes the legoESM repo: absolutize the output
+    # against the experiment directory (upstream writes
+    # <output>/<case>/<grid>/<res>/).
+    out_dir = config_path.parent if config_path else Path.cwd()
+    output_arg = str(out_dir / config.get("output", {}).get(
+        "path", "results/ocean"))
+
+    cmd = [sys.executable, script,
+           "--only", str(case),
+           "--grid", matrix_grid,
+           "--output", output_arg]
+
+    # Overrides: only what the upstream CLI honors. duration -> --days;
+    # dt/levels/resolution -> the matching flags. Absent keys keep the
+    # upstream baseline (the tested configuration).
+    duration_days = time_cfg.get("duration_days")
+    if duration_days is not None:
+        cmd.extend(["--days", str(duration_days)])
+    dt = time_cfg.get("dt_seconds")
+    if dt is not None:
+        cmd.extend(["--dt", str(dt)])
+    nlev = grid_cfg.get("nlev", grid_cfg.get("n_levels"))
+    if nlev is not None:
+        cmd.extend(["--levels", str(nlev)])
+    resolution = grid_cfg.get("resolution")
+    if resolution is not None:
+        cmd.extend(["--resolution", str(resolution)])
+
+    run_env = {**os.environ, "JAX_ENABLE_X64": "1"}
+    print(f"Running {case} via ocean test matrix: {' '.join(cmd)}")
+    result = subprocess.run(cmd, env=run_env, cwd=str(legoesm_path))
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"run_ocean_test_matrix.py exited with code "
+            f"{result.returncode} (case={case}, grid={matrix_grid})")
 
 
 def _run_coupled(config: dict, legoesm_path: Path):
