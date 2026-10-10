@@ -93,12 +93,12 @@ Init and provenance tagging work for all modes. The run path is implemented
 for:
 
 - `ocean_scm` (native run path)
-- `3d_ocean` and `barotropic_ocean` for **DINO** (delegation to legoESM's
-  `run_dino.py`, upstream since PR climate-federation/legoESM#1926:
-  multi-GPU SPMD, restart, ensemble seed and timing)
-  and the **matrix-lane idealized cases** (delegation to the upstream ocean
-  test matrix; the upstream runner owns the scientifically-validated case
-  config and gates)
+- `3d_ocean` for **DINO** (delegation to legoESM's `run_dino.py`, upstream
+  since PR climate-federation/legoESM#1926: multi-GPU SPMD, restart,
+  ensemble seed and timing)
+- `3d_ocean` and `barotropic_ocean` for the **matrix-lane idealized
+  cases** (delegation to the upstream ocean test matrix; the upstream
+  runner owns the scientifically-validated case config and gates)
 - `3d_ocean_realistic` on tripole grids (delegation to the upstream OMIP
   script with patches 002/003)
 
@@ -191,12 +191,12 @@ Every run produces an `experiment.tag` (INI format) recording the full software 
 ```ini
 [legoESM]
 ref = main
-commit = 69287951b423ddf77d74a53746d4b649ec1dbfcc
+commit = 2ddb56f77e197a53c8411fec62a9540884bc42c9
 
 [reproducibility]
-runner_tag = legoesm-69287951b423-20260606
-python_version = 3.11.14
-jax_version = 0.4.38
+runner_tag = legoesm-2ddb56f77e19-20261010
+python_version = 3.12.12
+jax_version = 0.10.0
 ```
 
 To reproduce:

@@ -1,25 +1,80 @@
 # Project Status
 
+*Last verified: 2026-10-10 — legoESM pin 2ddb56f77e19, runner tag legoesm-2ddb56f77e19-20261010 (see legoESM_version.txt)*
+
 This document tracks what's currently implemented and tested in the runners. Consult it before assuming any capability.
 
 ## Runner implementation status
 
-Only `ocean_scm` mode has a working native run path (YAML → model object → output). The `3d_ocean_realistic` mode has a working run path for tripolar grids via script delegation to `run_omip_core2.py`. All other mode/grid combinations have working init but stub or untested run paths. Do not assume that calling `run_experiment run` on a 3D or coupled template will execute a simulation — check the table below.
+Init (template → `config.yaml` + `experiment.tag` + `run.sh`) works for every mode. `run_experiment run` executes a simulation only on these lanes; everything else is init-only:
+
+- `ocean_scm` — native run path (YAML → model → NetCDF); all 5 templates run-tested.
+- `3d_ocean` — `dino` (delegation to legoESM `run_dino.py`) plus 10 matrix-lane idealized cases (delegation to the upstream ocean test matrix); all other cases init-only.
+- `barotropic_ocean` — `barotropic_wave` and `barotropic_double_gyre` via the same matrix delegation; other barotropic templates init-only.
+- `3d_ocean_realistic` — tripolar grids only (eORCA1 OMIP via `run_omip_core2.py`); other grid types init-only.
+- `coupled` — init-only.
+
+Quick answer to "will `run_experiment run` execute my template?": find the template's row in the Template test status table below — `run-tested` or `smoke-tested` means yes (on the recorded lane); `structural` or `init-only` means no (init and provenance still work). The mode table gives the mechanism per mode.
 
 | Mode | Init (YAML → config.yaml + tag) | Run (config.yaml → model → output) | Notes |
 |------|----------------------------------|-------------------------------------|-------|
-| `ocean_scm` | Working | **Working** | Constructs `OceanColumnModel`, runs, saves NetCDF. 5 templates tested end-to-end. |
-| `3d_ocean` | Working | **Working for `dino`, `baroclinic_gyre`, `lock_exchange`, `overflow`, `acc_channel`, `geostrophic_adjustment`, `phillips_two_layer`, `global_overturning`, `neverworld2_lite`, `eady_instability`, `rest_state_stratified_no_land` (lat-lon)** | Two delegation lanes (mechanisms; per-template receipts live in the Template test status table above): `dino` → `runners/run_experiment.py::_run_dino` calls `scripts/run/run_dino.py` (upstream multi-GPU/restart/seed/timing support since PR climate-federation/legoESM#1926 — merged; patch 006 dropped at the pin bump that followed); the matrix-lane cases → `_run_matrix_case` calls `scripts/matrix/run_ocean_test_matrix.py --only <case> --grid <grid>` (the upstream matrix runner owns the scientifically-validated case config; the runner forwards only duration/dt/levels/resolution overrides). See "Current 3D / coupled workflow" for lane details. All other `3d_ocean` cases: stub (init + provenance only). |
-| `3d_ocean_realistic` | Working | **Working for tripolar only** | Script delegation: calls `scripts/run/run_omip_core2.py` (upstream + patch `002` extensions) which reads eORCA1 mesh mask, loads WOCE ICs, applies CORE2 NYF forcing, supports `--scan-block` for `lax.scan`, `--convection enhanced_diffusion`, `--partial-cell`, `--synthetic-forcing`, `--forcing-scale`, `--days`. **MPI support** (patch `003`): when `mpi.enabled: true`, dispatches to `scripts/run/run_omip_core2_mpi.py` with latitude-band decomposition. Other grid types still stub. **2026-10-07 (pin `c986cb989`)**: patch 002 regenerated against the rewritten upstream script (same three flags); IC/SSS delegation flags remapped to the new upstream CLI (`--nemo-monthly-init`, `--sss-restore` + `--sss-restore-file` + `--sss-restore-tau-days`). **Delegation fixed + verified 2026-10-07**: upstream `build_tripole` now asserts `--mesh` resolves to the canonical repo-relative `data/grids/<file>` path, so the runner executes the delegated script with `cwd=<legoesm>` and passes the repo-rooted mesh (`<legoesm>/data/grids/<mesh_file>` — the mesh MUST exist there; a symlink into `data_root` is fine), and `--output` is absolutized against the experiment dir (relative output would relocate under the changed cwd). Mesh-resolution verified end-to-end (grid build + synthetic 5-day startup). **Run-tested 2026-10-07** (`macbook_2026-10-07_tripole-repin-5day`): 720 steps, no NaN, 2.85 s/step on M-series CPU (vs 3.9 s/step at the June pin) — delegation verified at this pin. **GPU-verified 2026-10-07** (`bigfoot_2026-10-08_tripole-gpu-smoke`, V100): exit 0, 1.17 steps/s (3.3× CPU), every diagnostic identical to the CPU run at print precision. **Caveats**: (1) at this pin `--sss-restore` implies loading NEMO siconc from an upstream-hardcoded path (`_SICONC_NC`) — unavailable off upstream's machine; disable via `physics.sss_restoring.enabled: false` until the Phase-3 env-override patch lands (the laptop's `orca1_data_repository/input_fields/` holds runoff/chl/domain_cfg locally — same repo upstream hardcodes). (2) **Delegation mapping completed 2026-10-07 (full 229-flag audit)**: `--tripole-vmix` ← `physics.vertical_mixing.scheme`, `--bottom-drag-{scheme,r,cd0,cdmax,z0,ke0}` ← `physics.bottom_drag` (template 'linear' → legacy), `--no-gm-redi` ← `physics.lateral_mixing.enabled: false` (upstream tripole ships GM/Redi **ON** κ=600 by default — the 2026-10-07 smokes therefore ran with GM active despite their `enabled: false` override; corrected by this mapping), `--runoff` ← `forcing.runoff.enabled` (the `_RUNOFF_NC` hardcode is fixed by patch `004-runoff-file-override.patch`; supply `--runoff-file` (and `--nemo-domain-cfg`) via the template/method in the `omip_faithful_card` section below — no longer blocked off upstream's machine). No upstream `--water-type` flag exists; Jerlov II is the upstream default and matches the template. Remaining unmapped upstream flags are grid-specific (`--cube-*`, `--fesom-*`, `--mpas-*`), and unenumerated physics/numerics families — card runs use the verbatim `run.extra_args` passthrough (see the card section). |
-| `barotropic_ocean` | Working | **Working for `barotropic_wave`, `barotropic_double_gyre` (+`_sin2` via the upstream substring match)** | Matrix delegation since wave-1 (2026-10-10): the `_run_ocean` dispatch accepts `barotropic_ocean` mode for matrix-lane cases and routes them through `_run_matrix_case` like the 3D lanes. Other barotropic templates (`barotropic_gyre`, `stommel_gyre_tracer`, `inertia_gravity_wave`): stub (init + provenance only). |
-| `coupled` | Working | **Partially implemented** | Constructs `CoupledESMDriver` but untested. |
+| `ocean_scm` | Working | **Working** | Native run path; see the `ocean_scm` subsection below. |
+| `3d_ocean` | Working | **Working: `dino` + 10 matrix-lane cases** | Two delegation lanes; see the `3d_ocean` subsection below. Other cases: init-only. |
+| `barotropic_ocean` | Working | **Working: `barotropic_wave`, `barotropic_double_gyre`** | Matrix delegation like the 3D lanes; see the `barotropic_ocean` subsection below. Other templates: init-only. |
+| `3d_ocean_realistic` | Working | **Working: tripolar grids** | Script delegation to `run_omip_core2.py`; see the `3d_ocean_realistic` subsection below. Other grid types: init-only. |
+| `coupled` | Working | **Implemented, untested** | Constructs `CoupledESMDriver`; no end-to-end run recorded. See the `coupled` subsection below. |
+
+### ocean_scm (native run path)
+
+Constructs `OceanColumnModel` from the resolved config, runs the simulation, and saves NetCDF output. All 5 templates are run-tested end-to-end.
+
+### 3d_ocean (dino and matrix lanes)
+
+Two delegation lanes; per-template receipts live in the Template test status table below.
+
+- **`dino`** (lat-lon): `_run_dino` in `runners/run_experiment.py` delegates to legoESM `scripts/run/run_dino.py`, the standalone DINO production driver. It builds the paper-faithful R1 `DINOConfig` itself (Kamm et al. 2025 defaults: KPP + Visbeck GM/Redi + EVD convection, Wright EOS, zstar 36 lev, dt 2700), so the runner forwards only legitimate overrides: resolution (`grid.n_lon`), duration, snapshot cadence, scheme flags, recipe cards via `run.extra_args`, plus the run-control lanes `run.n_devices` (lat-band SPMD; requires `n_lat % N == 0` — the R1 grid's 198 rows divide by 1 and 2 only), `run.restart_from` (snapshot NPZ; clock restarts at 0), `run.seed` (ensemble IC; 0 = canonical), and `run.timing_jsonl`. Multi-GPU, restart, seed and timing are upstream since PR climate-federation/legoESM#1926 (merged); patch 006 was dropped at the 2026-10-10 pin bump. Restart is verified bit-exact on CPU; SPMD parity within the re-association floor.
+- **Matrix-lane idealized cases** (`baroclinic_gyre`, `lock_exchange`, `overflow`, `acc_channel`, `geostrophic_adjustment`, `phillips_two_layer`, `global_overturning`, `neverworld2_lite`, `eady_instability`, `rest_state_stratified_no_land`): `_run_matrix_case` delegates to legoESM `scripts/matrix/run_ocean_test_matrix.py --only <case> --grid <grid>`. The upstream matrix runner owns the scientifically-validated configuration (grid geometry, ICs, physics, stability-verified dt/duration pairs — see legoESM `docs/dev-notes/ocean_experiments_reference.md`); the runner forwards only duration/dt/levels/resolution overrides. Template physics fields are the documented intent; the upstream baseline is what runs. NB: upstream `--only` is a substring match — `baroclinic_gyre` also runs the `baroclinic_gyre_cos` variant and `barotropic_double_gyre` also runs `_sin2` (extra runtime, both gated). `eady_instability` dispatches lat-lon templates onto the upstream `latlon_channel` lane (both eady lanes are channel-only; upstream excludes `mpas_channel` for eady_instability — it blows up). `neverworld2_lite` uses the upstream 180x360 lane resolution (not the 36x72 matrix default).
+
+All other `3d_ocean` cases: init + provenance only.
+
+### barotropic_ocean (matrix lanes)
+
+Added 2026-10-10: the `_run_ocean` dispatch accepts `barotropic_ocean` mode for matrix-lane cases and routes them through `_run_matrix_case` like the 3D lanes — the upstream ocean test matrix executes them with the same 3D machinery. Other barotropic templates (`barotropic_gyre`, `stommel_gyre_tracer`, `inertia_gravity_wave`): init + provenance only.
+
+### 3d_ocean_realistic (tripolar OMIP)
+
+Script delegation: the runner calls legoESM `scripts/run/run_omip_core2.py` (upstream, extended by patch `002-omip-core2-extensions.patch`), which provides `build_tripole()` (eORCA1 mesh mask reading), `load_core2_nyf()` (CORE-II Normal Year Forcing), WOCE IC loading, and the flags `--scan-block` (lax.scan stepping), `--convection enhanced_diffusion`, `--partial-cell`, `--synthetic-forcing` (explicit opt-in smoke tests without real Zarr data), `--forcing-scale` (amplitude multiplier), and `--days` (short experiments). Other grid types are init-only.
+
+**CLI remap at pin `c986cb989` (2026-10-07)**: the upstream script was rewritten; patch 002 was regenerated against it (same three flags), and the delegation now maps WOCE ICs to `--nemo-monthly-init <temp> <salt>` and SSS restoring to `--sss-restore --sss-restore-file <clim> --sss-restore-tau-days <tau>`.
+
+**cwd and mesh resolution (fixed 2026-10-07)**: upstream `build_tripole` asserts `--mesh` resolves to the canonical repo-relative `data/grids/<file>` path, so the runner executes the delegated script with `cwd=<legoesm>` and passes the repo-rooted mesh (`<legoesm>/data/grids/<mesh_file>` — the mesh MUST exist there; a symlink into `data_root` is fine). `--output` is absolutized against the experiment dir (a relative output path would relocate under the changed cwd). Verified end-to-end (grid build + synthetic 5-day startup); receipts in the `omip_tripole` row of the Template test status table.
+
+**MPI (patch `003-omip-core2-mpi.patch`)**: when `mpi.enabled: true`, the runner dispatches to `scripts/run/run_omip_core2_mpi.py` with latitude-band domain decomposition (details in the MPI section below).
+
+**Delegation mapping (full 229-flag audit, 2026-10-07)**:
+- `--tripole-vmix` ← `physics.vertical_mixing.scheme`
+- `--bottom-drag-{scheme,r,cd0,cdmax,z0,ke0}` ← `physics.bottom_drag` (template `linear` → legacy)
+- `--no-gm-redi` ← `physics.lateral_mixing.enabled: false`. Caveat: the upstream tripole recipe ships GM/Redi ON (κ=600) by default — the 2026-10-07 smokes ran with GM active despite their `enabled: false` override; this mapping corrected it.
+- `--runoff` ← `forcing.runoff.enabled`; the `_RUNOFF_NC` hardcode is fixed by patch `004-runoff-file-override.patch` — supply `--runoff-file` (and `--nemo-domain-cfg`) via the template method in the NEMO-faithful card section; no longer blocked on upstream's machine.
+- No upstream `--water-type` flag exists; Jerlov II is the upstream default and matches the template.
+- Remaining unmapped upstream flags are grid-specific (`--cube-*`, `--fesom-*`, `--mpas-*`) and unenumerated physics/numerics families; card runs use the verbatim `run.extra_args` passthrough (see the card section).
+
+**Caveat — siconc hardcode**: at this pin `--sss-restore` implies loading NEMO siconc from an upstream-hardcoded path (`_SICONC_NC`) that does not exist off upstream's machine; disable via `physics.sss_restoring.enabled: false` until an env-override patch lands. (The sibling hardcoded inputs — runoff, chl, domain_cfg — live in the same upstream repo directory and resolve only where staged.)
+
+### coupled
+
+`_run_coupled` constructs `CoupledESMDriver` from the `coupled.preset`, but no end-to-end run has been recorded. All three coupled templates are `structural`.
+
+### Init-only lanes
+
+Modes, grids, and cases without a run path are executed by calling legoESM's own Python scripts directly (e.g., `legoESM/scripts/run/run_omip.py`). The runners still handle init and provenance tagging for these — the generated `config.yaml` and `experiment.tag` are valid even though `run_experiment run` does not execute a simulation.
 
 ## Template test status
 
 Single source of truth for per-template status. `Status` uses a controlled
 vocabulary (`run-tested` | `smoke-tested` | `init-only` | `structural`);
 receipts (dates, machines, gate values) live ONLY here — never in the mode
-table below or in the README (the README block is generated by
+table above or in the README (the README block is generated by
 `scripts/render_readme_status.py`). This table is cross-referenced against
 `templates/` by CI: every template file must have exactly one row, and
 vice versa.
@@ -36,14 +91,14 @@ vice versa.
 | `2d/` | `barotropic_wave` | run-tested | 2026-10-10, Mac CPU via matrix delegation: latlon 48x72, 0.2 d, upstream gates PASS — eta_cons 0.814, min_final_amp 0.171 m, energy_ratio 0.294 |
 | `2d/` | `stommel_gyre_tracer` | structural | — |
 | `2d/` | `inertia_gravity_wave` | structural | — (known upstream gate defect; excluded from onboarding) |
-| `3d_idealized/` | `baroclinic_gyre` | run-tested | 2026-10-10, Mac CPU via matrix delegation: latlon_regional 64x128, 1 d, upstream drift gates 2/2 PASS incl. `baroclinic_gyre_cos`; also bigfoot V100 (native OAR smoke, ledger `bigfoot_2026-10-10_oar-native-smoke`, OAR 208301) |
+| `3d_idealized/` | `baroclinic_gyre` | run-tested | 2026-10-10, Mac CPU via matrix delegation: latlon_regional 64x128, 1 d, upstream drift gates 2/2 PASS incl. `baroclinic_gyre_cos`; also bigfoot V100 OAR-native smoke (ledger `bigfoot_2026-10-10_oar-native-smoke`) |
 | `3d_idealized/` | `lock_exchange` | run-tested | 2026-10-10, Mac CPU via matrix delegation: latlon 64x64, 0.5 d, RPE 2.9e-9 PASS |
 | `3d_idealized/` | `overflow` | run-tested | 2026-10-10, Mac CPU via matrix delegation: latlon 64x64, 0.5 d, PE drift 2.2e-8 PASS |
-| `3d_idealized/` | `eady_instability` | run-tested | 2026-10-10, Mac CPU via matrix delegation: latlon_channel 24x72, 5 d, upstream gates PASS, T_drift 3.20e-14; same-day surgery: `case: eady_uniform`→`eady_instability`, res 64x128→24x72, dt 1800→300, duration 84→60 — aligned to the upstream lane design |
+| `3d_idealized/` | `eady_instability` | run-tested | 2026-10-10, Mac CPU via matrix delegation: latlon_channel 24x72, 5 d, upstream gates PASS, T_drift 3.20e-14; template aligned same day to the upstream lane design (case `eady_uniform`→`eady_instability`, 64x128→24x72, dt 1800→300, duration 84→60 d) |
 | `3d_idealized/` | `phillips_two_layer` | run-tested | 2026-10-10, Mac CPU via matrix delegation: latlon 64x128, 1 d, upstream gates PASS, T drift 2.88e-07; dt 3600→300 |
-| `3d_idealized/` | `rest_state_stratified_no_land` | run-tested | 2026-10-10, Mac CPU via matrix delegation: latlon 36x72, 0.1 d, upstream gates PASS — eta drift 0.00, T drift 5.09e-16, S drift 1.42e-15; new template, wave-1 |
+| `3d_idealized/` | `rest_state_stratified_no_land` | run-tested | 2026-10-10, Mac CPU via matrix delegation: latlon 36x72, 0.1 d, upstream gates PASS — eta drift 0.00, T drift 5.09e-16, S drift 1.42e-15; new template |
 | `3d_idealized/` | `acc_channel` | run-tested | 2026-10-10, Mac CPU via matrix delegation: latlon_channel 64x128, 0.5 d, PASS |
-| `3d_idealized/` | `dino` | run-tested | 2026-10-10, `dino_e2e` Mac CPU: 198×50 R1, 8 steps, 154 SYPD; delegation via `run_dino.py`; template rewritten to paper-faithful R1 defaults; multi-GPU lanes upstream since PR #1926 |
+| `3d_idealized/` | `dino` | run-tested | 2026-10-10, Mac CPU end-to-end test: 198×50 R1, 8 steps, 154 SYPD; delegation via `run_dino.py`; template rewritten to paper-faithful R1 defaults; multi-GPU/restart/seed/timing upstream since PR #1926 |
 | `3d_idealized/` | `geostrophic_adjustment` | run-tested | 2026-10-10, Mac CPU via matrix delegation: latlon 64x64, 1 d, upstream gates PASS, T drift 1.81e-14; template already at lane dt 300 |
 | `3d_idealized/` | `isomip_plus` | structural | — |
 | `coupled/` | `coupled_aquaplanet` | structural | — |
@@ -51,12 +106,12 @@ vice versa.
 | `coupled/` | `coupled_full` | structural | — |
 | `global_ocean/` | `omip_jra55` | structural | — |
 | `global_ocean/` | `global_overturning` | run-tested | 2026-10-10, Mac CPU via matrix delegation: latlon 64x128, 10 d, upstream gates PASS, eta_drift 4.89e-17; dt 3600→300 |
-| `global_ocean/` | `neverworld2_lite` | run-tested | 2026-10-10, bigfoot V100 via matrix delegation + native OAR `oarsub -S ./run.sh`, OAR 208304: latlon 180x360, 50 lev, dt 300, 5 d, upstream gates 1/1 PASS — \|u\|max=0.643 m/s, "eddy-permitting"; ledger run `bigfoot_2026-10-10_nw2-wave1`, runner_tag `...20261010m`; template aligned to lane design 180x360 / dt 300 / 365 d |
+| `global_ocean/` | `neverworld2_lite` | run-tested | 2026-10-10, bigfoot V100 via matrix delegation, native OAR submission (`oarsub -S ./run.sh`): latlon 180x360, 50 lev, dt 300, 5 d, upstream gates 1/1 PASS — \|u\|max=0.643 m/s, "eddy-permitting"; ledger run `bigfoot_2026-10-10_nw2-wave1`; template aligned to lane design 180x360 / dt 300 / 365 d |
 | `global_ocean/` | `omip_global` | structural | — |
 | `global_ocean/` | `omip_cubed_sphere` | structural | — |
-| `global_ocean/` | `omip_tripole` | smoke-tested | 5-day run at pin `69287951` (2026-06, synthetic forcing); delegation remapped for pin `c986cb989` — re-run pending |
-| `global_ocean/` | `omip_faithful_card` | structural | — |
-| `global_ocean/` | `omip_core2_thin` | smoke-tested | legoESM job `8089905` (2026-08-18, RTX 8000): pure-defaults `run_omip_core2.py --years 4 --dt 600`, ~9.5 SYPD. Mac CPU 0.5-day startup smoke at pin `c986cb989` (2026-10-09, synthetic forcing fallback): grid (332,362), 72 steps finite at 1.90 steps/s. Real `_MOD` forcing resolves on machines with the staged cache (jean-zay). `initial_conditions.type: rest` = no IC flags (documented lane) |
+| `global_ocean/` | `omip_tripole` | smoke-tested | 2026-10-07 `macbook_2026-10-07_tripole-repin-5day`: 720 steps, no NaN, 2.85 s/step (M-series CPU, synthetic forcing; delegation verified at pin `c986cb989`). 2026-10-08 `bigfoot_2026-10-08_tripole-gpu-smoke` (V100): exit 0, 1.17 steps/s ≈ 3.3× CPU, diagnostics identical to the CPU run at print precision |
+| `global_ocean/` | `omip_faithful_card` | structural | Init works anywhere; execution requires staged data on the target machine (eORCA1 mesh mask, WOCE ICs, CORE2 forcing — see the NEMO-faithful card section); card flags pass through via `run.extra_args`. No end-to-end run recorded yet |
+| `global_ocean/` | `omip_core2_thin` | smoke-tested | Upstream receipt 2026-08-18 (one RTX 8000): pure-defaults `run_omip_core2.py --years 4 --dt 600`, ~9.5 SYPD (replication campaign documented in ledger `jeanzay_2026-10-09_orca1-thin-year4`). Mac CPU 0.5-day startup smoke 2026-10-09 at pin `c986cb989` (synthetic forcing fallback): grid (332,362), 72 steps finite, 1.90 steps/s. Real `_MOD` forcing resolves on machines with the staged cache (jean-zay). `initial_conditions.type: rest` = no IC flags (documented lane) |
 
 ## Definitions
 
@@ -72,17 +127,6 @@ The `Status` column of the table above uses a controlled vocabulary
 `run-tested` imply it transitively — that is why the separate
 "Init tested" column is gone.)
 
-## Current 3D / coupled workflow
-
-For `3d_ocean`, the runner has two delegation lanes:
-
-- **`dino`** (lat-lon): `_run_dino` in `runners/run_experiment.py` delegates to `scripts/run/run_dino.py`. The upstream script is the standalone DINO production driver — it builds the paper-faithful R1 `DINOConfig` itself (Kamm et al. 2025 defaults: KPP + Visbeck GM/Redi + EVD convection, Wright EOS, zstar 36 lev, dt 2700), so the runner forwards only legitimate overrides (resolution `grid.n_lon`, duration, snapshot cadence, scheme flags, recipe cards via `run.extra_args`) plus the patch-006 lanes: `run.n_devices` (lat-band SPMD; `n_lat % N == 0` — the R1 grid's 198 rows divide by 1 and 2 only), `run.restart_from` (snapshot NPZ; clock restarts at 0), `run.seed` (ensemble IC; 0 = canonical), `run.timing_jsonl`. Restart is verified bit-exact on CPU; SPMD parity within the re-association floor. Patch 006 is scheduled for removal once upstream PR climate-federation/legoESM#1926 merges and the pin is bumped.
-- **Tier-A idealized cases** (`baroclinic_gyre`, `lock_exchange`, `overflow`, `acc_channel`, `geostrophic_adjustment`, `phillips_two_layer`, `global_overturning`, `neverworld2_lite`, `eady_instability`, `rest_state_stratified_no_land`; 3d_ocean, plus `barotropic_wave` and `barotropic_double_gyre` under barotropic_ocean; lat-lon grids): `_run_matrix_case` delegates to `scripts/matrix/run_ocean_test_matrix.py --only <case> --grid <grid>` (the dispatch accepts both `3d_ocean` and `barotropic_ocean` modes). The upstream matrix runner owns the scientifically-validated configuration (grid geometry, ICs, physics, stability-verified dt/duration pairs — see legoESM `docs/dev-notes/ocean_experiments_reference.md`); the runner forwards only duration/dt/levels/resolution overrides. Template physics fields are the documented intent; the upstream baseline is what runs. NB: upstream `--only` is a substring match — `baroclinic_gyre` also runs the `baroclinic_gyre_cos` variant and `barotropic_double_gyre` also runs `_sin2` (extra runtime, both gated). `eady_instability` dispatches lat-lon templates onto the upstream `latlon_channel` lane (both eady lanes are channel-only; upstream excludes `mpas_channel` for eady_instability — it blows up). `neverworld2_lite` uses the upstream 180x360 lane resolution (not the 36x72 matrix default).
-
-For `3d_ocean_realistic` on tripolar grids, the runner delegates to `scripts/run/run_omip_core2.py` (upstream in legoESM, extended by patch `002-omip-core2-extensions.patch`). The upstream script provides `build_tripole()` for eORCA1 mesh mask reading, `load_core2_nyf()` for CORE-II Normal Year Forcing, `--scan-block` for `lax.scan` stepping, `--convection enhanced_diffusion`, and `--partial-cell` for partial bottom cells. Patch 002 (regenerated against the rewritten upstream script at pin `c986cb989`) adds: `--synthetic-forcing` (explicit opt-in smoke tests without real Zarr data), `--forcing-scale` (amplitude multiplier), `--days` (short experiments). Since the upstream CLI changed at this pin, the delegation maps WOCE ICs to `--nemo-monthly-init <temp> <salt>` and SSS restoring to `--sss-restore --sss-restore-file <clim> --sss-restore-tau-days <tau>`.
-
-For all other 3D/coupled modes, experiments are executed by calling legoESM's own Python scripts directly (e.g., `legoESM/scripts/run/run_omip.py`). The runners still handle init and provenance tagging for these modes — the generated `config.yaml` and `experiment.tag` are valid even though `run_experiment run` does not execute a simulation.
-
 ## The NEMO-faithful card (template `global_ocean/omip_faithful_card`)
 
 Added 2026-10-08. The template encodes the *standard NEMO-faithful 1° card* declared in legoESM `scripts/cluster/omip_nemo/run_standard_faithful_1deg.sbatch` (validated `nemolev_trp_long180` configuration, see legoESM `docs/dev-notes/OMIP_faithful.md`): TKE (NEMO Dirichlet surface BC, `nn_mxl=3`, prognostic, veros_sqrte κ convention), prognostic sea ice (free-drift, `--ice-init` SI3 NC), MLE, iwm, dm2dc, ISF 'spe' melt + Dai-Trenberth runoff (`--runoff-depth-nemo-ini`, river-mouth gate), SSS restoring (τ=45.5 d, ±4 mm/d cap, NEMO ice gate), RGB-chl SW, geothermal, bbl-adv, smc03 PGF, smag sched, momentum-RK3.
@@ -91,7 +135,7 @@ Delegation additions at this pin:
 - **Verbatim passthrough**: `run.extra_args` (list) from the template is appended after all mapped args with only the `{data_root}` token substituted — machine-portable, recorded verbatim in `config.yaml` + `experiment.tag`.
 - **`time.duration_overshoot_days`** (default 0.0): adds the standard card's +0.05 d overshoot to `--years`/`--days` (the driver skips the cadence snapshot at the exact final step, so the advertised day-N snapshot only lands as a normal cadence write).
 - **`output.snapshot_every_days` / `output.diag_every_days`** mapped to the upstream cadence flags.
-- **Patch `004-runoff-file-override.patch`** adds upstream `--runoff-file` (fixes the `_RUNOFF_NC` /burg hardcode; the `--isf`/`--runoff` double-count check follows the effective source). Remaining card path needs are satisfied by explicit flags: `--nemo-vertical-file`/`--nemo-domain-cfg` (domain_cfg.nc), `--chl-file` (RGB chl; card default `_CHL_NC` — override staged), `--siconc-file` (RUN_REF icemod, staged), `--iwm-forcing-file`, `--isf-forcing-file`, `--ice-init`, `--woa-t/--woa-s`, `--runoff-file`.
+- **Patch `004-runoff-file-override.patch`** adds upstream `--runoff-file` (fixes the `_RUNOFF_NC` hardcode; the `--isf`/`--runoff` double-count check follows the effective source). Remaining card path needs are satisfied by explicit flags: `--nemo-vertical-file`/`--nemo-domain-cfg` (domain_cfg.nc), `--chl-file` (RGB chl; card default `_CHL_NC` — override staged), `--siconc-file` (RUN_REF icemod, staged), `--iwm-forcing-file`, `--isf-forcing-file`, `--ice-init`, `--woa-t/--woa-s`, `--runoff-file`.
 
 Data staging note (card): the corrected CORE-II `_MOD` zarr is NOT under `data_root` — it resolves via `core2_nyf_cache_dir()` = `$LEGOESM_CACHE_DIR` (or `~/.cache/legoesm/ocean_fidelity/`) sibling `core2_nyf_mod/nyf.zarr`; set `LEGOESM_CACHE_DIR` for the data_root staging on the target machine.
 
@@ -123,7 +167,7 @@ overrides:
 `_generate_run_script` in `runners/run_experiment.py` emits scheduler directives based on the `scheduler` field of the machine config (experiments repo `machines/*.yaml`):
 
 - **`slurm`** → `#SBATCH` header (job name, partition, account, nodes, tasks, cpus-per-task, walltime, mem, gres, constraint, qos, output/error). Submit with `sbatch run.sh` (jean-zay path, run-tested since 2026-10-08).
-- **`oar`** (added 2026-10-10, GRICAD/CIMENT clusters: bigfoot, dahu, kraken/OAR v3) → `#OAR` header: `-n <experiment-name>`, `--project` ← `oar_project`, `-l <oar_resources>,walltime=<scheduler_walltime>` (walltime skipped if `oar_resources` already carries one), `-p "<oar_properties>"`, `-t <oar_types...>`, optional `-O`/`-E` from `scheduler_output`/`scheduler_error`. Submit with `oarsub -S ./run.sh` (path form required — a bare `run.sh` fails PATH lookup); `run.sh` is generated executable (`chmod 0o755`, NW2 receipt 208303 — OAR `-S` execs the script directly and a 644 run.sh died with "Permission denied"). Job logs land as `OAR.<name>.<jobid>.stdout/.stderr` in the submission directory, monitor with `oarstat -u`. This replaces the previous manual `oarsub` wrapper around `bin/run-experiment` (scheduler: null). Unit-tested in `tests/test_templates.py::TestRunScriptGeneration`; bigfoot end-to-end verification tracked in issue #4.
+- **`oar`** (added 2026-10-10, GRICAD/CIMENT clusters: bigfoot, dahu, kraken/OAR v3) → `#OAR` header: `-n <experiment-name>`, `--project` ← `oar_project`, `-l <oar_resources>,walltime=<scheduler_walltime>` (walltime skipped if `oar_resources` already carries one), `-p "<oar_properties>"`, `-t <oar_types...>`, optional `-O`/`-E` from `scheduler_output`/`scheduler_error`. Submit with `oarsub -S ./run.sh` (path form required — a bare `run.sh` fails PATH lookup); `run.sh` is generated executable (`chmod 0o755` — OAR `-S` execs the script directly, and a non-executable run.sh fails with "Permission denied"; ledger `bigfoot_2026-10-10_nw2-wave1`). Job logs land as `OAR.<name>.<jobid>.stdout/.stderr` in the submission directory, monitor with `oarstat -u`. This replaces the previous manual `oarsub` wrapper around `bin/run-experiment` (scheduler: null). Unit-tested in `tests/test_templates.py::TestRunScriptGeneration`; bigfoot end-to-end verification tracked in issue #4.
 - **`null`** → no directives; `run.sh` runs directly (`bash run.sh`) or via a hand-written scheduler wrapper.
 
 Directives always precede the first shell command (`set -euo pipefail` comes after the block) — SLURM stops parsing the header at the first command (jean-zay lesson, 2026-10-08).
