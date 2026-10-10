@@ -239,3 +239,4 @@ legoESM_version.txt.override
 # Local overrides
 local_*.yaml
 *.local
+.opencode/

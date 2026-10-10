@@ -107,7 +107,10 @@ def download_file(entry: dict, data_root: Path, verbose: bool = True):
 
     try:
         tmp_path = dest.with_suffix(dest.suffix + ".tmp")
-        urllib.request.urlretrieve(url, tmp_path)
+        # Some hosts (e.g. zenodo) reject the default urllib User-Agent.
+        request = urllib.request.Request(url, headers={"User-Agent": "legoESM-ocean-runners/1.0 (+https://github.com/lesommer/legoESM-ocean-runners)"})
+        with urllib.request.urlopen(request) as response, open(tmp_path, "wb") as out:
+            shutil.copyfileobj(response, out)
         shutil.move(str(tmp_path), str(dest))
         if verbose:
             print(f"  DONE ({format_size(entry.get('size_mb', 0))})")

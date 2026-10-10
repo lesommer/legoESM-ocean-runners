@@ -24,7 +24,7 @@ files:
   etopo1_1deg:
     description: ETOPO1 1-degree global topography/bathymetry (ice surface)
     path: bathymetry/etopo_1deg.nc
-    url: https://www.ncei.noaa.gov/data/oceans/etopo/etopo1/etopo1_ice/etopo1_ice_g_gmt4.grd.nc
+    url: "https://www.ngdc.noaa.gov/mgg/global/relief/ETOPO1/data/ice_surface/cell_registered/netcdf/ETOPO1_Ice_c_gmt4.grd.gz"
     access: public
     sha256: pending
     size_mb: 48
@@ -38,7 +38,7 @@ files:
   etopo1_quarter:
     description: ETOPO1 1/4-degree global topography/bathymetry (ice surface)
     path: bathymetry/etopo_quarter.nc
-    url: https://www.ncei.noaa.gov/data/oceans/etopo/etopo1/etopo1_ice/etopo1_ice_g_gmt4_025.grd.nc
+    url: "https://www.ngdc.noaa.gov/mgg/global/relief/ETOPO1/data/ice_surface/cell_registered/netcdf/ETOPO1_Ice_c_gmt4.grd.gz"
     access: public
     sha256: pending
     size_mb: 750
@@ -74,7 +74,7 @@ files:
   woa18_annual_t:
     description: WOA18 1-degree annual mean temperature
     path: woa18/woa18_decav_t00_01.nc
-    url: https://www.ncei.noaa.gov/data/oceans/woa/WOA18/DATA/temperature/decav/1.00/woa18_decav_t00_01.nc
+    url: "https://www.ncei.noaa.gov/data/oceans/woa/WOA18/DATA/temperature/netcdf/decav/1.00/woa18_decav_t00_01.nc"
     access: public
     sha256: pending
     size_mb: 198
@@ -89,7 +89,7 @@ files:
   woa18_annual_s:
     description: WOA18 1-degree annual mean salinity
     path: woa18/woa18_decav_s00_01.nc
-    url: https://www.ncei.noaa.gov/data/oceans/woa/WOA18/DATA/salinity/decav/1.00/woa18_decav_s00_01.nc
+    url: "https://www.ncei.noaa.gov/data/oceans/woa/WOA18/DATA/salinity/netcdf/decav/1.00/woa18_decav_s00_01.nc"
     access: public
     sha256: pending
     size_mb: 195
@@ -104,7 +104,7 @@ files:
   woa18_monthly_t:
     description: WOA18 1-degree monthly temperature (12 months)
     path: woa18/woa18_decav_t01_13.nc
-    url: https://www.ncei.noaa.gov/data/oceans/woa/WOA18/DATA/temperature/decav/1.00/woa18_decav_t01_13.nc
+    url: "https://www.ncei.noaa.gov/data/oceans/woa/WOA18/DATA/temperature/netcdf/decav/1.00/woa18_decav_t01_01.nc"
     access: public
     sha256: pending
     size_mb: 2400
@@ -120,7 +120,7 @@ files:
   woa18_monthly_s:
     description: WOA18 1-degree monthly salinity (12 months)
     path: woa18/woa18_decav_s01_13.nc
-    url: https://www.ncei.noaa.gov/data/oceans/woa/WOA18/DATA/salinity/decav/1.00/woa18_decav_s01_13.nc
+    url: "https://www.ncei.noaa.gov/data/oceans/woa/WOA18/DATA/salinity/netcdf/decav/1.00/woa18_decav_s01_01.nc"
     access: public
     sha256: pending
     size_mb: 2300
@@ -296,12 +296,12 @@ files:
     note: Downloaded automatically by legoESM if not present; also downloadable via scripts/download_grids.sh
     license: open (NEMO consortium grid; CC-BY style)
   eorca025_mesh:
-    description: eORCA025 tripolar mesh mask (1/4° resolution)
+    description: eORCA025 tripolar mesh mask (1/4° resolution; GO6 grid, GEBCO2021-derived bathymetry record)
     path: grids/eORCA025_mesh_mask.nc
-    url: https://zenodo.org/records/4436658/files/eORCA025_mesh_mask.nc
+    url: https://zenodo.org/records/15494369/files/grid_mask_eORCA025-GO6.nc
     access: public
     sha256: pending
-    size_mb: 7200
+    size_mb: 25
     format: NetCDF4
     variables:
     - glamt
@@ -504,7 +504,7 @@ files:
   rrtmgp_gas_lw:
     description: RRTMGP longwave gas optics coefficients
     path: rrtmgp/rrtmgp-gas-lw-g128.nc
-    url: https://github.com/earth-system-radiation/rrtmgp-data/releases/download/v1.7.1/rrtmgp-gas-lw-g128.nc
+    url: "https://raw.githubusercontent.com/earth-system-radiation/rrtmgp-data/master/rrtmgp-gas-lw-g128.nc"
     access: public
     sha256: pending
     size_mb: 150
@@ -514,7 +514,7 @@ files:
   rrtmgp_gas_sw:
     description: RRTMGP shortwave gas optics coefficients
     path: rrtmgp/rrtmgp-gas-sw-g112.nc
-    url: https://github.com/earth-system-radiation/rrtmgp-data/releases/download/v1.7.1/rrtmgp-gas-sw-g112.nc
+    url: "https://raw.githubusercontent.com/earth-system-radiation/rrtmgp-data/master/rrtmgp-gas-sw-g112.nc"
     access: public
     sha256: pending
     size_mb: 120
@@ -524,7 +524,7 @@ files:
   rrtmgp_cloud_lw:
     description: RRTMGP longwave cloud optics coefficients
     path: rrtmgp/rrtmgp-cloud-lw.nc
-    url: https://github.com/earth-system-radiation/rrtmgp-data/releases/download/v1.7.1/rrtmgp-cloud-lw.nc
+    url: "https://raw.githubusercontent.com/earth-system-radiation/rrtmgp-data/master/rrtmgp-clouds-lw-g128.nc"
     access: public
     sha256: pending
     size_mb: 70
@@ -534,7 +534,7 @@ files:
   rrtmgp_cloud_sw:
     description: RRTMGP shortwave cloud optics coefficients
     path: rrtmgp/rrtmgp-cloud-sw.nc
-    url: https://github.com/earth-system-radiation/rrtmgp-data/releases/download/v1.7.1/rrtmgp-cloud-sw.nc
+    url: "https://raw.githubusercontent.com/earth-system-radiation/rrtmgp-data/master/rrtmgp-clouds-sw-g112.nc"
     access: public
     sha256: pending
     size_mb: 50
@@ -544,7 +544,7 @@ files:
   cmip6_ghg:
     description: CMIP6 historical + SSP greenhouse gas concentrations (CO2, CH4, N2O)
     path: forcing/cmip6_ghg.nc
-    url: https://github.com/gentine/legoESM/raw/main/data/cmip6_ghg.nc
+    url: "https://raw.githubusercontent.com/climate-federation/legoESM/main/data/forcing_amip/ghg_amip_1979-1980.nc"
     access: public
     sha256: pending
     size_mb: 5
@@ -560,7 +560,7 @@ files:
   cmip6_ozone:
     description: CMIP6 ozone forcing (monthly zonal mean)
     path: forcing/cmip6_ozone.nc
-    url: https://github.com/gentine/legoESM/raw/main/data/cmip6_ozone.nc
+    url: "https://raw.githubusercontent.com/climate-federation/legoESM/main/data/forcing_amip/ozone_amip_clim.nc"
     access: public
     sha256: pending
     size_mb: 20
@@ -585,7 +585,7 @@ files:
   cmip6_solar:
     description: CMIP6 solar irradiance forcing (daily spectral)
     path: forcing/cmip6_solar.nc
-    url: https://github.com/gentine/legoESM/raw/main/data/cmip6_solar.nc
+    url: "https://raw.githubusercontent.com/climate-federation/legoESM/main/data/forcing_amip/solar_amip_1979-1980.nc"
     access: public
     sha256: pending
     size_mb: 1
@@ -596,7 +596,7 @@ files:
   etopo_topo_1deg:
     description: ETOPO1 1-degree topography for atmosphere surface elevation
     path: topography/etopo_topo_1deg.nc
-    url: https://www.ncei.noaa.gov/data/oceans/etopo/etopo1/etopo1_ice/etopo1_ice_g_gmt4.grd.nc
+    url: "https://www.ngdc.noaa.gov/mgg/global/relief/ETOPO1/data/ice_surface/cell_registered/netcdf/ETOPO1_Ice_c_gmt4.grd.gz"
     access: public
     sha256: pending
     size_mb: 48

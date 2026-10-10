@@ -146,11 +146,15 @@ cd my_dino && bash run.sh
 # 1. Check data availability (idealized experiments need no data)
 python scripts/fetch_data.py check 3d_idealized/baroclinic_gyre
 
-# 2. Initialize (--output-dir is required)
+# 2. Initialize (--output-dir is required). Tip: for a first quick look,
+#    shorten the run with -o time.duration_days=1 — the template default
+#    is the full validated duration (baroclinic_gyre: 365 d).
 python scripts/init_experiment.py 3d_idealized/baroclinic_gyre \
-    --name my_gyre --output-dir ./my_gyre
+    --name my_gyre --output-dir ./my_gyre \
+    -o time.duration_days=1
 
-# 3. Run (upstream ocean test matrix executes the validated case config)
+# 3. Run (upstream ocean test matrix executes the validated case config;
+#    --only baroclinic_gyre also runs its _cos variant — two cases)
 cd my_gyre && bash run.sh
 ```
 

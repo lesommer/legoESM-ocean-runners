@@ -116,6 +116,23 @@ def apply_patches(patches_str: str, dry_run: bool = False) -> bool:
             print(f"  Would apply patch: {patch_name}")
             continue
 
+        # Idempotency: if the legoESM worktree already carries this patch
+        # (git apply --check fails but --reverse --check succeeds), skip it
+        # instead of erroring — reproducing on a prepared checkout works.
+        legoesm_dir = os.environ.get("LEGOESM_DIR", str(ROOT_DIR.parent / "legoESM"))
+        probe = subprocess.run(
+            ["git", "-C", legoesm_dir, "apply", "--check", str(patch_path)],
+            capture_output=True, text=True,
+        )
+        if probe.returncode != 0:
+            reverse = subprocess.run(
+                ["git", "-C", legoesm_dir, "apply", "--reverse", "--check", str(patch_path)],
+                capture_output=True, text=True,
+            )
+            if reverse.returncode == 0:
+                print(f"  Already applied: {patch_name} (skipping)")
+                continue
+
         cmd = ["bash", str(script), patch_name]
         result = subprocess.run(cmd, cwd=ROOT_DIR, capture_output=True, text=True)
         if result.returncode != 0:
