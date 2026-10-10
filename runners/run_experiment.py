@@ -317,6 +317,10 @@ def init_experiment(
     run_path = exp_dir / "run.sh"
     with open(run_path, "w") as f:
         f.write(run_script)
+    # Executable: scheduler -S submissions (oarsub -S ./run.sh) execute
+    # the script directly and need the exec bit (bigfoot NW2 208303,
+    # 2026-10-10: "Permission denied" on a 644 run.sh).
+    run_path.chmod(0o755)
 
     return exp_dir
 

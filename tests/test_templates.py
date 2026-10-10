@@ -222,6 +222,22 @@ class TestRunScriptGeneration:
         assert "#OAR" not in script
         assert "#SBATCH" not in script
 
+    def test_init_makes_run_sh_executable(self, tmp_path):
+        # Scheduler -S submissions (oarsub -S ./run.sh) execute the script
+        # directly: the exec bit is required (bigfoot NW2 208303).
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from runners.run_experiment import init_experiment
+        exp_dir = init_experiment(
+            "3d_idealized/baroclinic_gyre",
+            experiment_name="exec_bit_smoke",
+            output_dir=tmp_path / "exp",
+        )
+        run_sh = exp_dir / "run.sh"
+        assert run_sh.exists()
+        assert run_sh.stat().st_mode & 0o111, "run.sh must be executable"
+
 
 class TestOceanCaseDispatch:
     """Test the 3d_ocean case-dispatch table (which lane a case takes)."""
