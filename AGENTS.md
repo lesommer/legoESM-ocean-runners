@@ -303,6 +303,10 @@ python scripts/init_experiment.py global_ocean/omip_jra55 --name omip_run \
 cd /scratch/experiments/omip_run && sbatch run.sh
 ```
 
+On OAR clusters (GRICAD/CIMENT: bigfoot, dahu, kraken), set `scheduler: oar` plus
+`oar_project` / `oar_resources` / `oar_properties` in the machine config — the
+generated `run.sh` carries `#OAR` directives and is submitted with `oarsub -S run.sh`.
+
 ### "I need a legoESM feature that isn't in main yet"
 ```bash
 # 1. Work in ../legoESM on a feature branch

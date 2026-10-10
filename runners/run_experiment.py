@@ -453,25 +453,26 @@ def _generate_run_script(config: dict, exp_dir: Path, machine: str | None = None
 
     scheduler = machine_cfg.get("scheduler") if machine_cfg else None
 
-    # NOTE: #SBATCH directives MUST precede the first non-comment line
-    # (slurm stops parsing the directive header at the first command). The
-    # `set -euo pipefail` line therefore comes AFTER the whole SLURM block;
-    # putting it first made jean-zay submissions fall back to defaults
-    # ("Multiple accounts available", unfilled partition/qos, 2026-10-08).
-    slurm_lines: list[str] = []
+    # NOTE: scheduler directives (#SBATCH / #OAR) MUST precede the first
+    # non-comment line (slurm stops parsing the directive header at the first
+    # command). The `set -euo pipefail` line therefore comes AFTER the whole
+    # scheduler block; putting it first made jean-zay submissions fall back
+    # to defaults ("Multiple accounts available", unfilled partition/qos,
+    # 2026-10-08).
+    scheduler_lines: list[str] = []
     if scheduler == "slurm":
-        slurm_lines += ["# ---------- SLURM directives ----------"]
-        slurm_lines.append(f"#SBATCH --job-name={template}")
+        scheduler_lines += ["# ---------- SLURM directives ----------"]
+        scheduler_lines.append(f"#SBATCH --job-name={template}")
         partition = machine_cfg.get("scheduler_partition", "")
         if partition:
-            slurm_lines.append(f"#SBATCH --partition={partition}")
+            scheduler_lines.append(f"#SBATCH --partition={partition}")
         account = machine_cfg.get("scheduler_account", "")
         if account:
-            slurm_lines.append(f"#SBATCH --account={account}")
+            scheduler_lines.append(f"#SBATCH --account={account}")
         nodes = machine_cfg.get("scheduler_nodes", 1)
-        slurm_lines.append(f"#SBATCH --nodes={nodes}")
+        scheduler_lines.append(f"#SBATCH --nodes={nodes}")
         tasks_per_node = machine_cfg.get("scheduler_tasks_per_node", 1)
-        slurm_lines.append(f"#SBATCH --ntasks-per-node={tasks_per_node}")
+        scheduler_lines.append(f"#SBATCH --ntasks-per-node={tasks_per_node}")
         # Memory on clusters that forbid --mem (jean-zay) derives per-CPU:
         # MinMemoryPerCPU x cpus. A GPU card with 1 task and no cpus-per-task
         # claims only ~2-7 GB host bound and gets OOM-killed by any big
@@ -481,32 +482,66 @@ def _generate_run_script(config: dict, exp_dir: Path, machine: str | None = None
         # is the cluster's MinMemoryPerCPU share only.
         cpus_per_task = machine_cfg.get("scheduler_cpus_per_task")
         if cpus_per_task:
-            slurm_lines.append(f"#SBATCH --cpus-per-task={cpus_per_task}")
+            scheduler_lines.append(f"#SBATCH --cpus-per-task={cpus_per_task}")
         walltime = machine_cfg.get("scheduler_walltime", "01:00:00")
-        slurm_lines.append(f"#SBATCH --time={walltime}")
+        scheduler_lines.append(f"#SBATCH --time={walltime}")
         mem = machine_cfg.get("scheduler_mem", "")
         if mem:
-            slurm_lines.append(f"#SBATCH --mem={mem}")
+            scheduler_lines.append(f"#SBATCH --mem={mem}")
         gres = machine_cfg.get("scheduler_gres", "")
         if gres:
-            slurm_lines.append(f"#SBATCH --gres={gres}")
+            scheduler_lines.append(f"#SBATCH --gres={gres}")
         constraint = machine_cfg.get("scheduler_constraint", "")
         if constraint:
-            slurm_lines.append(f"#SBATCH -C {constraint}")
+            scheduler_lines.append(f"#SBATCH -C {constraint}")
         qos = machine_cfg.get("scheduler_qos", "")
         if qos:
-            slurm_lines.append(f"#SBATCH --qos={qos}")
+            scheduler_lines.append(f"#SBATCH --qos={qos}")
         out_pattern = machine_cfg.get("scheduler_output", "")
         if out_pattern:
-            slurm_lines.append(f"#SBATCH --output={out_pattern}")
+            scheduler_lines.append(f"#SBATCH --output={out_pattern}")
         err_pattern = machine_cfg.get("scheduler_error", "")
         if err_pattern:
-            slurm_lines.append(f"#SBATCH --error={err_pattern}")
-        slurm_lines.append("")
+            scheduler_lines.append(f"#SBATCH --error={err_pattern}")
+        scheduler_lines.append("")
+
+    elif scheduler == "oar":
+        # OAR (GRICAD/CIMENT: bigfoot, dahu; kraken runs OAR v3 — same CLI).
+        # `oarsub -S run.sh` parses #OAR directives like sbatch parses
+        # #SBATCH, making the manual wrapper pattern native (ledger
+        # bigfoot_2026-10-08_tripole-gpu-smoke, OAR 207904):
+        #   cd <experiment-dir> && oarsub -S run.sh
+        # Job logs land as OAR.<name>.<jobid>.stdout/.stderr in the
+        # submission directory; monitor with `oarstat -u`.
+        scheduler_lines += ["# ---------- OAR directives ----------"]
+        scheduler_lines.append(f"#OAR -n {template}")
+        project = machine_cfg.get("oar_project", "")
+        if project:
+            scheduler_lines.append(f"#OAR --project {project}")
+        resources = machine_cfg.get("oar_resources", "/nodes=1")
+        walltime = machine_cfg.get("scheduler_walltime", "01:00:00")
+        if "walltime" not in resources:
+            resources = f"{resources},walltime={walltime}"
+        scheduler_lines.append(f"#OAR -l {resources}")
+        properties = machine_cfg.get("oar_properties", "")
+        if properties:
+            scheduler_lines.append(f'#OAR -p "{properties}"')
+        job_types = machine_cfg.get("oar_types", [])
+        if isinstance(job_types, str):
+            job_types = [job_types]
+        for job_type in job_types:
+            scheduler_lines.append(f"#OAR -t {job_type}")
+        out_pattern = machine_cfg.get("scheduler_output", "")
+        if out_pattern:
+            scheduler_lines.append(f"#OAR -O {out_pattern}")
+        err_pattern = machine_cfg.get("scheduler_error", "")
+        if err_pattern:
+            scheduler_lines.append(f"#OAR -E {err_pattern}")
+        scheduler_lines.append("")
 
     lines = [
         "#!/usr/bin/env bash",
-        *slurm_lines,
+        *scheduler_lines,
         "set -euo pipefail",
         "",
         f"# Auto-generated run script for experiment: {template}",

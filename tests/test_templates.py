@@ -147,6 +147,82 @@ class TestRunner:
             load_template("nonexistent/template")
 
 
+class TestRunScriptGeneration:
+    """Test scheduler-directive generation in run.sh (#SBATCH / #OAR)."""
+
+    @staticmethod
+    def _machine_file(tmp_path, cfg):
+        cfg = dict(cfg, data_root=str(tmp_path / "data"))
+        p = tmp_path / "machine.yaml"
+        p.write_text(yaml.dump(cfg))
+        return str(p)
+
+    @staticmethod
+    def _generate(machine):
+        from runners.run_experiment import _generate_run_script
+        config = {"experiment": {"name": "smoke", "mode": "3d_ocean"}}
+        return _generate_run_script(config, Path("expdir"), machine=machine,
+                                    template_name="global_ocean/smoke")
+
+    def test_oar_directives(self, tmp_path):
+        machine = self._machine_file(tmp_path, {
+            "scheduler": "oar",
+            "oar_project": "pr-data-ocean",
+            "oar_resources": "/nodes=1/gpu=1",
+            "oar_properties": "gpumodel = 'V100'",
+            "scheduler_walltime": "02:00:00",
+        })
+        lines = self._generate(machine).splitlines()
+        assert lines[0] == "#!/usr/bin/env bash"
+        assert "#OAR -n smoke" in lines
+        assert "#OAR --project pr-data-ocean" in lines
+        assert "#OAR -l /nodes=1/gpu=1,walltime=02:00:00" in lines
+        assert '#OAR -p "gpumodel = \'V100\'"' in lines
+        assert not any(l.startswith("#SBATCH") for l in lines)
+        assert lines.index("#OAR -l /nodes=1/gpu=1,walltime=02:00:00") < lines.index("set -euo pipefail")
+
+    def test_oar_defaults_and_types(self, tmp_path):
+        machine = self._machine_file(tmp_path, {
+            "scheduler": "oar",
+            "oar_project": "pr-data-ocean",
+            "oar_types": ["devel"],
+            "scheduler_walltime": "00:30:00",
+        })
+        lines = self._generate(machine).splitlines()
+        assert "#OAR -l /nodes=1,walltime=00:30:00" in lines
+        assert "#OAR -t devel" in lines
+        assert not any(l.startswith("#OAR -p") for l in lines)
+
+    def test_oar_walltime_in_resources_not_duplicated(self, tmp_path):
+        machine = self._machine_file(tmp_path, {
+            "scheduler": "oar",
+            "oar_project": "pr-data-ocean",
+            "oar_resources": "/nodes=1,walltime=04:00:00",
+            "scheduler_walltime": "02:00:00",
+        })
+        lines = self._generate(machine).splitlines()
+        assert "#OAR -l /nodes=1,walltime=04:00:00" in lines
+        assert not any("walltime=02:00:00" in l for l in lines)
+
+    def test_slurm_directives(self, tmp_path):
+        machine = self._machine_file(tmp_path, {
+            "scheduler": "slurm",
+            "scheduler_partition": "gpu",
+            "scheduler_account": "test",
+        })
+        lines = self._generate(machine).splitlines()
+        assert "#SBATCH --job-name=smoke" in lines
+        assert "#SBATCH --partition=gpu" in lines
+        assert "#SBATCH --account=test" in lines
+        assert not any(l.startswith("#OAR") for l in lines)
+
+    def test_null_scheduler_no_directives(self, tmp_path):
+        machine = self._machine_file(tmp_path, {"scheduler": None})
+        script = self._generate(machine)
+        assert "#OAR" not in script
+        assert "#SBATCH" not in script
+
+
 class TestOceanCaseDispatch:
     """Test the 3d_ocean case-dispatch table (which lane a case takes)."""
 
