@@ -19,3 +19,18 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+Exception — patches/
+
+The files under patches/ are modifications to legoESM
+(https://github.com/climate-federation/legoESM), which is licensed under the
+PolyForm Noncommercial License 1.0.0. As derivatives of legoESM, the patches
+follow the legoESM license terms (noncommercial use only), NOT the MIT
+license above. Applying a patch to legoESM, or running a legoESM checkout with
+patches applied, subjects that work to the PolyForm Noncommercial 1.0.0
+license of legoESM.
+
+Everything else in this repository (templates, runners, scripts,
+documentation) is MIT-licensed as stated above.

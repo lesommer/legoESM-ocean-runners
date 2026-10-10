@@ -215,6 +215,20 @@ category summary above is generated from it by
 `python scripts/render_readme_status.py`. Browsable template YAMLs live
 under [`templates/`](templates/).
 
+## License
+
+This repository is MIT-licensed (see [LICENSE](LICENSE)), **except** the
+files under `patches/`: they are modifications to
+[legoESM](https://github.com/climate-federation/legoESM), which is licensed
+under **PolyForm Noncommercial 1.0.0**. As derivatives of legoESM, the
+patches follow legoESM's terms — if you apply them to a legoESM checkout
+(or run an experiment whose `experiment.tag` lists patches), that combined
+work is subject to the PolyForm Noncommercial license. The rest of this
+repo (templates, runners, scripts, docs) is MIT.
+
+External data files referenced by `data_catalog.yaml` keep their own
+upstream licenses and citations (recorded per-entry in the catalog).
+
 ## CLI tools
 
 | Command | Description |
