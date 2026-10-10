@@ -1,6 +1,6 @@
 # legoESM-ocean-runners
 
-Experiment templates, runners, and reproducibility tools for ocean simulations with [legoESM](https://github.com/gentine/legoESM).
+Experiment templates, runners, and reproducibility tools for ocean simulations with [legoESM](https://github.com/climate-federation/legoESM).
 
 ## Why this repo exists
 
@@ -87,13 +87,34 @@ to record what you ran, where, and what came of it.
 ### Current capability status
 
 Init and provenance tagging work for all modes. The run path is implemented
-for `ocean_scm` (native; five templates run-tested) and for
-`3d_ocean_realistic` on tripole grids (delegation to the upstream OMIP
-script with patches 002/003). 2D, 3D-idealized and coupled templates are
+for:
+
+- `ocean_scm` (native; five templates run-tested)
+- `3d_ocean` for **DINO** (delegation to legoESM's `run_dino.py`, extended
+  by patch 006 with multi-GPU SPMD, restart, ensemble seed and timing —
+  upstream PR leap-stc/legoESM#1926) and the **Tier-A idealized cases**
+  `baroclinic_gyre`, `lock_exchange`, `overflow`, `acc_channel` (delegation
+  to the upstream ocean test matrix; all upstream validation gates PASS)
+- `3d_ocean_realistic` on tripole grids (delegation to the upstream OMIP
+  script with patches 002/003)
+
+2D, remaining 3D-idealized, non-tripolar global and coupled templates are
 init-only. See [project_status.md](project_status.md) before assuming a
 template can be executed through the runners.
 
 ## Run an experiment
+
+### DINO (idealized, no data needed)
+
+```bash
+# 1. Initialize (paper-faithful R1 by default; see docs/dino.md for the
+#    resolution ladder, multi-GPU, restart and ensemble lanes)
+python scripts/init_experiment.py 3d_idealized/dino \
+    --name my_dino --output-dir ./my_dino
+
+# 2. Run
+cd my_dino && bash run.sh
+```
 
 ### Idealized (no data needed)
 
@@ -105,7 +126,7 @@ python scripts/fetch_data.py check 3d_idealized/baroclinic_gyre
 python scripts/init_experiment.py 3d_idealized/baroclinic_gyre \
     --name my_gyre --output-dir ./my_gyre
 
-# 3. Run
+# 3. Run (upstream ocean test matrix executes the validated case config)
 cd my_gyre && bash run.sh
 ```
 
@@ -169,9 +190,11 @@ This checks out the runner tag → checks out the legoESM commit → applies pat
 | Category | Templates | Run status |
 |----------|-----------|------------|
 | `1d/` | `ocean_scm_convective`, `ocean_scm_ekman`, `ocean_scm_surface_heating`, `ocean_scm_kpp_wind`, `ocean_scm` | **Run-tested** |
+| `3d_idealized/` | `dino` | **Run-tested** (R1 198×50; restart bit-exact, SPMD parity verified; multi-GPU/restart/seed/timing via patch 006 — see [docs/dino.md](docs/dino.md)) |
+| `3d_idealized/` | `baroclinic_gyre`, `lock_exchange`, `overflow`, `acc_channel` | **Run-tested** (matrix delegation; upstream gates PASS) |
 | `global_ocean/` | `omip_tripole` | **5-day run completed** (CPU, rest ICs, synthetic forcing; patches 002 + 003: eORCA1 tripolar OMIP with CORE-II forcing, `--synthetic-forcing` for smoke tests, `--days` for short runs, `--forcing-scale` for sensitivity; MPI support via `mpi.enabled: true`) |
 | `global_ocean/` | `omip_jra55`, `omip_global`, `omip_cubed_sphere`, `global_overturning`, `neverworld2_lite` | Init-only |
-| `2d/`, `3d_idealized/`, `coupled/` | See `templates/` | Init-only or structurally validated |
+| `2d/`, remaining `3d_idealized/`, `coupled/` | See `templates/` | Init-only or structurally validated |
 
 See [project_status.md](project_status.md) for the full status of every template.
 

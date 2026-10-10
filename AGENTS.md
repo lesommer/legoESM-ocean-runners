@@ -4,7 +4,7 @@ This document explains the purpose, philosophy, boundaries, and working conventi
 
 ## 1. Purpose
 
-This repository stores **experiment templates, runners, and reproducibility tools** for running ocean (and coupled) simulations with [legoESM](https://github.com/gentine/legoESM). It is not the model itself — legoESM lives in a separate repository and is referenced by a pinned commit in `legoESM_version.txt`.
+This repository stores **experiment templates, runners, and reproducibility tools** for running ocean (and coupled) simulations with [legoESM](https://github.com/climate-federation/legoESM). It is not the model itself — legoESM lives in a separate repository and is referenced by a pinned commit in `legoESM_version.txt`.
 
 **Reproducibility is the core guiding principle.** Every experiment must be reconstructable from its provenance records. The full chain `template + overrides → config.yaml → experiment.tag → reproduce.py` must be unbroken. If an experiment cannot be reproduced from what is committed, the system has failed.
 
@@ -255,20 +255,20 @@ These tag files are intended to be archived alongside experiment output in a sep
 | Tests | `tests/test_templates.py` |
 | CI workflow | `.github/workflows/ci.yml` |
 
-## 8.5 CI Setup (Private legoESM Access)
+## 8.5 CI Setup
 
-CI is split into two tiers:
+legoESM is a **public** repository (`climate-federation/legoESM`), so CI
+needs no authentication:
 
-- **Tier 1** (always runs): YAML structure validation, catalog checks, requires references — no legoESM access needed
-- **Tier 2** (requires PAT): Full validation against legoESM, smoke test — only runs when the `LEGOESM_ACCESS_TOKEN` secret is set
+- **Tier 1** (always runs): YAML structure validation, catalog checks, requires references, reproducibility-tag enforcement
+- **Tier 2** (always runs): Full validation against the pinned public legoESM commit + smoke test
+- **sync-check** (weekly schedule): compares the pin against legoESM main and warns when upstream moved
 
-Since legoESM is a private repository, you must set up a **fine-grained Personal Access Token** for Tier 2:
-
-1. GitHub → Settings → Developer settings → Fine-grained tokens → New token
-2. Give it **Contents: Read** permission on `gentine/legoESM`
-3. Add the token as repository secret `LEGOESM_ACCESS_TOKEN` in `lesommer/legoESM-ocean-runners` → Settings → Secrets → Actions
-
-If the secret is missing, Tier 2 is skipped. The scheduled `sync-check` job also needs the token to query the legoESM remote.
+No `LEGOESM_ACCESS_TOKEN` secret is needed (the private-repo PAT gating was
+removed when legoESM went public). If legoESM ever moves again, update the
+`repository:` in the Tier-2 checkout action and the `git ls-remote` URL in
+`sync-check` (GitHub redirects renamed orgs, but CI should point at the
+canonical location).
 
 ## 9. Common Workflows
 

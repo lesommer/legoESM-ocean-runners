@@ -8,7 +8,7 @@
 # Maps to: legoesm.ocean.experiments.dino (DINOConfig, paper R1 defaults)
 # Run path: delegates to legoESM scripts/run/run_dino.py
 #           (extended by patch 006: --n-devices / --restart-from / --seed /
-#           --timing-jsonl, pending upstream PR leap-stc/legoESM#1926)
+#           --timing-jsonl, pending upstream PR climate-federation/legoESM#1926)
 # Grid:    latlon (Mercator; n_lon=50 -> 198 rows = paper 1deg R1)
 # Mode:    3d_ocean
 #
