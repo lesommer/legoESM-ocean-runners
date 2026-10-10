@@ -305,7 +305,7 @@ cd /scratch/experiments/omip_run && sbatch run.sh
 
 On OAR clusters (GRICAD/CIMENT: bigfoot, dahu, kraken), set `scheduler: oar` plus
 `oar_project` / `oar_resources` / `oar_properties` in the machine config — the
-generated `run.sh` carries `#OAR` directives and is submitted with `oarsub -S run.sh`.
+generated `run.sh` carries `#OAR` directives and is submitted with `oarsub -S ./run.sh` (path form required — a bare `run.sh` fails PATH lookup).
 
 ### "I need a legoESM feature that isn't in main yet"
 ```bash
