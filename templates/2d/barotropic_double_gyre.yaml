@@ -1,0 +1,65 @@
+# Barotropic double gyre (2D)
+# Wind-driven double gyre (Holland & Lin 1975), cosine wind stress.
+#
+# Maps to: legoesm.ocean.experiments.barotropic_double_gyre (upstream
+# matrix lane; the _sin2 wind-profile variant runs alongside via the
+# upstream substring match, like baroclinic_gyre_cos)
+# Grid:    latlon (dispatches to the upstream latlon_regional lane)
+# Mode:    barotropic_ocean
+#
+# Lane design (upstream matrix): latlon_regional 24x48, 30 d at dt 300
+# (quick 2 d). NB: --only barotropic_double_gyre also runs the _sin2
+# variant (extra runtime, both gated).
+
+experiment:
+  name: barotropic_double_gyre
+  mode: barotropic_ocean
+  description: "Wind-driven barotropic double gyre (cosine wind)"
+
+requires: []
+
+grid:
+  type: latlon
+  # Upstream matrix-lane design resolution (latlon_regional arm).
+  resolution: 24x48
+  nlev: 10
+
+ocean:
+  case: barotropic_double_gyre
+  A_h: 5.0e4
+  bottom_drag_r: 1.1e-3
+  eos: linear
+  eos_linear:
+    rho_ref: 1025.0
+    alpha_T: 0.0
+    beta_S: 0.0
+
+domain:
+  lon_west: 0.0
+  lon_east: 60.0
+  lat_south: 15.0
+  lat_north: 75.0
+  H_max: 4500.0
+
+physics:
+  vertical_mixing:
+    scheme: constant
+  surface_forcing:
+    scheme: prescribed
+    tau_x: 0.1
+    wind_profile: "double_gyre"
+  bottom_drag:
+    scheme: linear
+    r: 1.1e-3
+
+time:
+  # Lane-design pair: 30 d at dt 300 (upstream quick gate = 2 d).
+  # dt = upstream matrix-lane DEFAULT_DT (stability-verified). Larger dt
+  # values forwarded via --dt override the lane design and risk blowup
+  # (same latent-bug class as baroclinic_gyre, 2026-10-10).
+  duration_days: 30
+  dt_seconds: 300
+
+output:
+  diag_interval_hours: 24
+  checkpoint_interval_days: 5

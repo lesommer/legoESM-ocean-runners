@@ -699,6 +699,9 @@ def _run_ocean(config: dict, legoesm_path: Path, config_path: Path | None = None
 
     # 3D idealized case dispatch: case -> handler. Cases without a handler
     # fall through to the structural stub (init/provenance only).
+    # barotropic_ocean matrix lanes (2d/) route through the same upstream
+    # runner — the ocean test matrix executes them with the same 3D model
+    # machinery.
     case = config.get("ocean", {}).get("case")
     if mode == "3d_ocean" and case == "dino" and grid_type == "latlon":
         _run_dino(config, legoesm_path, config_path)
@@ -716,8 +719,12 @@ def _run_ocean(config: dict, legoesm_path: Path, config_path: Path | None = None
         "global_overturning": {"latlon": "latlon"},
         "neverworld2_lite": {"latlon": "latlon"},
         "eady_instability": {"latlon": "latlon_channel"},
+        "rest_state_stratified_no_land": {"latlon": "latlon"},
+        "barotropic_wave": {"latlon": "latlon"},
+        "barotropic_double_gyre": {"latlon": "latlon_regional"},
     }
-    if (mode == "3d_ocean" and case in _MATRIX_CASES
+    if (mode in ("3d_ocean", "barotropic_ocean")
+            and case in _MATRIX_CASES
             and grid_type in _MATRIX_CASES[case]):
         _run_matrix_case(config, legoesm_path, config_path,
                          _MATRIX_CASES[case][grid_type])

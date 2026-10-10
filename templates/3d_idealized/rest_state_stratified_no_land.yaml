@@ -1,0 +1,57 @@
+# Rest state, stratified, no land (3D)
+# Stratified T/S rest state on a land-free global grid: the cleanest
+# conservation gate in the ocean test matrix (no land mask, no forcing).
+#
+# Maps to: legoesm.ocean.experiments.rest_state_stratified_no_land
+# (upstream matrix lane; the with_land / uniform variants are run
+# directly via the upstream matrix runner)
+# Grid:    latlon
+# Mode:    3d_ocean
+#
+# Lane design (upstream matrix): latlon 36x72, 1 d at dt 300 (quick 0.1 d).
+
+experiment:
+  name: rest_state_stratified_no_land
+  mode: 3d_ocean
+  description: "Stratified rest state without land (conservation gate)"
+
+requires: []
+
+grid:
+  type: latlon
+  # Upstream matrix-lane design resolution (rest-state latlon arm).
+  resolution: 36x72
+  nlev: 10
+
+ocean:
+  case: rest_state_stratified_no_land
+  A_h: 1.0e2
+  K_h: 1.0e2
+  eos: linear
+  eos_linear:
+    rho_ref: 1025.0
+    alpha_T: 2.0e-4
+    T_reference: 10.0
+
+domain:
+  H_max: 4000.0
+
+physics:
+  vertical_mixing:
+    scheme: constant
+  surface_forcing:
+    scheme: none
+  bottom_drag:
+    scheme: none
+
+time:
+  # Lane-design pair: 1 d at dt 300 (upstream quick gate = 0.1 d).
+  # dt = upstream matrix-lane DEFAULT_DT (stability-verified). Larger dt
+  # values forwarded via --dt override the lane design and risk blowup
+  # (same latent-bug class as baroclinic_gyre, 2026-10-10).
+  duration_days: 1
+  dt_seconds: 300
+
+output:
+  diag_interval_hours: 6
+  checkpoint_interval_days: 1

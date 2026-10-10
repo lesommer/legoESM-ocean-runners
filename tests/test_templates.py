@@ -256,6 +256,9 @@ class TestOceanCaseDispatch:
             ("global_ocean", "global_overturning"): "latlon",
             ("global_ocean", "neverworld2_lite"): "latlon",
             ("3d_idealized", "eady_instability"): "latlon_channel",
+            ("3d_idealized", "rest_state_stratified_no_land"): "latlon",
+            ("2d", "barotropic_wave"): "latlon",
+            ("2d", "barotropic_double_gyre"): "latlon_regional",
         }
         from runners.run_experiment import load_template
         for (category, tmpl), matrix_grid in dispatch.items():
@@ -276,12 +279,25 @@ class TestOceanCaseDispatch:
                  ("3d_idealized", "phillips_two_layer"),
                  ("global_ocean", "global_overturning"),
                  ("global_ocean", "neverworld2_lite"),
-                 ("3d_idealized", "eady_instability")]
+                 ("3d_idealized", "eady_instability"),
+                 ("3d_idealized", "rest_state_stratified_no_land"),
+                 ("2d", "barotropic_wave"),
+                 ("2d", "barotropic_double_gyre")]
         for category, tmpl in lanes:
             cfg = load_template(f"{category}/{tmpl}")
             assert cfg["time"]["dt_seconds"] == 300, (
                 f"{tmpl}: dt_seconds {cfg['time']['dt_seconds']} != "
                 "lane DEFAULT_DT 300")
+
+    def test_barotropic_matrix_lanes(self):
+        # 2d barotropic templates ride the same matrix delegation as the
+        # 3d_ocean lanes (mode barotropic_ocean is accepted by the
+        # dispatch since 2026-10-10 wave-1).
+        from runners.run_experiment import load_template
+        for tmpl in ("barotropic_wave", "barotropic_double_gyre"):
+            cfg = load_template(f"2d/{tmpl}")
+            assert cfg["experiment"]["mode"] == "barotropic_ocean"
+            assert cfg["ocean"]["case"] == tmpl
 
     def test_stub_case_falls_through(self):
         # A 3d_ocean case WITHOUT a delegation lane hits the structural
