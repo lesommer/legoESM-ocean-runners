@@ -156,6 +156,7 @@ if [ "$CHECK_ONLY" = "1" ]; then
     echo "Check-only mode. Running validation..."
     ensure_legoesm_importable
     "$PYTHON" "$SCRIPT_DIR/validate_templates.py" --legoesm-dir "$LEGOESM_DIR" --verbose
+    "$PYTHON" "$SCRIPT_DIR/render_readme_status.py" --check
     exit $?
 fi
 
@@ -165,8 +166,12 @@ if [ "$TAG_ONLY" = "1" ]; then
     echo "Tag-only mode. Validating templates..."
     VALIDATION_OK=1
     "$PYTHON" "$SCRIPT_DIR/validate_templates.py" --skip-imports --verbose || VALIDATION_OK=0
+    "$PYTHON" "$SCRIPT_DIR/render_readme_status.py" --check || VALIDATION_OK=0
     if [ "$VALIDATION_OK" = "0" ]; then
-        echo "ERROR: Template validation failed. Not creating tag."
+        echo "ERROR: Template validation or status-docs sync failed. Not creating tag."
+        echo "       If the status-docs check failed: update project_status.md,"
+        echo "       run 'python scripts/render_readme_status.py', and commit both"
+        echo "       together with the capability change."
         exit 1
     fi
 

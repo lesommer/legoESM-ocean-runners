@@ -13,6 +13,7 @@ TEMPLATES_DIR = ROOT_DIR / "templates"
 RUNNERS_DIR = ROOT_DIR / "runners"
 
 sys.path.insert(0, str(ROOT_DIR))
+sys.path.insert(0, str(ROOT_DIR / "scripts"))
 
 
 class TestTemplates:
@@ -453,3 +454,119 @@ class TestDataCatalog:
         paths = resolve_data_paths(["etopo1_1deg"])
         assert "etopo1_1deg" in paths
         assert paths["etopo1_1deg"].name == "etopo_1deg.nc"
+
+class TestStatusDocsSync:
+    """project_status.md is the single source; README's block is generated.
+
+    Enforced by scripts/render_readme_status.py: vocabulary, template
+    parity, and README-block freshness (docs-sync procedure, 2026-10-10).
+    """
+
+    @staticmethod
+    def _fixture(tmp_path, rows, template_names, readme_block=None):
+        """Build a minimal (project_status, README, templates/) fixture."""
+        status = tmp_path / "project_status.md"
+        table = ["## Template test status", "",
+                 "| Category | Template | Status | Receipt |",
+                 "|----------|----------|--------|---------|"]
+        for cat, name, st in rows:
+            table.append(f"| `{cat}/` | `{name}` | {st} | x |")
+        status.write_text("\n".join(table) + "\n")
+        templates = tmp_path / "templates"
+        for cat, name, _ in rows:
+            d = templates / cat
+            d.mkdir(parents=True, exist_ok=True)
+            (d / f"{name}.yaml").write_text("experiment: {}\n")
+        for extra in template_names:
+            cat, name = extra.split("/")
+            d = templates / cat
+            d.mkdir(parents=True, exist_ok=True)
+            (d / f"{name}.yaml").write_text("experiment: {}\n")
+        readme = tmp_path / "README.md"
+        block = readme_block if readme_block is not None else "placeholder"
+        readme.write_text(f"# README\n\n{block}\n")
+        return status, readme, templates
+
+    def test_vocabulary_rejected(self, tmp_path):
+        import render_readme_status as rrs
+        status, readme, templates = self._fixture(
+            tmp_path, [("1d", "scm", "kindof-tested")], [])
+        with pytest.raises(rrs.StatusError, match="unknown status"):
+            rrs.parse_status_table(status)
+
+    def test_missing_template_row_fails(self, tmp_path):
+        import render_readme_status as rrs
+        status, readme, templates = self._fixture(
+            tmp_path, [("1d", "scm", "run-tested")], ["2d/gyre"])
+        rows = rrs.parse_status_table(status)
+        with pytest.raises(rrs.StatusError, match="without a project_status"):
+            rrs.check_template_parity(rows, templates)
+
+    def test_ghost_row_fails(self, tmp_path):
+        import render_readme_status as rrs
+        status, readme, templates = self._fixture(
+            tmp_path, [("1d", "scm", "run-tested"), ("2d", "gyre", "structural")],
+            [])
+        (templates / "2d" / "gyre.yaml").unlink()
+        rows = rrs.parse_status_table(status)
+        with pytest.raises(rrs.StatusError, match="without a template file"):
+            rrs.check_template_parity(rows, templates)
+
+    def test_check_fails_on_stale_readme(self, tmp_path, capsys):
+        import render_readme_status as rrs
+        status, readme, templates = self._fixture(
+            tmp_path, [("1d", "scm", "run-tested")], [],
+            readme_block=f"{rrs.BEGIN_MARKER}\nSTALE\n{rrs.END_MARKER}")
+        rc = rrs.main.__wrapped__ if hasattr(rrs.main, "__wrapped__") else None
+        import sys as _sys
+        old_argv = _sys.argv
+        try:
+            _sys.argv = ["render_readme_status.py", "--check",
+                         "--project-status", str(status),
+                         "--readme", str(readme),
+                         "--templates-dir", str(templates)]
+            code = rrs.main()
+        finally:
+            _sys.argv = old_argv
+        assert code == 1
+        assert "stale" in capsys.readouterr().err
+
+    def test_write_then_check_roundtrip(self, tmp_path):
+        import render_readme_status as rrs
+        import sys as _sys
+        status, readme, templates = self._fixture(
+            tmp_path,
+            [("1d", "scm", "run-tested"), ("2d", "gyre", "structural"),
+             ("3d", "case", "smoke-tested"), ("3d", "stub", "init-only")],
+            [],
+            readme_block=f"{rrs.BEGIN_MARKER}\nSTALE\n{rrs.END_MARKER}")
+        for argv_tail, expect in (
+            ([], 0),          # no --check => write (default)
+            (["--check"], 0),
+        ):
+            old_argv = _sys.argv
+            try:
+                _sys.argv = ["render_readme_status.py"] + argv_tail + [
+                    "--project-status", str(status),
+                    "--readme", str(readme),
+                    "--templates-dir", str(templates)]
+                assert rrs.main() == expect
+            finally:
+                _sys.argv = old_argv
+        text = readme.read_text()
+        assert "`1d/` — 1 template: 1 run-tested" in text
+        assert "`3d/` — 2 templates: 1 smoke-tested, 1 init-only" in text
+
+    def test_real_repo_check_passes(self):
+        """The committed repo itself satisfies the sync contract."""
+        import subprocess
+        result = subprocess.run(
+            [_sys_exe(), str(ROOT_DIR / "scripts" / "render_readme_status.py"),
+             "--check"],
+            capture_output=True, text=True)
+        assert result.returncode == 0, result.stdout + result.stderr
+
+
+def _sys_exe():
+    import sys
+    return sys.executable

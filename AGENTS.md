@@ -167,6 +167,21 @@ Every initialized experiment produces an `experiment.tag` INI file with:
 
 These tag files are intended to be archived alongside experiment output in a separate archive repository.
 
+### Status documentation sync
+
+`project_status.md` is the **single source of truth** for per-template status; the README only carries a **generated** summary of it. This is what keeps the two documents in phase without discipline (procedure added 2026-10-10 after they drifted apart during wave-1 onboarding):
+
+- The **Template test status** table in `project_status.md` has a `Status` column with a controlled vocabulary: `run-tested` | `smoke-tested` | `init-only` | `structural` (definitions at the bottom of that file). Receipts (dates, machines, gate values) live ONLY in that table's receipt cell — never in the mode table ("Runner implementation status", which describes mechanisms only) and never in the README.
+- The README carries a category-count block between `<!-- BEGIN status-summary ... DO NOT EDIT -->` / `<!-- END status-summary -->` markers, rendered by `python scripts/render_readme_status.py`. Nobody hand-edits that block.
+- The renderer also enforces **template parity**: every `templates/<category>/<name>.yaml` must have exactly one status row, and vice versa — a new template without a status row fails CI. Gates must be able to fail.
+- Enforcement: CI Tier-1 runs `render_readme_status.py --check`; `sync_legoesm.sh --tag-only` and `--check-only` run it before tagging; `tests/test_templates.py::TestStatusDocsSync` unit-tests the failure modes.
+
+**Update order when a capability or template status changes** (e.g. onboarding a run lane, run-testing a template):
+
+1. Update the affected row(s) of the project_status.md table (Status + receipt), and the mode table only if the *mechanism* changed (new lane, new dispatch).
+2. Run `python scripts/render_readme_status.py` to refresh the README block.
+3. Commit everything **in the same commit** as the capability change (a capability change + its status docs are one unit). CI rejects pushes where the block is stale.
+
 ## 6. What Agents Should Do
 
 ### Add a new experiment template
@@ -178,7 +193,15 @@ These tag files are intended to be archived alongside experiment output in a sep
 6. Reference data catalog IDs in `requires` — never invent new IDs without adding them to `data_catalog.yaml`
 7. If the template needs unmerged legoESM features, add `requires_patches` listing the patch filenames
 8. Run `python scripts/validate_templates.py --skip-imports` to verify
-9. Update the test count in `tests/test_templates.py` if needed
+9. Add a row to the project_status.md "Template test status" table with Status `structural`, then run `python scripts/render_readme_status.py` (CI fails without the row — template parity)
+10. Update the test count in `tests/test_templates.py` if needed
+
+### Onboard a run lane (new case in `_MATRIX_CASES` or a new delegation handler)
+1. Audit the template against the upstream lane design (resolution, dt = lane `DEFAULT_DT`, duration) — a template dt larger than the lane default is forwarded as `--dt` and can blow up (baroclinic_gyre lesson, 2026-10-10)
+2. Implement the dispatch; extend `tests/test_templates.py::test_matrix_lane_cases` (and the dt-gate test for matrix lanes)
+3. Run-test at the upstream quick duration and record the receipt (Status + receipt cell) in the project_status table
+4. Update the mode table only if the mechanism changed; run `python scripts/render_readme_status.py`
+5. Same commit: dispatch + tests + project_status + rendered README; then `sync_legoesm.sh --tag-only [--push]`
 
 ### Fix a broken template
 1. Run `python scripts/validate_templates.py --skip-imports --verbose` to identify the issue
@@ -229,16 +252,19 @@ These tag files are intended to be archived alongside experiment output in a sep
 - **Never merge changes to `patches/`, `templates/`, `runners/`, `scripts/`, `legoESM_version.txt`, or `data_catalog.yaml` without tagging.** These affect reproducibility just as much as pin updates. Run `bash scripts/sync_legoesm.sh --tag-only` after merging.
 - **Never assume runner capabilities without checking `project_status.md`.** The runners support init + provenance tagging for all modes, but run path availability varies. Consult `project_status.md` for what's currently implemented and tested before assuming a template can be executed through the runners.
 - **Never modify runners or templates without updating `project_status.md`.** Any change that affects runner capabilities or template test status must be reflected in `project_status.md` before committing:
-  - New runner functionality (e.g., implementing the `3d_ocean` run path) → update the "Runner implementation status" table and move affected templates from "structurally validated" to "run tested"
-  - New template → add a row to the "Template test status" table (status: structurally validated only until run-tested)
+  - New runner functionality (e.g., implementing the `3d_ocean` run path) → update the "Runner implementation status" table and move affected templates from `structural` to `run-tested`
+  - New template → add a row to the "Template test status" table (Status: `structural` only until run-tested)
   - Broken/removed functionality → update status accordingly
-  - End-to-end test of a template → move it from "structurally validated" to "run tested"
+  - End-to-end test of a template → move it from `structural` (or `init-only`) to `run-tested` / `smoke-tested`
+  - Then run `python scripts/render_readme_status.py` and commit the regenerated README block together with the project_status change (CI runs `--check`).
+- **Never hand-edit the generated README block** (between the `status-summary` markers) or record receipts in the README or the mode table — the README block is rendered from the project_status table, and receipts live only there.
 
 ## 8. Key File Locations
 
 | What | Where |
 |------|-------|
 | Project status | `project_status.md` |
+| README status-block renderer | `scripts/render_readme_status.py` (`--check` gate in CI + `sync_legoesm.sh`) |
 | Experiment templates | `templates/<category>/<name>.yaml` |
 | Data catalog | `data_catalog.yaml` |
 | Pinned legoESM version | `legoESM_version.txt` |
