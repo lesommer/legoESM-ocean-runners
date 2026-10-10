@@ -60,7 +60,10 @@ This repo fills that gap. It provides:
 - **Machine adaptation** — templates are machine-agnostic; machine
   configuration (scheduler, accounts, paths, environment) is passed at init
   via `--machine` and the generated `run.sh` matches the machine's scheduler
-  (slurm, pbs, lsf) or runs directly.
+  (`slurm`, `oar`, pbs, lsf) or runs directly. SLURM machines get `#SBATCH`
+  directives (submit with `sbatch run.sh`); OAR machines (GRICAD/CIMENT:
+  bigfoot, dahu, kraken) get `#OAR` directives (submit with
+  `oarsub -S ./run.sh` — the path form is required).
 
 - **Validation** — `scripts/validate_templates.py` checks templates against
   the pinned legoESM, and CI blocks pushes to `main` when
@@ -92,9 +95,15 @@ for:
 - `ocean_scm` (native; five templates run-tested)
 - `3d_ocean` for **DINO** (delegation to legoESM's `run_dino.py`, extended
   by patch 006 with multi-GPU SPMD, restart, ensemble seed and timing —
-  upstream PR leap-stc/legoESM#1926) and the **Tier-A idealized cases**
-  `baroclinic_gyre`, `lock_exchange`, `overflow`, `acc_channel` (delegation
-  to the upstream ocean test matrix; all upstream validation gates PASS)
+  upstream PR climate-federation/legoESM#1926) and the **matrix-lane
+  idealized cases** `baroclinic_gyre`, `lock_exchange`, `overflow`,
+  `acc_channel`, `geostrophic_adjustment`, `phillips_two_layer`,
+  `global_overturning`, `neverworld2_lite`, `eady_instability`,
+  `rest_state_stratified_no_land` (delegation to the upstream ocean test
+  matrix; all upstream validation gates PASS — Mac CPU, plus bigfoot V100
+  via native OAR for `baroclinic_gyre` and `neverworld2_lite`)
+- `barotropic_ocean` for the matrix-lane cases `barotropic_wave`,
+  `barotropic_double_gyre` (same matrix delegation; upstream gates PASS)
 - `3d_ocean_realistic` on tripole grids (delegation to the upstream OMIP
   script with patches 002/003)
 
@@ -190,11 +199,16 @@ This checks out the runner tag → checks out the legoESM commit → applies pat
 | Category | Templates | Run status |
 |----------|-----------|------------|
 | `1d/` | `ocean_scm_convective`, `ocean_scm_ekman`, `ocean_scm_surface_heating`, `ocean_scm_kpp_wind`, `ocean_scm` | **Run-tested** |
+| `2d/` | `barotropic_wave`, `barotropic_double_gyre` | **Run-tested** (matrix delegation; upstream gates PASS, incl. the `_sin2` substring variant) |
+| `2d/` | `barotropic_gyre`, `stommel_gyre_tracer`, `inertia_gravity_wave` | Init-only |
 | `3d_idealized/` | `dino` | **Run-tested** (R1 198×50; restart bit-exact, SPMD parity verified; multi-GPU/restart/seed/timing via patch 006 — see [docs/dino.md](docs/dino.md)) |
-| `3d_idealized/` | `baroclinic_gyre`, `lock_exchange`, `overflow`, `acc_channel` | **Run-tested** (matrix delegation; upstream gates PASS) |
+| `3d_idealized/` | `baroclinic_gyre`, `lock_exchange`, `overflow`, `acc_channel`, `geostrophic_adjustment`, `phillips_two_layer`, `eady_instability`, `rest_state_stratified_no_land` | **Run-tested** (matrix delegation; upstream gates PASS — Mac CPU) |
+| `3d_idealized/` | `isomip_plus` | Init-only |
+| `global_ocean/` | `global_overturning`, `neverworld2_lite` | **Run-tested** (matrix delegation; upstream gates PASS — Mac CPU, neverworld2_lite also bigfoot V100 via native OAR at the 180x360 lane design) |
 | `global_ocean/` | `omip_tripole` | **5-day run completed** (CPU, rest ICs, synthetic forcing; patches 002 + 003: eORCA1 tripolar OMIP with CORE-II forcing, `--synthetic-forcing` for smoke tests, `--days` for short runs, `--forcing-scale` for sensitivity; MPI support via `mpi.enabled: true`) |
-| `global_ocean/` | `omip_jra55`, `omip_global`, `omip_cubed_sphere`, `global_overturning`, `neverworld2_lite` | Init-only |
-| `2d/`, remaining `3d_idealized/`, `coupled/` | See `templates/` | Init-only or structurally validated |
+| `global_ocean/` | `omip_core2_thin` | **Startup smoke tested** (fast thin-card tripole lane; full forcing needs the staged cache) |
+| `global_ocean/` | `omip_jra55`, `omip_global`, `omip_cubed_sphere`, `omip_faithful_card` | Init-only |
+| `coupled/` | all | Init-only or structurally validated |
 
 See [project_status.md](project_status.md) for the full status of every template.
 
