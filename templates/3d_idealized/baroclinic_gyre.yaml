@@ -63,7 +63,11 @@ initial_conditions:
 
 time:
   duration_days: 365
-  dt_seconds: 1800
+  # dt = upstream matrix-lane DEFAULT_DT (stability-verified). A larger dt
+  # here is forwarded as --dt and destabilizes the lane: 1800 blew up at
+  # day 0.6 (exponential eta growth to NaN, reproduced Mac CPU + bigfoot
+  # V100, 2026-10-10).
+  dt_seconds: 300
 
 output:
   diag_interval_hours: 24
