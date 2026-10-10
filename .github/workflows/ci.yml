@@ -3,6 +3,7 @@ name: Validate Templates
 on:
   push:
     branches: [main]
+    tags: ['legoesm-*']
     paths:
       - 'templates/**'
       - 'runners/**'
