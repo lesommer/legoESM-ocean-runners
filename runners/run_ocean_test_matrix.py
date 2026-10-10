@@ -100,22 +100,33 @@ def build_test_matrix(
     return cases
 
 
-def run_quick_test(case: TestCase, legoesm_path: Path, verbose: bool = False):
+def run_quick_test(case: TestCase, legoesm_path: Path, output_base: Path,
+                   verbose: bool = False):
     """Run a quick smoke test for a single test case.
 
-    This runs legoesm directly via Python for `quick_days` timesteps.
+    This initializes the template with `quick_days` duration and runs
+    the resulting experiment directory.
     """
-    env = None
+    import tempfile
+
+    exp_dir = output_base / f"smoke_{case.name}"
     cmd = [
         sys.executable, "-m", "runners.run_experiment", "init",
         case.template,
         "--name", f"smoke_{case.name}",
+        "--output-dir", str(exp_dir),
         "-o", f"time.duration_days={case.quick_days}",
     ]
     if verbose:
         print(f"  Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, env={**subprocess.os.environ, **env}, capture_output=not verbose)
-    return result.returncode == 0
+    result = subprocess.run(cmd, capture_output=not verbose)
+    if result.returncode != 0:
+        return False
+    run_cmd = ["bash", str(exp_dir / "run.sh")]
+    if verbose:
+        print(f"  Running: {' '.join(run_cmd)}")
+    run_result = subprocess.run(run_cmd, cwd=exp_dir, capture_output=not verbose)
+    return run_result.returncode == 0
 
 
 def main():
@@ -132,14 +143,13 @@ def main():
         choices=["latlon", "cubed_sphere", "mpas", "spectral"],
         help="Grid types to test",
     )
-    parser.add_argument(
-        "--quick", action="store_true",
-        help="Run quick smoke tests (few timesteps each)",
-    )
-    parser.add_argument(
-        "--dry-run", action="store_true",
-        help="Print test matrix without running",
-    )
+    parser.add_argument("--quick", action="store_true",
+                        help="Run quick smoke tests (few timesteps each)")
+    parser.add_argument("--output-base", type=Path, default=None,
+                        help="Base directory for smoke-test experiment dirs "
+                             "(default: a fresh tempdir)")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Print test matrix without running")
     parser.add_argument("-v", "--verbose", action="store_true")
 
     args = parser.parse_args()
@@ -153,13 +163,25 @@ def main():
     if args.dry_run:
         return
 
+    if not args.quick:
+        print("\nUse --quick to run smoke tests (dry listing only otherwise).")
+        return
+
+    import tempfile
     from runners.run_experiment import resolve_legoesm_path
     legoesm_path = resolve_legoesm_path()
+
+    if args.output_base is not None:
+        output_base = args.output_base
+        output_base.mkdir(parents=True, exist_ok=True)
+    else:
+        output_base = Path(tempfile.mkdtemp(prefix="lego_ocean_smoke_"))
+    print(f"Smoke-test experiment dirs: {output_base}")
 
     passed, failed = 0, 0
     for case in cases:
         print(f"\nRunning: {case.name}")
-        ok = run_quick_test(case, legoesm_path, args.verbose)
+        ok = run_quick_test(case, legoesm_path, output_base, args.verbose)
         if ok:
             passed += 1
             print(f"  PASS: {case.name}")

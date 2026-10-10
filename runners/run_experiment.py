@@ -652,18 +652,17 @@ def _run_ocean(config: dict, legoesm_path: Path, config_path: Path | None = None
         _run_tripolar_omip(config, legoesm_path, config_path)
         return
 
-    from legoesm.ocean.state import LatLonCGridOceanConfig
-    from legoesm.ocean.experiments import get_experiment
-    import jax
-    import jax.numpy as jnp
+    from legoesm.ocean.experiments import AVAILABLE_EXPERIMENTS
 
     case = config.get("ocean", {}).get("case", "rest_state")
     grid_type = config.get("grid", {}).get("type", "latlon")
 
-    exp_info = get_experiment(case)
-
-    print(f"Ocean experiment: case={case}, grid={grid_type}")
-    print(f"  Scientific purpose: {exp_info.get('scientific_purpose', 'N/A')}")
+    exp_info = AVAILABLE_EXPERIMENTS.get(case)
+    if exp_info is None:
+        print(f"Ocean experiment: case={case!r} (not in legoESM AVAILABLE_EXPERIMENTS), grid={grid_type}")
+    else:
+        print(f"Ocean experiment: case={case}, grid={grid_type}")
+        print(f"  Scientific purpose: {exp_info.get('scientific_purpose', 'N/A')}")
 
     print("NOTE: Full ocean experiment execution requires case-specific Python code.")
     print("      Use run_ocean_test_matrix.py for pre-built test harnesses.")

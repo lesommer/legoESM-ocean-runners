@@ -39,6 +39,8 @@ def main():
     run_p.add_argument("--resolution", type=int, default=48, help="Grid resolution")
     run_p.add_argument("--days", type=int, default=365, help="Simulation days")
     run_p.add_argument("--machine", default=None, help="Machine config")
+    run_p.add_argument("--output-dir", type=Path, default=None,
+                       help="Write experiment files to this directory (required)")
 
     args = parser.parse_args()
 
@@ -52,7 +54,9 @@ def main():
             f"grid.resolution={args.resolution}",
             f"time.duration_days={args.days}",
         ]
-        exp_dir = init_experiment(template_name, overrides=overrides, machine=args.machine)
+        exp_dir = init_experiment(template_name, overrides=overrides,
+                                  machine=args.machine,
+                                  output_dir=args.output_dir)
         print(f"Coupled experiment initialized: {exp_dir}")
     else:
         parser.print_help()

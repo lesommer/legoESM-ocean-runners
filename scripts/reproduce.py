@@ -156,6 +156,9 @@ def main():
     parser.add_argument("tag_file", type=Path, help="Path to experiment.tag file")
     parser.add_argument("--run", action="store_true",
                         help="Re-initialize and run the experiment after checkout")
+    parser.add_argument("--output-dir", type=Path, default=None,
+                        help="Directory for the re-initialized experiment "
+                             "(default: ./reproduced_<name>; required by init)")
     parser.add_argument("--data-dir", default=None,
                         help="Data root directory (default: $LEGOESM_DATA_DIR or ./data)")
     parser.add_argument("--legoesm-dir", default=None,
@@ -235,19 +238,22 @@ def main():
     if args.run and template_name:
         exp_name = experiment.get("name", "reproduced")
         print(f"\nRe-initializing experiment: {exp_name}")
+        out_dir = args.output_dir if args.output_dir is not None else (
+            ROOT_DIR / f"reproduced_{exp_name}")
         cmd = [
             sys.executable,
             str(ROOT_DIR / "scripts" / "init_experiment.py"),
             template_name,
             "--name", f"{exp_name}_reproduced",
+            "--output-dir", str(out_dir),
         ]
         if not args.dry_run:
             subprocess.run(cmd, cwd=ROOT_DIR)
     else:
         print("\nTo initialize and run the experiment:")
         if template_name:
-            print(f"  python scripts/init_experiment.py {template_name} --name reproduced_run")
-            print(f"  cd experiments/reproduced_run && bash run.sh")
+            print(f"  python scripts/init_experiment.py {template_name} --name reproduced_run --output-dir runs/reproduced_run")
+            print(f"  cd runs/reproduced_run && bash run.sh")
         else:
             print("  (No template name found in tag file)")
 
