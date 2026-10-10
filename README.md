@@ -89,6 +89,45 @@ use the [experiment-ledger template repository](https://github.com/lesommer/lego
 ("Use this template" → private clone), which carries the run-declaration
 format, machine-config template, and the bin/ helpers.
 
+## Installation
+
+Prerequisites: Python ≥ 3.11 and [uv](https://docs.astral.sh/uv/) (or plain
+pip), git. No GPU required — CPU JAX runs the idealized cases.
+
+```bash
+# 1. Clone this repo and legoESM side-by-side (the generated run.sh
+#    resolves legoESM at ../legoESM)
+git clone https://github.com/lesommer/legoESM-ocean-runners.git
+git clone https://github.com/climate-federation/legoESM.git
+
+# 2. Pin legoESM to the commit this repo is validated against
+cd legoESM
+git checkout $(grep '^commit:' ../legoESM-ocean-runners/legoESM_version.txt | cut -d: -f2 | tr -d ' ')
+
+# 3. Install legoESM (uv workspace — plain pip cannot resolve the
+#    federation package layout)
+uv sync
+
+# 4. Apply this repo's patches to the legoESM checkout (REQUIRED:
+#    patch 001 fixes a macOS import failure; 002-005 enable the OMIP
+#    lanes. Patches are dropped automatically at pin bumps once merged
+#    upstream.)
+cd ../legoESM-ocean-runners && bash scripts/apply_patches.sh
+
+# 5. Verify
+cd ../legoESM && python -c "import legoesm; print('legoESM OK')"
+```
+
+Note: `run.sh` invokes plain `python`, so have the legoESM environment
+active when running experiments (`source ../legoESM/.venv/bin/activate`).
+`python scripts/reproduce.py <experiment.tag>` performs the whole
+checkout-and-patch sequence automatically for reproducing a past run.
+
+To set up a complete experiment workspace — machine configs, a personal
+experiment ledger, multi-machine workflows — see the
+[experiment-ledger template](https://github.com/lesommer/legoESM-ocean-experiments-template)
+and its setup guide.
+
 ### Current capability status
 
 Init and provenance tagging work for all modes. The run path is implemented

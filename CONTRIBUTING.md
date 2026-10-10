@@ -32,9 +32,10 @@ pip install -e ".[dev]"
 
 Template structure validation and the test suite do not require a legoESM
 checkout. Full validation against the pinned model
-(`python scripts/validate_templates.py` without `--skip-imports`) checks
-out the commit recorded in `legoESM_version.txt`; CI does this
-automatically for every PR and push.
+(`python scripts/validate_templates.py` without `--skip-imports`) needs
+a legoESM checkout at the commit recorded in `legoESM_version.txt` (see
+the Installation section in README.md); CI does this automatically for
+every PR and push.
 
 ## Before opening a PR
 
