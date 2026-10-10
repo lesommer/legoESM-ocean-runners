@@ -1,9 +1,14 @@
 # Eady instability (baroclinic instability on an f-plane)
 # Classic baroclinic instability test with uniform stratification.
 #
-# Maps to: legoesm.ocean.experiments.eady_uniform
-# Grid:    latlon
+# Maps to: legoesm.ocean.experiments.eady_instability
+# Grid:    latlon (dispatches to the upstream latlon_channel lane)
 # Mode:    3d_ocean
+#
+# 2026-10-10 surgery: the template previously declared `case: eady_uniform`
+# with a latlon 64x128 grid — a name/case mismatch, and both eady lanes are
+# latlon_channel-only in the upstream matrix. Now filename-consistent and
+# aligned to the upstream lane design (latlon_channel 24x72, dt 300, 60 d).
 
 experiment:
   name: eady_instability
@@ -14,11 +19,13 @@ requires: []
 
 grid:
   type: latlon
-  resolution: 64x128
+  # Upstream matrix-lane design resolution (eady_instability latlon_channel
+  # arm; mpas_channel is known to blow up, upstream excludes it).
+  resolution: 24x72
   nlev: 50
 
 ocean:
-  case: eady_uniform
+  case: eady_instability
   A_h: 1.0e2
   K_h: 1.0e2
   eos: linear
@@ -47,8 +54,12 @@ physics:
     r: 1.1e-3
 
 time:
-  duration_days: 84
-  dt_seconds: 1800
+  # Lane-design pair: 60 d at dt 300 (upstream quick gate = 5 d).
+  # dt = upstream matrix-lane DEFAULT_DT (stability-verified). Larger dt
+  # values forwarded via --dt override the lane design and risk blowup
+  # (same latent-bug class as baroclinic_gyre, 2026-10-10).
+  duration_days: 60
+  dt_seconds: 300
 
 output:
   diag_interval_hours: 12

@@ -45,7 +45,10 @@ physics:
 
 time:
   duration_days: 200
-  dt_seconds: 3600
+  # dt = upstream matrix-lane DEFAULT_DT (stability-verified). Larger dt
+  # values forwarded via --dt override the lane design and risk blowup
+  # (same latent-bug class as baroclinic_gyre, 2026-10-10).
+  dt_seconds: 300
 
 output:
   diag_interval_hours: 24

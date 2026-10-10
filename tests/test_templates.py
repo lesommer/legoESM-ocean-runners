@@ -247,32 +247,56 @@ class TestOceanCaseDispatch:
         # The Tier-A idealized cases route through the matrix delegation
         # (grid-type mapping asserted against the dispatch table).
         dispatch = {
-            "baroclinic_gyre": {"latlon": "latlon_regional"},
-            "lock_exchange": {"latlon": "latlon"},
-            "overflow": {"latlon": "latlon"},
-            "acc_channel": {"latlon": "latlon_channel"},
+            ("3d_idealized", "baroclinic_gyre"): "latlon_regional",
+            ("3d_idealized", "lock_exchange"): "latlon",
+            ("3d_idealized", "overflow"): "latlon",
+            ("3d_idealized", "acc_channel"): "latlon_channel",
+            ("3d_idealized", "geostrophic_adjustment"): "latlon",
+            ("3d_idealized", "phillips_two_layer"): "latlon",
+            ("global_ocean", "global_overturning"): "latlon",
+            ("global_ocean", "neverworld2_lite"): "latlon",
+            ("3d_idealized", "eady_instability"): "latlon_channel",
         }
         from runners.run_experiment import load_template
-        for tmpl, grids in dispatch.items():
-            cfg = load_template(f"3d_idealized/{tmpl}")
+        for (category, tmpl), matrix_grid in dispatch.items():
+            cfg = load_template(f"{category}/{tmpl}")
             case = cfg["ocean"]["case"]
             grid = cfg["grid"]["type"]
-            assert case in dispatch, f"{tmpl}: case {case} not a matrix lane"
-            assert grid in grids, f"{tmpl}: grid {grid} not mapped"
+            assert case == tmpl, f"{tmpl}: case {case} != template name"
+            assert grid == "latlon", f"{tmpl}: grid {grid} not latlon"
+
+    def test_matrix_lane_dt_is_lane_default(self):
+        # Template dt is forwarded as --dt which overrides the upstream
+        # lane's stability-verified DEFAULT_DT = 300; anything larger is
+        # the latent-blowup class found 2026-10-10 (baroclinic_gyre).
+        from runners.run_experiment import load_template
+        lanes = [("3d_idealized", "baroclinic_gyre"),
+                 ("3d_idealized", "acc_channel"),
+                 ("3d_idealized", "geostrophic_adjustment"),
+                 ("3d_idealized", "phillips_two_layer"),
+                 ("global_ocean", "global_overturning"),
+                 ("global_ocean", "neverworld2_lite"),
+                 ("3d_idealized", "eady_instability")]
+        for category, tmpl in lanes:
+            cfg = load_template(f"{category}/{tmpl}")
+            assert cfg["time"]["dt_seconds"] == 300, (
+                f"{tmpl}: dt_seconds {cfg['time']['dt_seconds']} != "
+                "lane DEFAULT_DT 300")
 
     def test_stub_case_falls_through(self):
         # A 3d_ocean case WITHOUT a delegation lane hits the structural
-        # stub, not an error (e.g. eady_instability, phillips_two_layer).
+        # stub, not an error (e.g. isomip_plus).
         import sys
         from pathlib import Path
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
         from runners.run_experiment import load_template
-        cfg = load_template("3d_idealized/eady_instability")
+        cfg = load_template("3d_idealized/isomip_plus")
         assert cfg["experiment"]["mode"] == "3d_ocean"
-        # case eady_uniform is NOT in the dispatch table (falls to stub)
+        # isomip_plus is NOT in the dispatch table (falls to stub)
         assert cfg["ocean"]["case"] not in (
             "dino", "baroclinic_gyre", "lock_exchange", "overflow",
-            "acc_channel")
+            "acc_channel", "geostrophic_adjustment", "phillips_two_layer",
+            "global_overturning", "neverworld2_lite", "eady_instability")
 
 
 class TestOceanTestMatrix:

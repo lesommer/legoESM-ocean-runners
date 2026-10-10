@@ -15,7 +15,8 @@ requires: []
 
 grid:
   type: latlon
-  resolution: 64x128
+  # Upstream matrix-lane design resolution (neverworld2_lite latlon arm).
+  resolution: 180x360
   nlev: 50
 
 ocean:
@@ -49,8 +50,12 @@ physics:
     r: 1.1e-3
 
 time:
-  duration_days: 3650
-  dt_seconds: 1800
+  # Lane-design pair: 365 d at dt 300 (upstream quick gate = 5 d).
+  # dt = upstream matrix-lane DEFAULT_DT (stability-verified). Larger dt
+  # values forwarded via --dt override the lane design and risk blowup
+  # (same latent-bug class as baroclinic_gyre, 2026-10-10).
+  duration_days: 365
+  dt_seconds: 300
 
 output:
   diag_interval_hours: 24

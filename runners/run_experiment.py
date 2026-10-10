@@ -711,6 +711,11 @@ def _run_ocean(config: dict, legoesm_path: Path, config_path: Path | None = None
         "overflow": {"latlon": "latlon"},
         "acc_channel": {"latlon": "latlon_channel",
                          "mpas": "mpas_channel"},
+        "geostrophic_adjustment": {"latlon": "latlon"},
+        "phillips_two_layer": {"latlon": "latlon"},
+        "global_overturning": {"latlon": "latlon"},
+        "neverworld2_lite": {"latlon": "latlon"},
+        "eady_instability": {"latlon": "latlon_channel"},
     }
     if (mode == "3d_ocean" and case in _MATRIX_CASES
             and grid_type in _MATRIX_CASES[case]):
