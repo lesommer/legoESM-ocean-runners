@@ -177,7 +177,7 @@ class TestRunScriptGeneration:
         assert "#OAR -n smoke" in lines
         assert "#OAR --project pr-data-ocean" in lines
         assert "#OAR -l /nodes=1/gpu=1,walltime=02:00:00" in lines
-        assert '#OAR -p "gpumodel = \'V100\'"' in lines
+        assert "#OAR -p gpumodel = 'V100'" in lines
         assert not any(l.startswith("#SBATCH") for l in lines)
         assert lines.index("#OAR -l /nodes=1/gpu=1,walltime=02:00:00") < lines.index("set -euo pipefail")
 

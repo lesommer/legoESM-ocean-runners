@@ -525,7 +525,13 @@ def _generate_run_script(config: dict, exp_dir: Path, machine: str | None = None
         scheduler_lines.append(f"#OAR -l {resources}")
         properties = machine_cfg.get("oar_properties", "")
         if properties:
-            scheduler_lines.append(f'#OAR -p "{properties}"')
+            # NOTE: no shell-style quoting here — OAR's -S directive parser
+            # (oar/lib/submission.py) captures the -p value VERBATIM, so
+            # wrapping quotes would reach the server as invalid SQL and
+            # abort the submission transaction (bigfoot OAR 3.0.3b1,
+            # InFailedSqlTransaction, 2026-10-10). Command-line -p keeps
+            # its usual quoting; only the #OAR directive form is bare.
+            scheduler_lines.append(f"#OAR -p {properties}")
         job_types = machine_cfg.get("oar_types", [])
         if isinstance(job_types, str):
             job_types = [job_types]
