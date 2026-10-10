@@ -45,7 +45,7 @@ Template → CLI mapping:
 | R4 | `-o grid.n_lon=200 -o time.dt_seconds=675` | 794 | 675 |
 | R8 | `-o grid.n_lon=400 -o time.dt_seconds=338` | 1590 | 338 |
 
-## Multi-GPU (patch 006, upstream PR climate-federation/legoESM#1926)
+## Multi-GPU (upstream PR climate-federation/legoESM#1926, merged)
 
 ```yaml
 run:
@@ -112,9 +112,9 @@ GPU-class numbers.
 ## Provenance
 
 `experiment.tag` records the pinned legoESM commit, the applied patches
-(including `006-dino-spmd-restart-timing.patch` until the upstream PR
-merges and the pin is bumped), and the runner tag. `reproduce.py` rebuilds
-the environment from it.
+(the multi-GPU/restart/seed/timing lanes are upstream since PR #1926 —
+pins at or after the merge carry no patch for them), and the runner tag.
+`reproduce.py` rebuilds the environment from it.
 
 ## References
 

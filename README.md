@@ -94,8 +94,8 @@ for:
 
 - `ocean_scm` (native run path)
 - `3d_ocean` and `barotropic_ocean` for **DINO** (delegation to legoESM's
-  `run_dino.py`, extended by patch 006 with multi-GPU SPMD, restart,
-  ensemble seed and timing — upstream PR climate-federation/legoESM#1926)
+  `run_dino.py`, upstream since PR climate-federation/legoESM#1926:
+  multi-GPU SPMD, restart, ensemble seed and timing)
   and the **matrix-lane idealized cases** (delegation to the upstream ocean
   test matrix; the upstream runner owns the scientifically-validated case
   config and gates)

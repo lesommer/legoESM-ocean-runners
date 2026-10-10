@@ -942,7 +942,7 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
 def _run_dino(config: dict, legoesm_path: Path, config_path: Path | None = None):
     """Run a DINO experiment via script delegation to scripts/run/run_dino.py.
 
-    The upstream script (legoESM PR climate-federation/legoESM#1926, runners patch
+    The upstream script (legoESM PR climate-federation/legoESM#1926; runners patch
     ``006-dino-spmd-restart-timing.patch`` at pins before the merge) is the
     standalone DINO production driver: it builds the paper-faithful R1
     DINOConfig itself, so this mapping only forwards the knobs a template

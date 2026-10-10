@@ -251,7 +251,7 @@ class TestOceanCaseDispatch:
         # The delegation lanes read these; assert the contract.
         assert cfg["grid"]["n_lon"] == 50          # R1
         assert cfg["time"]["dt_seconds"] == 2700   # paper dt
-        assert cfg["requires_patches"] == ["006-dino-spmd-restart-timing.patch"]
+        assert cfg.get("requires_patches", []) == []  # patch 006 merged upstream (PR #1926)
 
     def test_dino_requires_patches_exist(self):
         from runners.run_experiment import PATCHES_DIR

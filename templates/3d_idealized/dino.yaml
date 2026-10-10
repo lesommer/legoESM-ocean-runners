@@ -30,9 +30,6 @@ experiment:
 
 requires: []
 
-requires_patches:
-  - 006-dino-spmd-restart-timing.patch
-
 grid:
   type: latlon
   resolution: 50x198
