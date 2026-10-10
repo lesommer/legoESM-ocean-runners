@@ -536,6 +536,10 @@ def _generate_run_script(config: dict, exp_dir: Path, machine: str | None = None
         'EXPERIMENT_DIR=$(cd "$(dirname "$0")" && pwd)',
         'CONFIG="$EXPERIMENT_DIR/config.yaml"',
         f"CONFIG_TEMPLATE={template_name!r}",
+        # The runner + its CLI tools are repo-relative; anchor the repo root
+        # so the script works from ANY cwd (experiment dir, spool, home).
+        f"RUNNERS_ROOT={_RUNNERS_ROOT}",
+        'cd "$RUNNERS_ROOT"',
         "",
         *body,
     ]
@@ -652,10 +656,14 @@ def _run_ocean(config: dict, legoesm_path: Path, config_path: Path | None = None
         _run_tripolar_omip(config, legoesm_path, config_path)
         return
 
-    from legoesm.ocean.experiments import AVAILABLE_EXPERIMENTS
+    # 3D idealized case dispatch: case -> handler. Cases without a handler
+    # fall through to the structural stub (init/provenance only).
+    case = config.get("ocean", {}).get("case")
+    if mode == "3d_ocean" and case == "dino" and grid_type == "latlon":
+        _run_dino(config, legoesm_path, config_path)
+        return
 
-    case = config.get("ocean", {}).get("case", "rest_state")
-    grid_type = config.get("grid", {}).get("type", "latlon")
+    from legoesm.ocean.experiments import AVAILABLE_EXPERIMENTS
 
     exp_info = AVAILABLE_EXPERIMENTS.get(case)
     if exp_info is None:
@@ -858,6 +866,123 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
     result = subprocess.run(cmd, env=run_env, cwd=str(legoesm_path))
     if result.returncode != 0:
         raise RuntimeError(f"run_omip_core2.py exited with code {result.returncode}")
+
+
+def _run_dino(config: dict, legoesm_path: Path, config_path: Path | None = None):
+    """Run a DINO experiment via script delegation to scripts/run/run_dino.py.
+
+    The upstream script (legoESM PR leap-stc/legoESM#1926, runners patch
+    ``006-dino-spmd-restart-timing.patch`` at pins before the merge) is the
+    standalone DINO production driver: it builds the paper-faithful R1
+    DINOConfig itself, so this mapping only forwards the knobs a template
+    legitimately overrides — resolution, duration, output cadence, scheme
+    selections, and the patch-006 lanes (SPMD devices, restart, seed,
+    timing). Unknown physics is NOT interpreted here; use ``run.extra_args``
+    for verbatim upstream flags (recipe cards etc.).
+    """
+    import subprocess
+
+    grid_cfg = config.get("grid", {})
+    ocean_cfg = config.get("ocean", {})
+    time_cfg = config.get("time", {})
+    output_cfg = config.get("output", {})
+    run_cfg = config.get("run", {}) or {}
+
+    script = str(legoesm_path / "scripts" / "run" / "run_dino.py")
+    if not Path(script).exists():
+        raise FileNotFoundError(
+            f"{script} not found — the DINO lane needs legoESM's "
+            f"scripts/run/run_dino.py (check the pin / legoESM checkout)")
+
+    # The subprocess cwd becomes the legoESM repo (relative --output would
+    # relocate): absolutize against the experiment directory.
+    out_dir = config_path.parent if config_path else Path.cwd()
+    output_arg = str(out_dir / output_cfg.get("path", "results/dino"))
+
+    cmd = [sys.executable, script, "--output", output_arg]
+
+    # Resolution: n_lon drives the Mercator row count (50 -> 198 = R1).
+    n_lon = grid_cfg.get("n_lon",
+                         int(str(grid_cfg.get("resolution", "50x198")).split("x")[0])
+                         if "x" in str(grid_cfg.get("resolution", "")) else 50)
+    cmd.extend(["--n-lon", str(n_lon)])
+
+    # Duration + cadence. The upstream script caps --days at 365 unless
+    # --allow-multiyear is passed (a local-machine guard): durations over
+    # a year (SLURM jobs) need the opt-out, forwarded automatically.
+    duration_days = float(time_cfg.get("duration_days", 365))
+    cmd.extend(["--days", str(duration_days)])
+    if duration_days > 365.0:
+        cmd.append("--allow-multiyear")
+    snap_days = (output_cfg.get("snapshot_every_days")
+                 or time_cfg.get("snapshot_every_days"))
+    if snap_days:
+        cmd.extend(["--snapshot-every-days", str(snap_days)])
+    dt = time_cfg.get("dt_seconds")
+    if dt is not None and dt != 2700:
+        cmd.extend(["--dt", str(dt)])
+
+    # Scheme selections (1:1 upstream flags; DINOConfig defaults are the
+    # paper values, so absent keys forward nothing).
+    _DINO_SCHEME_FLAGS = (
+        # (template key, upstream flag, valid choices or None)
+        ("vmix", "--vmix", ("kpp", "tke", "constant", "richardson", "catke")),
+        ("eos", "--eos", ("wright", "nemo_seos")),
+        ("gm_kappa_scheme", "--gm-kappa-scheme", ("visbeck", "treguier")),
+        ("bottom_drag_scheme", "--bottom-drag-scheme",
+         ("legacy", "nemo_quadratic", "nemo_loglayer")),
+    )
+    for key, flag, choices in _DINO_SCHEME_FLAGS:
+        val = ocean_cfg.get(key)
+        if val is not None:
+            if choices and val not in choices:
+                raise ValueError(
+                    f"ocean.{key}={val!r} is not a valid {flag} choice "
+                    f"({choices})")
+            cmd.extend([flag, str(val)])
+
+    recipe = ocean_cfg.get("recipe")
+    if recipe:
+        cmd.extend(["--recipe", str(recipe)])
+    if grid_cfg.get("nemo_faithful", ocean_cfg.get("nemo_faithful", False)):
+        cmd.append("--nemo-faithful-grid")
+
+    if config.get("physics", {}).get("disabled", False):
+        cmd.append("--physics-off")
+    if (config.get("forcing", {}) or {}).get("disabled", False):
+        cmd.append("--no-forcing")
+
+    # Patch-006 lanes (present upstream after PR #1926 merges; absent at
+    # pins without the patch — check the flag exists before relying on it).
+    nd = run_cfg.get("n_devices")
+    if nd:
+        cmd.extend(["--n-devices", str(nd)])
+    restart_from = run_cfg.get("restart_from")
+    if restart_from:
+        # Resolve against the experiment dir (snapshot paths in run.yaml
+        # are written relative to the experiment directory).
+        rp = Path(restart_from)
+        if not rp.is_absolute():
+            rp = out_dir / rp
+        cmd.extend(["--restart-from", str(rp)])
+    seed = run_cfg.get("seed")
+    if seed:
+        cmd.extend(["--seed", str(seed)])
+    if run_cfg.get("timing_jsonl"):
+        cmd.extend(["--timing-jsonl", str(out_dir / str(run_cfg["timing_jsonl"]))])
+
+    # Verbatim passthrough: run.extra_args appended AFTER the mapped args,
+    # with only the {data_root} token substituted (the tripolar-card
+    # convention — machine-portable, recorded verbatim in config.yaml).
+    data_root = resolve_data_root()
+    for raw in (run_cfg.get("extra_args") or []):
+        cmd.append(str(raw).replace("{data_root}", str(data_root)))
+
+    run_env = {**os.environ, "JAX_ENABLE_X64": "1"}
+    print(f"Running DINO via: {' '.join(cmd)}")
+    result = subprocess.run(cmd, env=run_env, cwd=str(legoesm_path))
+    if result.returncode != 0:
+        raise RuntimeError(f"run_dino.py exited with code {result.returncode}")
 
 
 def _run_coupled(config: dict, legoesm_path: Path):

@@ -1,69 +1,74 @@
-# DINO (Diabatic Ocean) idealized basin
-# Wind + thermohaline forcing in a semi-enclosed basin with ridges.
-# Comprehensive ocean physics test: GM/Redi, KPP, bottom drag.
+# DINO (DIabatic Neverworld Ocean) — Kamm, Deshayes & Madec (2025, GMD)
+# https://doi.org/10.5194/gmd-18-8091-2025
 #
-# Maps to: legoesm.ocean.experiments.dino
-# Grid:    latlon
+# Pole-to-pole idealized Atlantic-sector basin with a re-entrant ACC
+# channel (45-65S). The standard testbed for subgrid parameterizations
+# (ACC, MOC, MHT, sigma-2 stratification benchmarks).
+#
+# Maps to: legoesm.ocean.experiments.dino (DINOConfig, paper R1 defaults)
+# Run path: delegates to legoESM scripts/run/run_dino.py
+#           (extended by patch 006: --n-devices / --restart-from / --seed /
+#           --timing-jsonl, pending upstream PR leap-stc/legoESM#1926)
+# Grid:    latlon (Mercator; n_lon=50 -> 198 rows = paper 1deg R1)
 # Mode:    3d_ocean
+#
+# Defaults are the DINOConfig paper-faithful values: KPP + Visbeck GM/Redi
+# (triads) + enhanced-diffusion convection, Wright EOS, zstar 36 levels,
+# dt=2700s, implicit-CN barotropic. Do not override numeric physics here
+# without consulting the DINOConfig docstring in
+# legoESM/packages/ocean/legoesm/ocean/experiments/dino.py.
+#
+# Resolution ladder (via overrides, NOT new templates):
+#   R1 (default): n_lon=50  | R2: -o grid.n_lon=100 (dt 1350)
+#   R4: -o grid.n_lon=200 (dt 675) | R8: -o grid.n_lon=400 (dt 338)
+# Multi-GPU (patch 006): -o run.n_devices=2 (n_lat=198 divides by 2 only).
 
 experiment:
   name: dino
   mode: 3d_ocean
-  description: "DINO: Diabatic ocean circulation in an idealized basin"
+  description: "DINO: diabatic pole-to-pole ocean dynamics (Kamm et al. 2025, R1)"
 
 requires: []
 
+requires_patches:
+  - 006-dino-spmd-restart-timing.patch
+
 grid:
   type: latlon
-  resolution: 64x128
-  nlev: 50
+  resolution: 50x198
+  nlev: 36
+  n_lon: 50
 
 ocean:
   case: dino
-  A_h: 5.0e4
-  K_h: 0.0
-  bottom_drag_r: 1.1e-3
-  tracer_advection: tvd
-  gm_redi:
-    kappa_GM: 1000.0
-    kappa_Redi: 1000.0
-    S_max: 0.01
-    slope_scheme: triads
+  vmix: kpp
   eos: wright
+  tracer_advection: tvd
+  gm_kappa_scheme: visbeck
+  gm_redi_slope_scheme: triads
+  bottom_drag_scheme: legacy
 
 domain:
   lon_west_deg: -50.0
   lon_east_deg: 0.0
   lat_max_deg: 70.0
-  H_deep: 4500.0
-  H_shallow: 500.0
-
-physics:
-  vertical_mixing:
-    scheme: kpp
-    kpp:
-      Ri_crit: 0.3
-      Cv: 1.6
-      K_conv: 1.0
-      K_bg: 1.0e-5
-  surface_forcing:
-    scheme: prescribed
-    tau_0: 0.05
-    wind_profile: "double_gyre_sin2"
-  bottom_drag:
-    scheme: linear
-    r: 1.1e-3
-  shortwave_penetration:
-    water_type: "II"
-
-initial_conditions:
-  T_water_init_C: 20.0
-  S_uniform: 35.0
+  channel_lat_south_deg: -65.0
+  channel_lat_north_deg: -45.0
+  H_deep: 4000.0
+  H_shallow: 2000.0
 
 time:
   duration_days: 365
-  dt_seconds: 1800
+  dt_seconds: 2700
+  snapshot_every_days: 30
 
 output:
   diag_interval_hours: 24
-  checkpoint_interval_days: 30
+  snapshot_every_days: 30
+
+run:
+  # Verbatim passthrough to run_dino.py (patch 006 fields):
+  # n_devices: 2          # lat-band SPMD (n_lat=198 divides by 1 or 2 only)
+  # restart_from: <path>  # snapshot NPZ (clock restarts at 0)
+  # seed: 0               # ensemble IC perturbation (0 = canonical)
+  extra_args: []
