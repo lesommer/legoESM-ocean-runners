@@ -150,10 +150,14 @@ jobs:
         run: bash scripts/apply_patches.sh --check || true
 
       - name: Install legoESM + JAX
+        # Bare `pip install -e legoESM/` cannot resolve the uv workspace
+        # federation layout — use legoESM's own installer (proven on
+        # bigfoot, see the experiments how-to). No continue-on-error: the
+        # gate must be able to fail.
         run: |
-          pip install -e legoESM/
+          cd legoESM
+          python scripts/experiment/install_federation.py --all
           pip install jax jaxlib
-        continue-on-error: true
 
       - name: Validate templates against legoESM (full)
         run: python scripts/validate_templates.py --legoesm-dir legoESM --verbose
