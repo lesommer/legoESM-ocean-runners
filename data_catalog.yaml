@@ -20,516 +20,632 @@
 #   - "derived": Must be built from other catalog entries (build_script provided)
 
 files:
-  # ===========================================================================
-  # Bathymetry / Topography
-  # ===========================================================================
+files:
   etopo1_1deg:
-    description: "ETOPO1 1-degree global topography/bathymetry (ice surface)"
+    description: ETOPO1 1-degree global topography/bathymetry (ice surface)
     path: bathymetry/etopo_1deg.nc
-    url: "https://www.ncei.noaa.gov/data/oceans/etopo/etopo1/etopo1_ice/etopo1_ice_g_gmt4.grd.nc"
+    url: https://www.ncei.noaa.gov/data/oceans/etopo/etopo1/etopo1_ice/etopo1_ice_g_gmt4.grd.nc
     access: public
     sha256: pending
     size_mb: 48
     format: NetCDF4
-    variables: [z, latitude, longitude]
-    citation: "Amante & Eakins 2009, NOAA Tech. Memo. NESDIS NGDC-24"
-    license: "public domain (NOAA)"
-
+    variables:
+    - z
+    - latitude
+    - longitude
+    citation: Amante & Eakins 2009, NOAA Tech. Memo. NESDIS NGDC-24
+    license: public domain (NOAA)
   etopo1_quarter:
-    description: "ETOPO1 1/4-degree global topography/bathymetry (ice surface)"
+    description: ETOPO1 1/4-degree global topography/bathymetry (ice surface)
     path: bathymetry/etopo_quarter.nc
-    url: "https://www.ncei.noaa.gov/data/oceans/etopo/etopo1/etopo1_ice/etopo1_ice_g_gmt4_025.grd.nc"
+    url: https://www.ncei.noaa.gov/data/oceans/etopo/etopo1/etopo1_ice/etopo1_ice_g_gmt4_025.grd.nc
     access: public
     sha256: pending
     size_mb: 750
     format: NetCDF4
-    variables: [z, latitude, longitude]
-    citation: "Amante & Eakins 2009, NOAA Tech. Memo. NESDIS NGDC-24"
-    license: "public domain (NOAA)"
-
+    variables:
+    - z
+    - latitude
+    - longitude
+    citation: Amante & Eakins 2009, NOAA Tech. Memo. NESDIS NGDC-24
+    license: public domain (NOAA)
   gebco_2023:
-    description: "GEBCO 2023 15-arc-second global bathymetry"
+    description: GEBCO 2023 15-arc-second global bathymetry
     path: bathymetry/GEBCO_2023.nc
-    url: "https://www.bodc.ac.uk/data/open_download/gebco/gebco_2023/zip/"
+    url: https://www.bodc.ac.uk/data/open_download/gebco/gebco_2023/zip/
     access: institutional
-    instructions: |
-      1. Visit https://www.gebco.net/data_and_products/gridded_bathymetry_data/
+    instructions: '1. Visit https://www.gebco.net/data_and_products/gridded_bathymetry_data/
+
       2. Download GEBCO_2023 Grid (NetCDF)
+
       3. Move to DATA_ROOT/bathymetry/GEBCO_2023.nc
+
+      '
     sha256: pending
     size_mb: 7800
     format: NetCDF4
-    variables: [elevation, lat, lon]
-    citation: "GEBCO Compilation Group 2023, doi:10.5285/f9833022hf493f12da5a84e5e6de4"
-    license: "CC-BY-4.0 (GEBCO)"
-    note: "Only needed for high-resolution (>=0.25°) global configurations"
-
-  # ===========================================================================
-  # Ocean Initialization: WOA18 Climatology
-  # ===========================================================================
+    variables:
+    - elevation
+    - lat
+    - lon
+    citation: GEBCO Compilation Group 2023, doi:10.5285/f9833022hf493f12da5a84e5e6de4
+    note: Only needed for high-resolution (>=0.25°) global configurations
+    license: CC-BY-4.0 (GEBCO)
   woa18_annual_t:
-    description: "WOA18 1-degree annual mean temperature"
+    description: WOA18 1-degree annual mean temperature
     path: woa18/woa18_decav_t00_01.nc
-    url: "https://www.ncei.noaa.gov/data/oceans/woa/WOA18/DATA/temperature/decav/1.00/woa18_decav_t00_01.nc"
+    url: https://www.ncei.noaa.gov/data/oceans/woa/WOA18/DATA/temperature/decav/1.00/woa18_decav_t00_01.nc
     access: public
     sha256: pending
     size_mb: 198
     format: NetCDF4
-    variables: [t_an, depth, lat, lon]
-    citation: "Locarnini et al. 2018, NOAA Atlas NESDIS 81"
-    license: "public domain (NOAA WOA18; cc0-style)"
-
+    variables:
+    - t_an
+    - depth
+    - lat
+    - lon
+    citation: Locarnini et al. 2018, NOAA Atlas NESDIS 81
+    license: public domain (NOAA WOA18; cc0-style)
   woa18_annual_s:
-    description: "WOA18 1-degree annual mean salinity"
+    description: WOA18 1-degree annual mean salinity
     path: woa18/woa18_decav_s00_01.nc
-    url: "https://www.ncei.noaa.gov/data/oceans/woa/WOA18/DATA/salinity/decav/1.00/woa18_decav_s00_01.nc"
+    url: https://www.ncei.noaa.gov/data/oceans/woa/WOA18/DATA/salinity/decav/1.00/woa18_decav_s00_01.nc
     access: public
     sha256: pending
     size_mb: 195
     format: NetCDF4
-    variables: [s_an, depth, lat, lon]
-    citation: "Zweng et al. 2018, NOAA Atlas NESDIS 82"
-    license: "public domain (NOAA WOA18; cc0-style)"
-
+    variables:
+    - s_an
+    - depth
+    - lat
+    - lon
+    citation: Zweng et al. 2018, NOAA Atlas NESDIS 82
+    license: public domain (NOAA WOA18; cc0-style)
   woa18_monthly_t:
-    description: "WOA18 1-degree monthly temperature (12 months)"
+    description: WOA18 1-degree monthly temperature (12 months)
     path: woa18/woa18_decav_t01_13.nc
-    url: "https://www.ncei.noaa.gov/data/oceans/woa/WOA18/DATA/temperature/decav/1.00/woa18_decav_t01_13.nc"
+    url: https://www.ncei.noaa.gov/data/oceans/woa/WOA18/DATA/temperature/decav/1.00/woa18_decav_t01_13.nc
     access: public
     sha256: pending
     size_mb: 2400
     format: NetCDF4
-    variables: [t_mn, depth, lat, lon, time]
-    citation: "Locarnini et al. 2018, NOAA Atlas NESDIS 81"
-    license: "public domain (NOAA WOA18; cc0-style)"
-
+    variables:
+    - t_mn
+    - depth
+    - lat
+    - lon
+    - time
+    citation: Locarnini et al. 2018, NOAA Atlas NESDIS 81
+    license: public domain (NOAA WOA18; cc0-style)
   woa18_monthly_s:
-    description: "WOA18 1-degree monthly salinity (12 months)"
+    description: WOA18 1-degree monthly salinity (12 months)
     path: woa18/woa18_decav_s01_13.nc
-    url: "https://www.ncei.noaa.gov/data/oceans/woa/WOA18/DATA/salinity/decav/1.00/woa18_decav_s01_13.nc"
+    url: https://www.ncei.noaa.gov/data/oceans/woa/WOA18/DATA/salinity/decav/1.00/woa18_decav_s01_13.nc
     access: public
     sha256: pending
     size_mb: 2300
     format: NetCDF4
-    variables: [s_mn, depth, lat, lon, time]
-    citation: "Zweng et al. 2018, NOAA Atlas NESDIS 82"
-    license: "public domain (NOAA WOA18; cc0-style)"
-
-  # ===========================================================================
-  # Surface Forcing: AMIP SST / Sea Ice
-  # ===========================================================================
+    variables:
+    - s_mn
+    - depth
+    - lat
+    - lon
+    - time
+    citation: Zweng et al. 2018, NOAA Atlas NESDIS 82
+    license: public domain (NOAA WOA18; cc0-style)
   hadisst_sst:
-    description: "HadISST monthly SST 1870-present"
+    description: HadISST monthly SST 1870-present
     path: forcing/hadisst_sst.nc
-    url: "https://www.metoffice.gov.uk/hadobs/hadisst/data/HadISST_sst.nc.gz"
+    url: https://www.metoffice.gov.uk/hadobs/hadisst/data/HadISST_sst.nc.gz
     access: public
     sha256: pending
     size_mb: 120
     format: NetCDF4
-    variables: [sst, latitude, longitude, time]
-    citation: "Rayner et al. 2003, J. Climate, doi:10.1175/1520-0442(2003)016<1501:GIDHAI>2.0.CO;2"
-    license: "open (Met Office Hadley Centre; free for research with citation)"
-    post_process: "gunzip and rename to hadisst_sst.nc"
-
+    variables:
+    - sst
+    - latitude
+    - longitude
+    - time
+    citation: Rayner et al. 2003, J. Climate, doi:10.1175/1520-0442(2003)016<1501:GIDHAI>2.0.CO;2
+    post_process: gunzip and rename to hadisst_sst.nc
+    license: open (Met Office Hadley Centre; free for research with citation)
   hadisst_sic:
-    description: "HadISST monthly sea ice concentration 1870-present"
+    description: HadISST monthly sea ice concentration 1870-present
     path: forcing/hadisst_sic.nc
-    url: "https://www.metoffice.gov.uk/hadobs/hadisst/data/HadISST_ice.nc.gz"
+    url: https://www.metoffice.gov.uk/hadobs/hadisst/data/HadISST_ice.nc.gz
     access: public
     sha256: pending
     size_mb: 50
     format: NetCDF4
-    variables: [seaice, latitude, longitude, time]
-    citation: "Rayner et al. 2003"
-    post_process: "gunzip and rename to hadisst_sic.nc"
-    description: "COBE SST monthly 1891-present (AMIP forcing)"
+    variables:
+    - seaice
+    - latitude
+    - longitude
+    - time
+    citation: Rayner et al. 2003
+    post_process: gunzip and rename to hadisst_sic.nc
+    license: open (Met Office Hadley Centre; free for research with citation)
+  cobe_sst:
+    description: COBE SST monthly 1891-present (AMIP forcing)
     path: forcing/cobe_sst.nc
-    url: "https://psl.noaa.gov/data/gridded/data/cobe.html"
+    url: https://psl.noaa.gov/data/gridded/data/cobe.html
     access: institutional
-    instructions: |
-      1. Visit https://psl.noaa.gov/data/gridded/data.cobe2.html
+    instructions: '1. Visit https://psl.noaa.gov/data/gridded/data.cobe2.html
+
       2. Download COBE2 SST data (NetCDF)
+
       3. Move to DATA_ROOT/forcing/cobe_sst.nc
+
+      '
     sha256: pending
     size_mb: 80
     format: NetCDF4
-    variables: [sst, lat, lon, time]
-
-    citation: "Hirahara et al. 2014, J. Oceanogr., doi:10.1007/s10872-014-0237-9 (COBE2)"
-    license: "public domain (JMA product, free redistribution)"
-  # ===========================================================================
-  # Surface Forcing: JRA55-do (OMIP)
-  # ===========================================================================
+    variables:
+    - sst
+    - lat
+    - lon
+    - time
+    citation: Hirahara et al. 2014, J. Oceanogr., doi:10.1007/s10872-014-0237-9 (COBE2)
+    license: public domain (JMA product; free redistribution)
   jra55_do_ryf:
-    description: "JRA55-do Repeat Year Forcing, pre-processed Zarr cache"
+    description: JRA55-do Repeat Year Forcing, pre-processed Zarr cache
     path: jra55_ryf_cache/jra55_do_v14_omip2_1deg_noleap.zarr/
     access: derived
-    build_from: [jra55_iaf_raw]
-    build_script: "scripts/prepare_omip_forcing.py"
-    build_instructions: |
-      1. Fetch raw JRA55-do IAF data (see jra55_iaf_raw)
+    build_from:
+    - jra55_iaf_raw
+    build_script: scripts/prepare_omip_forcing.py
+    build_instructions: '1. Fetch raw JRA55-do IAF data (see jra55_iaf_raw)
+
       2. Run: python scripts/prepare_omip_forcing.py --input-dir DATA_ROOT/jra55_iaf/ --output DATA_ROOT/jra55_ryf_cache/
+
       3. Alternatively, download pre-built RYF cache from institutional storage
+
+      '
     sha256: pending
     size_mb: 5000
     format: Zarr
-    variables: [uas, vas, tas, huss, psl, rsds, rlds, prra, prsn, friver]
-    citation: "Tsujino et al. 2018, doi:10.2208/prog.2018-006"
-    license: "open (JRA55-do; free for research, courtesy attribution to JMA/Tsugawa)"
-
+    variables:
+    - uas
+    - vas
+    - tas
+    - huss
+    - psl
+    - rsds
+    - rlds
+    - prra
+    - prsn
+    - friver
+    citation: Tsujino et al. 2018, doi:10.2208/prog.2018-006
+    license: open (JRA55-do; research use, courtesy attribution JMA)
   jra55_iaf_raw:
-    description: "JRA55-do IAF raw forcing data (60+ years, all variables at 3hr resolution)"
+    description: JRA55-do IAF raw forcing data (60+ years, all variables at 3hr resolution)
     path: jra55_iaf/
     access: globus
-    instructions: |
-      1. Register at https://esgf-node.llnl.gov/
+    instructions: '1. Register at https://esgf-node.llnl.gov/
+
       2. Use scripts/download_jra55_iaf.py to fetch per-variable per-year NetCDF files
+
       3. Files will be stored under DATA_ROOT/jra55_iaf/atmos/ and DATA_ROOT/jra55_iaf/land/
+
       4. Run scripts/prepare_omip_forcing.py to build the Zarr cache (see jra55_do_ryf)
+
+      '
     sha256: pending
     size_mb: 50000
     format: NetCDF4
-    variables: [uas, vas, tas, huss, psl, rsds, rlds, prra, prsn, friver]
-    citation: "Tsujino et al. 2018"
-    license: "open (JRA55; JMA terms - research use)"
-
-  # ===========================================================================
-  # Surface Forcing: CORE-II Normal Year (OMIP-1)
-  # ===========================================================================
+    variables:
+    - uas
+    - vas
+    - tas
+    - huss
+    - psl
+    - rsds
+    - rlds
+    - prra
+    - prsn
+    - friver
+    citation: Tsujino et al. 2018
+    license: open (JRA55; JMA terms - research use)
   core2_nyf:
-    description: "CORE-II Normal Year Forcing (Large & Yeager 2009), pre-processed Zarr"
+    description: CORE-II Normal Year Forcing (Large & Yeager 2009), pre-processed Zarr
     path: core2_nyf/nyf.zarr/
     access: institutional
-    instructions: |
-      1. Register at https://www.earthsystemgrid.org/dataset/ucar.cgd.artmip.core2.html
-      2. Download CORE-II NYF data (7 variables, daily climatological year)
-      3. Convert to Zarr with the same schema as legoESM's OceanForcing:
-         lon, lat, time_s, u10, v10, T_air, q_air, sw_down, lw_down, precip, runoff
-      4. Store as DATA_ROOT/core2_nyf/nyf.zarr/
+    instructions: "1. Register at https://www.earthsystemgrid.org/dataset/ucar.cgd.artmip.core2.html\n\
+      2. Download CORE-II NYF data (7 variables, daily climatological year)\n3. Convert to Zarr with the\
+      \ same schema as legoESM's OceanForcing:\n   lon, lat, time_s, u10, v10, T_air, q_air, sw_down,\
+      \ lw_down, precip, runoff\n4. Store as DATA_ROOT/core2_nyf/nyf.zarr/\n"
     sha256: pending
     size_mb: 2000
     format: Zarr
-    variables: [u10, v10, T_air, q_air, sw_down, lw_down, precip, runoff]
-    citation: "Large & Yeager 2009, Climate Dynamics 33, 341-364"
-    license: "open (CORE-II forcing; research use with citation)"
-
-  # ===========================================================================
-  # Ocean Grids: Tripolar
-  # ===========================================================================
+    variables:
+    - u10
+    - v10
+    - T_air
+    - q_air
+    - sw_down
+    - lw_down
+    - precip
+    - runoff
+    citation: Large & Yeager 2009, Climate Dynamics 33, 341-364
+    license: open (CORE-II forcing; research use with citation)
   eorca1_mesh:
-    description: "eORCA1.2 tripolar mesh mask (NEMO format, 1° resolution)"
+    description: eORCA1.2 tripolar mesh mask (NEMO format, 1° resolution)
     path: grids/eORCA1.2_mesh_mask.nc
-    url: "https://zenodo.org/records/4436658/files/eORCA1.2_mesh_mask.nc"
+    url: https://zenodo.org/records/4436658/files/eORCA1.2_mesh_mask.nc
     access: public
     sha256: pending
     size_mb: 484
     format: NetCDF4
-    variables: [glamt, gphit, glamu, gphiu, glamv, gphiv, tmask, umask, vmask, e1t, e2t, e1u, e2u, e1v, e2v]
-    citation: "Vancoppenolle et al. 2023, doi:10.5285/f9833022hf493f12da5a84e5e6de4"
-    note: "Downloaded automatically by legoESM if not present; also downloadable via scripts/download_grids.sh"
-    description: "eORCA025 tripolar mesh mask (1/4° resolution)"
+    variables:
+    - glamt
+    - gphit
+    - glamu
+    - gphiu
+    - glamv
+    - gphiv
+    - tmask
+    - umask
+    - vmask
+    - e1t
+    - e2t
+    - e1u
+    - e2u
+    - e1v
+    - e2v
+    citation: Vancoppenolle et al. 2023, doi:10.5285/f9833022hf493f12da5a84e5e6de4
+    note: Downloaded automatically by legoESM if not present; also downloadable via scripts/download_grids.sh
+    license: open (NEMO consortium grid; CC-BY style)
+  eorca025_mesh:
+    description: eORCA025 tripolar mesh mask (1/4° resolution)
     path: grids/eORCA025_mesh_mask.nc
-    url: "https://zenodo.org/records/4436658/files/eORCA025_mesh_mask.nc"
+    url: https://zenodo.org/records/4436658/files/eORCA025_mesh_mask.nc
     access: public
     sha256: pending
     size_mb: 7200
     format: NetCDF4
-    variables: [glamt, gphit, e1t, e2t, tmask, nav_lon, nav_lat, gdept_0]
-    citation: "Broddeau et al. eORCA025 grid; doi:10.5285/44d99c1e-9c70-2e58-e053-6c86c07c5d49"
-    license: "CC-BY-4.0 (NEMO consortium grid)"
-    note: "Large file (~7 GB). Only needed for 1/4° global ocean runs."
-
-  # ===========================================================================
-  # Initial Conditions: NEMO WOCE/EN4 on eORCA1
-  # ===========================================================================
+    variables:
+    - glamt
+    - gphit
+    - e1t
+    - e2t
+    - tmask
+    - nav_lon
+    - nav_lat
+    - gdept_0
+    note: Large file (~7 GB). Only needed for 1/4° global ocean runs.
+    citation: Broddeau et al. eORCA025 grid; doi:10.5285/44d99c1e-9c70-2e58-e053-6c86c07c5d49
+    license: CC-BY-4.0 (NEMO consortium grid)
   woce_ic_t:
-    description: "WOCE/EN4 v4.2 temperature on eORCA1 grid (NEMO ICs)"
+    description: WOCE/EN4 v4.2 temperature on eORCA1 grid (NEMO ICs)
     path: ic/woce_temp_monthly_init_4p2.nc
     access: institutional
-    instructions: |
-      Copy from NEMO ORCA1 INPUTS directory or download from Zenodo:
+    instructions: 'Copy from NEMO ORCA1 INPUTS directory or download from Zenodo:
+
       https://doi.org/10.5281/zenodo.14041098
+
       Place at DATA_ROOT/ic/woce_temp_monthly_init_4p2.nc
+
+      '
     size_mb: 834
     format: NetCDF4
-    variables: [contemp, nav_lat, nav_lev, nav_lon]
-    citation: "Gouretski 2019 / WAGHC (WOCE/EN4 v4.2)"
-    license: "open (WOCE/CCHDO)"
-
+    variables:
+    - contemp
+    - nav_lat
+    - nav_lev
+    - nav_lon
+    citation: Gouretski 2019 / WAGHC (WOCE/EN4 v4.2)
+    license: open (WOCE/CCHDO)
   woce_ic_s:
-    description: "WOCE/EN4 v4.2 salinity on eORCA1 grid (NEMO ICs)"
+    description: WOCE/EN4 v4.2 salinity on eORCA1 grid (NEMO ICs)
     path: ic/woce_salt_monthly_init_4p2.nc
     access: institutional
-    instructions: |
-      Copy from NEMO ORCA1 INPUTS directory or download from Zenodo:
+    instructions: 'Copy from NEMO ORCA1 INPUTS directory or download from Zenodo:
+
       https://doi.org/10.5281/zenodo.14041098
+
       Place at DATA_ROOT/ic/woce_salt_monthly_init_4p2.nc
+
+      '
     size_mb: 833
     format: NetCDF4
-    variables: [presalt, nav_lat, nav_lev, nav_lon]
-    citation: "Gouretski 2019 / WAGHC (WOCE/EN4 v4.2)"
-    license: "open (WOCE/CCHDO)"
-
-  # ===========================================================================
-  # SSS Restoring
-  # ===========================================================================
+    variables:
+    - presalt
+    - nav_lat
+    - nav_lev
+    - nav_lon
+    citation: Gouretski 2019 / WAGHC (WOCE/EN4 v4.2)
+    license: open (WOCE/CCHDO)
   sss_climatology:
-    description: "SSS climatology for restoring (WOCE/EN4 on eORCA1 grid)"
+    description: SSS climatology for restoring (WOCE/EN4 on eORCA1 grid)
     path: sss/sss_climatology_for_restoring.nc
     access: institutional
-    instructions: |
-      Copy from NEMO ORCA1 INPUTS directory or download from Zenodo:
+    instructions: 'Copy from NEMO ORCA1 INPUTS directory or download from Zenodo:
+
       https://doi.org/10.5281/zenodo.14041098
+
       Place at DATA_ROOT/sss/sss_climatology_for_restoring.nc
+
+      '
     size_mb: 13
     format: NetCDF4
-    variables: [presalt, nav_lat, nav_lon]
-    citation: "NEMO ORCA1 reference configuration"
-    license: "open (WOA-derived)"
-
-  # ===========================================================================
-  # NEMO ORCA1 faithful card: NEMO INPUTS, ice IC, references
-  # (template global_ocean/omip_faithful_card; README in the run notes)
-  # ===========================================================================
+    variables:
+    - presalt
+    - nav_lat
+    - nav_lon
+    citation: NEMO ORCA1 reference configuration
+    license: open (WOA-derived)
   nemo_domain_cfg:
-    description: "NEMO ORCA1 domain_cfg.nc: grid geometry, partial cells (e3t/e3u/e3v_0), bottom_level — source of the --nemo-vertical 75-level column and runoff cell areas"
+    description: 'NEMO ORCA1 domain_cfg.nc: grid geometry, partial cells (e3t/e3u/e3v_0), bottom_level
+      — source of the --nemo-vertical 75-level column and runoff cell areas'
     path: input_fields/domain_cfg.nc
     access: institutional
-    instructions: |
-      Copy from the NEMO ORCA1 data repository (local checkout
+    instructions: 'Copy from the NEMO ORCA1 data repository (local checkout
+
       ~/data/models/orca1_data_repository/input_fields/domain_cfg.nc) or
+
       ahead from the ORCA1 deploy: https://doi.org/10.5281/zenodo.14041098
+
       Place at DATA_ROOT/input_fields/domain_cfg.nc
+
+      '
     size_mb: 520
     format: NetCDF4
-    citation: "de Lavergne et al. 2024, JAMES doi:10.1029/2024MS004824 (ORCA1 config)"
-    license: "open (NEMO consortium grid; CC-BY style)"
-
+    citation: de Lavergne et al. 2024, JAMES doi:10.1029/2024MS004824 (ORCA1 config)
+    license: open (NEMO consortium grid; CC-BY style)
   zdfiwm_forcing_TRA:
-    description: "de Lavergne et al. 2020 improved internal-wave/tidal mixing power fields (4 sources) on eORCA1 — --iwm input"
+    description: de Lavergne et al. 2020 improved internal-wave/tidal mixing power fields (4 sources)
+      on eORCA1 — --iwm input
     path: input_fields/zdfiwm_forcing_TRA.nc
     access: institutional
-    instructions: |
-      Copy from the NEMO ORCA1 data repository
+    instructions: 'Copy from the NEMO ORCA1 data repository
+
       (input_fields/zdfiwm_forcing_TRA.nc). Place at
+
       DATA_ROOT/input_fields/zdfiwm_forcing_TRA.nc
+
+      '
     size_mb: 40
     format: NetCDF4
-    citation: "de Lavergne et al. 2020, JPO doi:10.1175/JPO-D-19-0243.1"
-    license: "open (author-provided dataset; research use with citation)"
-
+    citation: de Lavergne et al. 2020, JPO doi:10.1175/JPO-D-19-0243.1
+    license: open (author-provided dataset; research use with citation)
   runoff_icb_daitrenberth_depoorter:
-    description: "NEMO ORCA1 runoff-icb Dai-Trenberth-Depoorter eORCA1 runoff file (sorunoff/sornfisf/Icb_flux) — --runoff (patch 004 --runoff-file) and --isf source"
+    description: NEMO ORCA1 runoff-icb Dai-Trenberth-Depoorter eORCA1 runoff file (sorunoff/sornfisf/Icb_flux)
+      — --runoff (patch 004 --runoff-file) and --isf source
     path: input_fields/runoff-icb_DaiTrenberth_Depoorter.nc
     access: institutional
-    instructions: |
-      Copy from the NEMO ORCA1 data repository
+    instructions: 'Copy from the NEMO ORCA1 data repository
+
       (input_fields/runoff-icb_DaiTrenberth_Depoorter.nc). Place at
+
       DATA_ROOT/input_fields/runoff-icb_DaiTrenberth_Depoorter.nc
+
+      '
     size_mb: 30
     format: NetCDF4
-    citation: "Dai & Trenberth 2002/2009; Depoorter et al. 2013 (icebergs)"
-    license: "open (Dai & Trenberth / Depoorter datasets; research use)"
-
+    citation: Dai & Trenberth 2002/2009; Depoorter et al. 2013 (icebergs)
+    license: open (Dai & Trenberth / Depoorter datasets; research use)
   chl_biomer_reg05:
-    description: "Monthly ESACCI/BIOMER chlorophyll climatology on a 0.5° regular grid — --sw-rgb-chl input (NEMO ln_qsr_rgb/nn_chldta=1)"
+    description: Monthly ESACCI/BIOMER chlorophyll climatology on a 0.5° regular grid — --sw-rgb-chl input
+      (NEMO ln_qsr_rgb/nn_chldta=1)
     path: input_fields/merged_ESACCI_BIOMER4V1R1_CHL_REG05.nc
     access: institutional
-    instructions: |
-      Copy from the NEMO ORCA1 data repository
+    instructions: 'Copy from the NEMO ORCA1 data repository
+
       (input_fields/merged_ESACCI_BIOMER4V1R1_CHL_REG05.nc). Place at
+
       DATA_ROOT/input_fields/merged_ESACCI_BIOMER4V1R1_CHL_REG05.nc
+
+      '
     size_mb: 20
     format: NetCDF4
-    citation: "ESA CCI Ocean Colour; BiOMER4 v1.1 (NEMO ORCA1 INPUTS)"
-    license: "open (BIOMER; research use with citation)"
-
+    citation: ESA CCI Ocean Colour; BiOMER4 v1.1 (NEMO ORCA1 INPUTS)
+    license: open (BIOMER; research use with citation)
   ice_init_nemo:
-    description: "NEMO SI3 Ice_initialization.nc cold start on eORCA1 — --ice-init for --prognostic-sea-ice"
+    description: NEMO SI3 Ice_initialization.nc cold start on eORCA1 — --ice-init for --prognostic-sea-ice
     path: ice/Ice_initialization.nc
     access: institutional
-    instructions: |
-      From the ORCA1 repository (github.com/alexis-barge/ORCA1, deploy.sh
+    instructions: 'From the ORCA1 repository (github.com/alexis-barge/ORCA1, deploy.sh
+
       fetch) or the campaign NEMOIN staging on bigfoot. Place at
+
       DATA_ROOT/ice/Ice_initialization.nc
+
+      '
     size_mb: 30
     format: NetCDF4
-    citation: "NEMO ORCA1 reference configuration"
-    license: "open (NEMO SI3 reference fields)"
-
+    citation: NEMO ORCA1 reference configuration
+    license: open (NEMO SI3 reference fields)
   woa57_annual_t:
-    description: "WOA/WAGHC (Gouretski) annual temperature on eORCA1 — --woa-t for --woa-init"
+    description: WOA/WAGHC (Gouretski) annual temperature on eORCA1 — --woa-t for --woa-init
     path: woa/woce_t_woa57_annual.nc
     access: institutional
-    instructions: |
-      From the campaign staging (bigfoot data/woce_gouretski/) or rebuild
+    instructions: 'From the campaign staging (bigfoot data/woce_gouretski/) or rebuild
+
       from the public WOA/WAGHC annual. Place at
+
       DATA_ROOT/woa/woce_t_woa57_annual.nc
+
+      '
     size_mb: 80
     format: NetCDF4
-    citation: "Gouretski 2019, WAGHC v1 (WOA57)"
-    license: "public domain (NOAA WOA57)"
-
+    citation: Gouretski 2019, WAGHC v1 (WOA57)
+    license: public domain (NOAA WOA57)
   woa57_annual_s:
-    description: "WOA/WAGHC (Gouretski) annual salinity on eORCA1 — --woa-s for --woa-init"
+    description: WOA/WAGHC (Gouretski) annual salinity on eORCA1 — --woa-s for --woa-init
     path: woa/woce_s_woa57_annual.nc
     access: institutional
-    instructions: |
-      From the campaign staging (bigfoot data/woce_gouretski/) or rebuild
+    instructions: 'From the campaign staging (bigfoot data/woce_gouretski/) or rebuild
+
       from the public WOA/WAGHC annual. Place at
+
       DATA_ROOT/woa/woce_s_woa57_annual.nc
+
+      '
     size_mb: 80
     format: NetCDF4
-    citation: "Gouretski 2019, WAGHC v1 (WOA57)"
-    license: "public domain (NOAA WOA57)"
-
+    citation: Gouretski 2019, WAGHC v1 (WOA57)
+    license: public domain (NOAA WOA57)
   nemo_run_ref_icemod:
-    description: "NEMO ORCA1 RUN_REF annual mean siconc (SI3) on eORCA1 — --siconc-file override for the SSS-restoring ice gate under the faithful card"
+    description: NEMO ORCA1 RUN_REF annual mean siconc (SI3) on eORCA1 — --siconc-file override for the
+      SSS-restoring ice gate under the faithful card
     path: ref/ORCA1_1y_20000101_20041231_icemod.nc
     access: institutional
-    instructions: |
-      From the ORCA1 5-yr RUN_REF output on the campaign staging (bigfoot,
+    instructions: 'From the ORCA1 5-yr RUN_REF output on the campaign staging (bigfoot,
+
       EXP00/RUN_REF/ORCA1_1y_20000101_20041231_icemod.nc). Place at
+
       DATA_ROOT/ref/ORCA1_1y_20000101_20041231_icemod.nc
+
+      '
     size_mb: 120
     format: NetCDF4
-    citation: "NEMO ORCA1 RUN_REF (de Lavergne et al. 2024 config)"
-    license: "open (NEMO reference run output; research use)"
-
-  # ===========================================================================
-  # Radiation: RRTMGP Optics
-  # ===========================================================================
+    citation: NEMO ORCA1 RUN_REF (de Lavergne et al. 2024 config)
+    license: open (NEMO reference run output; research use)
   rrtmgp_gas_lw:
-    description: "RRTMGP longwave gas optics coefficients"
+    description: RRTMGP longwave gas optics coefficients
     path: rrtmgp/rrtmgp-gas-lw-g128.nc
-    url: "https://github.com/earth-system-radiation/rrtmgp-data/releases/download/v1.7.1/rrtmgp-gas-lw-g128.nc"
+    url: https://github.com/earth-system-radiation/rrtmgp-data/releases/download/v1.7.1/rrtmgp-gas-lw-g128.nc
     access: public
     sha256: pending
     size_mb: 150
     format: NetCDF4
-    citation: "Pincus et al. 2019, JAMES, doi:10.1029/2019MS001725"
-    license: "CC-BY-4.0 (RRTMGP data release)"
-
+    citation: Pincus et al. 2019, JAMES, doi:10.1029/2019MS001725
+    license: CC-BY-4.0 (RRTMGP data release)
   rrtmgp_gas_sw:
-    description: "RRTMGP shortwave gas optics coefficients"
+    description: RRTMGP shortwave gas optics coefficients
     path: rrtmgp/rrtmgp-gas-sw-g112.nc
-    url: "https://github.com/earth-system-radiation/rrtmgp-data/releases/download/v1.7.1/rrtmgp-gas-sw-g112.nc"
+    url: https://github.com/earth-system-radiation/rrtmgp-data/releases/download/v1.7.1/rrtmgp-gas-sw-g112.nc
     access: public
     sha256: pending
     size_mb: 120
     format: NetCDF4
-    citation: "Pincus et al. 2019"
-    description: "RRTMGP longwave cloud optics coefficients"
+    citation: Pincus et al. 2019
+    license: CC-BY-4.0 (RRTMGP data release)
+  rrtmgp_cloud_lw:
+    description: RRTMGP longwave cloud optics coefficients
     path: rrtmgp/rrtmgp-cloud-lw.nc
-    url: "https://github.com/earth-system-radiation/rrtmgp-data/releases/download/v1.7.1/rrtmgp-cloud-lw.nc"
+    url: https://github.com/earth-system-radiation/rrtmgp-data/releases/download/v1.7.1/rrtmgp-cloud-lw.nc
     access: public
     sha256: pending
     size_mb: 70
     format: NetCDF4
-
-    citation: "Pincus et al., RRTMGP data v1.7.1, github.com/earth-system-radiation/rrtmgp-data"
-    description: "RRTMGP shortwave cloud optics coefficients"
+    citation: Pincus et al., RRTMGP data v1.7.1, github.com/earth-system-radiation/rrtmgp-data
+    license: CC-BY-4.0 (RRTMGP data release)
+  rrtmgp_cloud_sw:
+    description: RRTMGP shortwave cloud optics coefficients
     path: rrtmgp/rrtmgp-cloud-sw.nc
-    url: "https://github.com/earth-system-radiation/rrtmgp-data/releases/download/v1.7.1/rrtmgp-cloud-sw.nc"
+    url: https://github.com/earth-system-radiation/rrtmgp-data/releases/download/v1.7.1/rrtmgp-cloud-sw.nc
     access: public
     sha256: pending
     size_mb: 50
     format: NetCDF4
-
-    citation: "Pincus et al., RRTMGP data v1.7.1, github.com/earth-system-radiation/rrtmgp-data"
-    license: "CC-BY-4.0 (RRTMGP data release)"
-  # ===========================================================================
-  # CMIP6 Forcing: GHG, Ozone, Aerosol, Solar
-    description: "CMIP6 historical + SSP greenhouse gas concentrations (CO2, CH4, N2O)"
+    citation: Pincus et al., RRTMGP data v1.7.1, github.com/earth-system-radiation/rrtmgp-data
+    license: CC-BY-4.0 (RRTMGP data release)
+  cmip6_ghg:
+    description: CMIP6 historical + SSP greenhouse gas concentrations (CO2, CH4, N2O)
     path: forcing/cmip6_ghg.nc
-    url: "https://github.com/gentine/legoESM/raw/main/data/cmip6_ghg.nc"
+    url: https://github.com/gentine/legoESM/raw/main/data/cmip6_ghg.nc
     access: public
     sha256: pending
     size_mb: 5
     format: NetCDF4
-    variables: [co2, ch4, n2o, time]
-    citation: "Meinshausen et al. 2017, GMD, doi:10.5194/gmd-10-2057-2017 (input4MIPs)"
-    license: "open (input4MIPs / CC-BY-4.0 style)"
-    note: "Bundled with legoESM; also available from input4MIPs"
-    description: "CMIP6 ozone forcing (monthly zonal mean)"
+    variables:
+    - co2
+    - ch4
+    - n2o
+    - time
+    note: Bundled with legoESM; also available from input4MIPs
+    citation: Meinshausen et al. 2017, GMD, doi:10.5194/gmd-10-2057-2017 (input4MIPs)
+    license: open (input4MIPs; CC-BY-4.0 style)
+  cmip6_ozone:
+    description: CMIP6 ozone forcing (monthly zonal mean)
     path: forcing/cmip6_ozone.nc
-    url: "https://github.com/gentine/legoESM/raw/main/data/cmip6_ozone.nc"
+    url: https://github.com/gentine/legoESM/raw/main/data/cmip6_ozone.nc
     access: public
     sha256: pending
     size_mb: 20
     format: NetCDF4
-    citation: "Checa-Garcia et al. 2018 (input4MIPs ozone); via legoESM bundle"
-    license: "open (input4MIPs)"
-    note: "Bundled with legoESM; also from input4MIPs"
-    description: "CMIP6 aerosol forcing (optical properties)"
+    note: Bundled with legoESM; also from input4MIPs
+    citation: Checa-Garcia et al. 2018 (input4MIPs ozone); via legoESM bundle
+    license: open (input4MIPs)
+  cmip6_aerosol:
+    description: CMIP6 aerosol forcing (optical properties)
     path: forcing/cmip6_aerosol.nc
     access: institutional
-    instructions: |
-      1. Download from https://esgf-node.llnl.gov/search/input4mips/
+    instructions: '1. Download from https://esgf-node.llnl.gov/search/input4mips/
+
       2. Move to DATA_ROOT/forcing/cmip6_aerosol.nc
+
+      '
     sha256: pending
     size_mb: 30
     format: NetCDF4
-
-    citation: "input4MIPs aerosol optical properties; via ESGF"
-    description: "CMIP6 solar irradiance forcing (daily spectral)"
+    citation: input4MIPs aerosol optical properties; via ESGF
+    license: open (input4MIPs; ESGF user agreement)
+  cmip6_solar:
+    description: CMIP6 solar irradiance forcing (daily spectral)
     path: forcing/cmip6_solar.nc
-    url: "https://github.com/gentine/legoESM/raw/main/data/cmip6_solar.nc"
+    url: https://github.com/gentine/legoESM/raw/main/data/cmip6_solar.nc
     access: public
     sha256: pending
     size_mb: 1
     format: NetCDF4
-    citation: "Matthes et al. 2017, GMD (solar forcing); via legoESM bundle"
-    license: "open (input4MIPs)"
-    note: "Bundled with legoESM; also from input4MIPs"
-
-  # ===========================================================================
-  # Topography (for atmosphere)
-    description: "ETOPO1 1-degree topography for atmosphere surface elevation"
+    note: Bundled with legoESM; also from input4MIPs
+    citation: Matthes et al. 2017, GMD (solar forcing); via legoESM bundle
+    license: open (input4MIPs)
+  etopo_topo_1deg:
+    description: ETOPO1 1-degree topography for atmosphere surface elevation
     path: topography/etopo_topo_1deg.nc
-    url: "https://www.ncei.noaa.gov/data/oceans/etopo/etopo1/etopo1_ice/etopo1_ice_g_gmt4.grd.nc"
+    url: https://www.ncei.noaa.gov/data/oceans/etopo/etopo1/etopo1_ice/etopo1_ice_g_gmt4.grd.nc
     access: public
     sha256: pending
     size_mb: 48
     format: NetCDF4
-    citation: "Amante & Eakins 2009, NOAA Tech. Memo. NESDIS NGDC-24"
-    license: "public domain (NOAA)"
-    note: "Same source as etopo1_1deg; can be symlinked"
-
-  # ===========================================================================
-  # Initial Conditions: ERA5 (for AMIP)
-    description: "ERA5 monthly reanalysis (for AMIP initial conditions and validation)"
+    note: Same source as etopo1_1deg; can be symlinked
+    citation: Amante & Eakins 2009, NOAA Tech. Memo. NESDIS NGDC-24
+    license: public domain (NOAA)
+  era5_monthly:
+    description: ERA5 monthly reanalysis (for AMIP initial conditions and validation)
     path: forcing/era5_monthly/
     access: institutional
-    instructions: |
-      1. Register at https://cds.climate.copernicus.eu/
+    instructions: '1. Register at https://cds.climate.copernicus.eu/
+
       2. Use CDS API to download ERA5 monthly fields
+
       3. Store under DATA_ROOT/forcing/era5_monthly/
+
       4. Alternatively, use analytical initial conditions (no data needed)
+
+      '
     sha256: pending
     size_mb: 5000
     format: NetCDF/Zarr
-    variables: [t, u, v, q, z, sp]
-    citation: "Hersbach et al. 2020, GRL, doi:10.1029/2019GL084696 (ERA5)"
-    license: "Copernicus license (free with attribution; CDS registration)"
-    note: "Only needed for realistic atmosphere IC; analytical IC available without data"
-
-  # ===========================================================================
-  # Validation / Diagnostics: Observational
-    description: "ERA5 SST climatology for validation"
+    variables:
+    - t
+    - u
+    - v
+    - q
+    - z
+    - sp
+    note: Only needed for realistic atmosphere IC; analytical IC available without data
+    citation: Hersbach et al. 2020, GRL, doi:10.1029/2019GL084696 (ERA5)
+    license: Copernicus license (free with attribution; CDS registration)
+  era5_sst_climatology:
+    description: ERA5 SST climatology for validation
     path: validation/era5_sst_climatology.nc
     access: institutional
-    instructions: "Download from CDS; optional for validation"
+    instructions: Download from CDS; optional for validation
     size_mb: 50
     format: NetCDF4
-
-    citation: "Hersbach et al. 2020, GRL, doi:10.1029/2019GL084696 (ERA5)"
-    description: "WOCE hydrographic sections for ocean validation"
+    citation: Hersbach et al. 2020, GRL, doi:10.1029/2019GL084696 (ERA5)
+    license: Copernicus license (free with attribution; CDS registration)
+  woce_hydrographic:
+    description: WOCE hydrographic sections for ocean validation
     path: validation/woce/
     access: public
-    url: "https://cchdo.ucsd.edu/"
+    url: https://cchdo.ucsd.edu/
     size_mb: 200
     format: NetCDF
-    citation: "WOCE Hydrographic Programme sections; CCHDO archive"
-    license: "open (CCHDO; CC-BY style)"
-    note: "Optional; for advanced ocean validation only"
+    note: Optional; for advanced ocean validation only
+    citation: WOCE Hydrographic Programme sections; CCHDO archive
+    license: open (CCHDO; CC-BY style)
