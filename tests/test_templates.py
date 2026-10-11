@@ -148,6 +148,60 @@ class TestRunner:
             load_template("nonexistent/template")
 
 
+class TestDinoSchemeForwarding:
+    """DINO scheme flags forward only overrides, so recipe cards stand.
+
+    Regression lane for the 2026-10-11 P-A receipt (ige-calcul1): the
+    runner used to forward template-default scheme flags, silently
+    clobbering the ``ocean.recipe`` card run_dino.py applies first.
+    """
+
+    def test_table_defaults_match_template(self):
+        from runners.run_experiment import _DINO_SCHEME_FLAGS
+        template = yaml.safe_load(
+            (TEMPLATES_DIR / "3d_idealized" / "dino.yaml").read_text())
+        for key, _flag, _choices, default in _DINO_SCHEME_FLAGS:
+            assert template["ocean"][key] == default, (
+                f"_DINO_SCHEME_FLAGS default for {key!r} drifted from the "
+                f"dino template")
+
+    def test_template_defaults_not_forwarded(self):
+        from runners.run_experiment import _DINO_SCHEME_FLAGS, _dino_scheme_flags
+        ocean = {key: default for key, _f, _c, default in _DINO_SCHEME_FLAGS}
+        assert _dino_scheme_flags(ocean) == []
+
+    def test_explicit_override_forwarded(self):
+        from runners.run_experiment import _dino_scheme_flags
+        assert _dino_scheme_flags({"eos": "nemo_seos"}) == ["--eos", "nemo_seos"]
+
+    def test_all_overrides_forwarded(self):
+        from runners.run_experiment import _dino_scheme_flags
+        flags = _dino_scheme_flags({
+            "vmix": "tke",
+            "eos": "nemo_seos",
+            "gm_kappa_scheme": "treguier",
+            "bottom_drag_scheme": "nemo_quadratic",
+        })
+        assert flags == [
+            "--vmix", "tke", "--eos", "nemo_seos",
+            "--gm-kappa-scheme", "treguier",
+            "--bottom-drag-scheme", "nemo_quadratic",
+        ]
+
+    def test_invalid_choice_raises(self):
+        from runners.run_experiment import _dino_scheme_flags
+        with pytest.raises(ValueError):
+            _dino_scheme_flags({"vmix": "bogus"})
+
+    def test_recipe_card_survives_template_defaults(self):
+        # Full dino-template ocean section + a recipe card must yield no
+        # scheme flags — the exact P-A failure shape.
+        from runners.run_experiment import _dino_scheme_flags, load_template
+        config = load_template("3d_idealized/dino")
+        config["ocean"]["recipe"] = "nemo_dino_kamm_mlf"
+        assert _dino_scheme_flags(config["ocean"]) == []
+
+
 class TestRunScriptGeneration:
     """Test scheduler-directive generation in run.sh (#SBATCH / #OAR)."""
 

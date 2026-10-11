@@ -939,6 +939,39 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
         raise RuntimeError(f"run_omip_core2.py exited with code {result.returncode}")
 
 
+# DINO scheme selections: (template key, upstream flag, valid choices,
+# dino-template default). A flag is forwarded only when the resolved
+# config differs from the template default — the same semantics as the
+# --dt guard (defaults are no-ops: run_dino.py applies the DINOConfig
+# paper values itself). This keeps ocean.recipe cards authoritative:
+# template-default scheme values are never forwarded after a recipe, so
+# the card's selections stand unless an experiment explicitly overrides
+# a field (2026-10-11 P-A receipt: template defaults silently
+# un-certified the nemo_dino_kamm_mlf card on ige-calcul1).
+_DINO_SCHEME_FLAGS = (
+    ("vmix", "--vmix", ("kpp", "tke", "constant", "richardson", "catke"), "kpp"),
+    ("eos", "--eos", ("wright", "nemo_seos"), "wright"),
+    ("gm_kappa_scheme", "--gm-kappa-scheme", ("visbeck", "treguier"), "visbeck"),
+    ("bottom_drag_scheme", "--bottom-drag-scheme",
+     ("legacy", "nemo_quadratic", "nemo_loglayer"), "legacy"),
+)
+
+
+def _dino_scheme_flags(ocean_cfg: dict) -> list[str]:
+    """Build DINO scheme-selection CLI flags, forwarding only overrides."""
+    flags: list[str] = []
+    for key, flag, choices, default in _DINO_SCHEME_FLAGS:
+        val = ocean_cfg.get(key)
+        if val is None or val == default:
+            continue
+        if choices and val not in choices:
+            raise ValueError(
+                f"ocean.{key}={val!r} is not a valid {flag} choice "
+                f"({choices})")
+        flags.extend([flag, str(val)])
+    return flags
+
+
 def _run_dino(config: dict, legoesm_path: Path, config_path: Path | None = None):
     """Run a DINO experiment via script delegation to scripts/run/run_dino.py.
 
@@ -949,7 +982,9 @@ def _run_dino(config: dict, legoesm_path: Path, config_path: Path | None = None)
     legitimately overrides — resolution, duration, output cadence, scheme
     selections, and the patch-006 lanes (SPMD devices, restart, seed,
     timing). Unknown physics is NOT interpreted here; use ``run.extra_args``
-    for verbatim upstream flags (recipe cards etc.).
+    for verbatim upstream flags. ``ocean.recipe`` selects an upstream
+    recipe card; scheme flags are forwarded only when overridden, so the
+    card stands (see ``_DINO_SCHEME_FLAGS``).
     """
     import subprocess
 
@@ -993,24 +1028,9 @@ def _run_dino(config: dict, legoesm_path: Path, config_path: Path | None = None)
     if dt is not None and dt != 2700:
         cmd.extend(["--dt", str(dt)])
 
-    # Scheme selections (1:1 upstream flags; DINOConfig defaults are the
-    # paper values, so absent keys forward nothing).
-    _DINO_SCHEME_FLAGS = (
-        # (template key, upstream flag, valid choices or None)
-        ("vmix", "--vmix", ("kpp", "tke", "constant", "richardson", "catke")),
-        ("eos", "--eos", ("wright", "nemo_seos")),
-        ("gm_kappa_scheme", "--gm-kappa-scheme", ("visbeck", "treguier")),
-        ("bottom_drag_scheme", "--bottom-drag-scheme",
-         ("legacy", "nemo_quadratic", "nemo_loglayer")),
-    )
-    for key, flag, choices in _DINO_SCHEME_FLAGS:
-        val = ocean_cfg.get(key)
-        if val is not None:
-            if choices and val not in choices:
-                raise ValueError(
-                    f"ocean.{key}={val!r} is not a valid {flag} choice "
-                    f"({choices})")
-            cmd.extend([flag, str(val)])
+    # Scheme selections: forwarded only when the template default was
+    # overridden, so ocean.recipe cards stand (see _DINO_SCHEME_FLAGS).
+    cmd.extend(_dino_scheme_flags(ocean_cfg))
 
     recipe = ocean_cfg.get("recipe")
     if recipe:

@@ -26,15 +26,17 @@ Template → CLI mapping:
 | `time.duration_days` | `--days` (+`--allow-multiyear` > 365) | upstream caps at 1 yr locally |
 | `time.dt_seconds` | `--dt` | default 2700 forwarded only if changed |
 | `output.snapshot_every_days` | `--snapshot-every-days` | |
-| `ocean.vmix` | `--vmix` | kpp (paper), tke, constant, richardson, catke |
-| `ocean.eos` | `--eos` | wright (default), nemo_seos (paper oracle) |
-| `ocean.gm_kappa_scheme` | `--gm-kappa-scheme` | visbeck (default), treguier (NEMO nn_aei_ijk_t=21) |
-| `ocean.bottom_drag_scheme` | `--bottom-drag-scheme` | legacy (default), nemo_quadratic, nemo_loglayer |
+| `ocean.vmix` | `--vmix` | kpp (paper), tke, constant, richardson, catke — forwarded only if ≠ default |
+| `ocean.eos` | `--eos` | wright (default), nemo_seos (paper oracle) — forwarded only if ≠ default |
+| `ocean.gm_kappa_scheme` | `--gm-kappa-scheme` | visbeck (default), treguier (NEMO nn_aei_ijk_t=21) — forwarded only if ≠ default |
+| `ocean.bottom_drag_scheme` | `--bottom-drag-scheme` | legacy (default), nemo_quadratic, nemo_loglayer — forwarded only if ≠ default |
 | `ocean.recipe` | `--recipe` | L1/L2 model-recipe cards (see upstream `--help`) |
 | `grid.nemo_faithful` | `--nemo-faithful-grid` | NEMO's exact 52×199 mesh (oracle lane) |
 | `physics.disabled` | `--physics-off` | dycore only |
 | `forcing.disabled` | `--no-forcing` | no wind/restoring |
 | `run.extra_args` | verbatim passthrough | `{data_root}` substituted; upstream flags recorded verbatim in `config.yaml` + `experiment.tag` |
+
+**Scheme flags vs recipe cards.** The four scheme selections are forwarded only when the experiment sets them to something other than the template default (the same rule as `--dt`). `run_dino.py` applies `--recipe` first and lets explicit CLI flags override it, so a recipe card stands unless a scheme field is deliberately changed — template defaults never clobber a card. (2026-10-11: template defaults used to be forwarded unconditionally, silently un-certifying the `nemo_dino_kamm_mlf` card on ige-calcul1 — caught by the card's eos guard; fixed in the runner.)
 
 ## Resolution ladder (overrides, not new templates)
 
