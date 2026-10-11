@@ -158,7 +158,7 @@ receipts and history live in
 - `2d/` — 5 templates: 2 run-tested, 3 structural
 - `3d_idealized/` — 10 templates: 9 run-tested, 1 structural
 - `coupled/` — 3 templates: 3 structural
-- `global_ocean/` — 8 templates: 2 run-tested, 2 smoke-tested, 4 structural
+- `global_ocean/` — 9 templates: 2 run-tested, 3 smoke-tested, 4 structural
 
 <!-- END status-summary -->
 

@@ -381,9 +381,110 @@ class TestOceanCaseDispatch:
         assert cfg["experiment"]["mode"] == "3d_ocean"
         # isomip_plus is NOT in the dispatch table (falls to stub)
         assert cfg["ocean"]["case"] not in (
-            "dino", "baroclinic_gyre", "lock_exchange", "overflow",
+            "dino", "bench", "baroclinic_gyre", "lock_exchange", "overflow",
             "acc_channel", "geostrophic_adjustment", "phillips_two_layer",
             "global_overturning", "neverworld2_lite", "eady_instability")
+
+
+class TestBenchLane:
+    """The BENCH delegation lane (global_ocean/bench -> run_bench.py)."""
+
+    def test_bench_template_has_all_dispatch_fields(self):
+        from runners.run_experiment import load_template
+        cfg = load_template("global_ocean/bench")
+        assert cfg["ocean"]["case"] == "bench"
+        assert cfg["experiment"]["mode"] == "3d_ocean"
+        assert cfg["grid"]["type"] in ("latlon", "tripole")
+        # Benchmarks count STEPS, not days: the lane reads run.*, and
+        # time.duration_days is nominal only.
+        assert cfg["run"]["preset"] == "orca1_like"
+        assert cfg["run"]["steps"] == 1000        # NEMO nn_itend default
+        assert cfg["run"]["timing_jsonl"]
+        assert cfg["requires"] == []
+
+    def test_bench_command_defaults(self, tmp_path):
+        from runners.run_experiment import _bench_command, load_template
+        cfg = load_template("global_ocean/bench")
+        cmd = _bench_command(cfg, "/legoesm/scripts/run/run_bench.py",
+                             tmp_path, tmp_path)
+        joined = " ".join(cmd)
+        assert "--grid latlon" in joined
+        assert "--preset orca1_like" in joined
+        assert "--steps 1000" in joined
+        assert "--warmup-steps 5" in joined
+        # orca1_like dt == template dt -> NOT forwarded (the preset stands)
+        assert "--dt " not in joined
+        # the timing record lands inside the experiment directory
+        assert str(tmp_path / "timing_bench.jsonl") in joined
+
+    def test_bench_preset_override_resizes_dt(self, tmp_path):
+        # The baroclinic_gyre dt lesson: switching preset must NOT inherit
+        # the template's orca1_like dt (1200 s exceeds the orca025_like
+        # stability boundary; the preset's own measured dt stands).
+        from runners.run_experiment import _bench_command, load_template
+        cfg = load_template("global_ocean/bench")
+        cfg = dict(cfg)
+        cfg["run"] = {**cfg["run"], "preset": "orca025_like"}
+        cmd = _bench_command(cfg, "x.py", tmp_path, tmp_path)
+        joined = " ".join(cmd)
+        assert "--preset orca025_like" in joined
+        assert "--dt " not in joined              # preset dt (300 s) stands
+
+    def test_bench_explicit_dt_override_forwarded(self, tmp_path):
+        from runners.run_experiment import _bench_command, load_template
+        cfg = load_template("global_ocean/bench")
+        cfg = dict(cfg)
+        cfg["time"] = {**cfg["time"], "dt_seconds": 900}
+        cmd = _bench_command(cfg, "x.py", tmp_path, tmp_path)
+        assert "--dt 900" in " ".join(cmd)
+
+    def test_bench_invalid_preset_raises(self, tmp_path):
+        import pytest
+        from runners.run_experiment import _bench_command
+        cfg = {"grid": {"type": "latlon"}, "ocean": {"case": "bench"},
+               "time": {}, "run": {"preset": "nope"}}
+        with pytest.raises(ValueError, match="not a BENCH preset"):
+            _bench_command(cfg, "x.py", tmp_path, tmp_path)
+
+    def test_bench_invalid_grid_raises(self, tmp_path):
+        import pytest
+        from runners.run_experiment import _bench_command
+        cfg = {"grid": {"type": "mpas"}, "ocean": {"case": "bench"},
+               "time": {}, "run": {}}
+        with pytest.raises(ValueError, match="not supported"):
+            _bench_command(cfg, "x.py", tmp_path, tmp_path)
+
+    def test_bench_tripole_forwards_n_lat(self, tmp_path):
+        from runners.run_experiment import _bench_command
+        cfg = {"grid": {"type": "tripole"}, "ocean": {"case": "bench"},
+               "time": {}, "run": {"n_lat": 331}}
+        cmd = _bench_command(cfg, "x.py", tmp_path, tmp_path)
+        joined = " ".join(cmd)
+        assert "--grid tripole" in joined
+        assert "--n-lat 331" in joined
+
+    def test_bench_resolution_override_forwards_n_lon(self, tmp_path):
+        # grid.resolution drives n_lon (rows are Mercator-derived upstream);
+        # a downsized smoke is recorded in a structured field, not extra_args.
+        from runners.run_experiment import _bench_command, load_template
+        cfg = load_template("global_ocean/bench")
+        cfg = dict(cfg)
+        cfg["grid"] = {**cfg["grid"], "resolution": "72x56"}
+        cmd = _bench_command(cfg, "x.py", tmp_path, tmp_path)
+        assert "--n-lon 72" in " ".join(cmd)
+
+    def test_bench_resolution_at_preset_not_forwarded(self, tmp_path):
+        from runners.run_experiment import _bench_command, load_template
+        cfg = load_template("global_ocean/bench")
+        cmd = _bench_command(cfg, "x.py", tmp_path, tmp_path)
+        assert "--n-lon" not in " ".join(cmd)   # 360 == orca1_like preset
+
+    def test_bench_extra_args_passthrough(self, tmp_path):
+        from runners.run_experiment import _bench_command
+        cfg = {"grid": {"type": "latlon"}, "ocean": {"case": "bench"},
+               "time": {}, "run": {"extra_args": ["--n-lon", "720"]}}
+        cmd = _bench_command(cfg, "x.py", tmp_path, tmp_path)
+        assert cmd[-2:] == ["--n-lon", "720"]
 
 
 class TestOceanTestMatrix:
@@ -479,6 +580,7 @@ class TestDataCatalog:
             "3d_idealized/dino",
             "3d_idealized/geostrophic_adjustment",
             "3d_idealized/isomip_plus",
+            "global_ocean/bench",
         ]
         from runners.run_experiment import load_template
         for tmpl in idealized:

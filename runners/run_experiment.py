@@ -710,6 +710,9 @@ def _run_ocean(config: dict, legoesm_path: Path, config_path: Path | None = None
     if mode == "3d_ocean" and case == "dino" and grid_type == "latlon":
         _run_dino(config, legoesm_path, config_path)
         return
+    if mode == "3d_ocean" and case == "bench" and grid_type in ("latlon", "tripole"):
+        _run_bench(config, legoesm_path, config_path)
+        return
     _MATRIX_CASES = {
         # case -> (grid.type -> upstream matrix --grid value)
         "baroclinic_gyre": {"latlon": "latlon_regional",
@@ -1074,6 +1077,147 @@ def _run_dino(config: dict, legoesm_path: Path, config_path: Path | None = None)
     result = subprocess.run(cmd, env=run_env, cwd=str(legoesm_path))
     if result.returncode != 0:
         raise RuntimeError(f"run_dino.py exited with code {result.returncode}")
+
+
+# Measured-stable first-guess dt per BENCH preset (legoESM BENCH_PRESETS,
+# stability probes committed 2026-10-10, boundary halved for margin).
+_BENCH_PRESET_DT = {
+    "orca1_like": 1200.0,
+    "orca025_like": 300.0,
+    "orca12_like": 120.0,
+}
+# Preset n_lon (legoESM BENCH_PRESETS): the latlon row count is DERIVED
+# (Mercator placement from n_lon + lat_max), so resolution is n_lon-driven.
+_BENCH_PRESET_NLON = {
+    "orca1_like": 360,
+    "orca025_like": 1440,
+    "orca12_like": 4320,
+}
+# The nominal dt declared in templates/global_ocean/bench.yaml (orca1_like).
+# An explicit override is detected against THIS, not the selected preset:
+# switching preset must re-size dt with the grid.
+_BENCH_TEMPLATE_DEFAULT_DT = _BENCH_PRESET_DT["orca1_like"]
+
+
+def _bench_command(config: dict, script: str, out_dir: Path,
+                   data_root: Path) -> list[str]:
+    """Build the run_bench.py command from template fields (pure; testable).
+
+    See ``_run_bench`` for the forwarding contract (preset-owned dt, steps
+    not days, gates in the exit code).
+    """
+    grid_cfg = config.get("grid", {})
+    ocean_cfg = config.get("ocean", {})
+    time_cfg = config.get("time", {})
+    run_cfg = config.get("run", {}) or {}
+
+    grid_type = grid_cfg.get("type", "latlon")
+    if grid_type not in ("latlon", "tripole"):
+        raise ValueError(
+            f"bench: grid.type={grid_type!r} is not supported "
+            "(latlon | tripole — the synthetic fold lane)")
+
+    preset = run_cfg.get("preset", "orca1_like")
+    if preset not in _BENCH_PRESET_DT:
+        raise ValueError(
+            f"run.preset={preset!r} is not a BENCH preset "
+            f"({sorted(_BENCH_PRESET_DT)})")
+
+    cmd = [sys.executable, script, "--grid", grid_type, "--preset", preset]
+
+    steps = run_cfg.get("steps")
+    if steps is not None:
+        cmd.extend(["--steps", str(steps)])
+    warmup = run_cfg.get("warmup_steps")
+    if warmup is not None:
+        cmd.extend(["--warmup-steps", str(warmup)])
+
+    # dt: preset-owned — forward only an explicit override (a value other
+    # than the template's nominal default), so switching preset re-sizes
+    # dt with the grid instead of inheriting the template's orca1_like
+    # value (the baroclinic_gyre dt lesson).
+    dt = time_cfg.get("dt_seconds")
+    if dt is not None and float(dt) != _BENCH_TEMPLATE_DEFAULT_DT:
+        cmd.extend(["--dt", str(dt)])
+
+    # Sizing overrides: preset-owned upstream, forward only deviations.
+    # grid.resolution "NxM" carries n_lon (rows are Mercator-derived, so
+    # the N component is informational); forward when it differs from the
+    # preset so downsized smokes are recorded in a structured field.
+    res = str(grid_cfg.get("resolution", ""))
+    if "x" in res:
+        n_lon = int(res.split("x")[0])
+        if n_lon != _BENCH_PRESET_NLON[preset]:
+            cmd.extend(["--n-lon", str(n_lon)])
+    nlev = grid_cfg.get("nlev")
+    if nlev is not None and int(nlev) != 74:
+        cmd.extend(["--nlev", str(nlev)])
+    h_max = ocean_cfg.get("H_max")
+    if h_max is not None and float(h_max) != 5000.0:
+        cmd.extend(["--H-max", str(h_max)])
+    lat_max = ocean_cfg.get("lat_max_deg")
+    if lat_max is not None and float(lat_max) != 80.0:
+        cmd.extend(["--lat-max", str(lat_max)])
+    if grid_type == "tripole":
+        n_lat = run_cfg.get("n_lat")
+        if n_lat:
+            cmd.extend(["--n-lat", str(n_lat)])
+
+    if run_cfg.get("timing_jsonl"):
+        cmd.extend(["--timing-jsonl",
+                    str(out_dir / str(run_cfg["timing_jsonl"]))])
+    if run_cfg.get("float32", False):
+        cmd.append("--no-x64")
+
+    # Verbatim passthrough: run.extra_args appended AFTER the mapped args,
+    # with only the {data_root} token substituted (bench needs no data, but
+    # the token keeps machine-portable cards uniform).
+    for raw in (run_cfg.get("extra_args") or []):
+        cmd.append(str(raw).replace("{data_root}", str(data_root)))
+    return cmd
+
+
+def _run_bench(config: dict, legoesm_path: Path, config_path: Path | None = None):
+    """Run a BENCH performance benchmark via script delegation to
+    scripts/run/run_bench.py.
+
+    The upstream script (legoESM PR climate-federation/legoESM#1934, NEMO
+    BENCH port per Irrmann et al. 2022) is the standalone timing harness:
+    it builds the BenchConfig itself, so this mapping only forwards the
+    knobs a template legitimately overrides — preset sizing, step count,
+    timing output. Benchmarks count STEPS (NEMO ``nn_itend``), not days:
+    ``time.duration_days`` is nominal and NOT forwarded. ``time.dt_seconds``
+    is forwarded only when it differs from the chosen preset's measured-
+    stable dt (see ``_bench_command``). Unknown knobs go via
+    ``run.extra_args`` verbatim. The exit code carries the pre-registered
+    stability gates (finite fields, max speed, max |eta|): a gate failure
+    exits 1.
+
+    Writes no snapshots (no I/O perturbs the measurement); the timing
+    record lands in ``run.timing_jsonl`` inside the experiment directory.
+    """
+    import subprocess
+
+    script = str(legoesm_path / "scripts" / "run" / "run_bench.py")
+    if not Path(script).exists():
+        raise FileNotFoundError(
+            f"{script} not found — the BENCH lane needs legoESM's "
+            f"scripts/run/run_bench.py (check the pin / legoESM checkout)")
+
+    # The subprocess cwd becomes the legoESM repo: absolutize the timing
+    # record against the experiment directory.
+    out_dir = config_path.parent if config_path else Path.cwd()
+    data_root = resolve_data_root()
+
+    cmd = _bench_command(config, script, out_dir, data_root)
+
+    run_env = {**os.environ, "JAX_ENABLE_X64": "1"}
+    print(f"Running BENCH via: {' '.join(cmd)}")
+    result = subprocess.run(cmd, env=run_env, cwd=str(legoesm_path))
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"run_bench.py exited with code {result.returncode} "
+            "(stability gates failed or the harness errored)")
 
 
 def _run_matrix_case(config: dict, legoesm_path: Path,

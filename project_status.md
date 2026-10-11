@@ -9,7 +9,7 @@ This document tracks what's currently implemented and tested in the runners. Con
 Init (template → `config.yaml` + `experiment.tag` + `run.sh`) works for every mode. `run_experiment run` executes a simulation only on these lanes; everything else is init-only:
 
 - `ocean_scm` — native run path (YAML → model → NetCDF); all 5 templates run-tested.
-- `3d_ocean` — `dino` (delegation to legoESM `run_dino.py`) plus 10 matrix-lane idealized cases (delegation to the upstream ocean test matrix); all other cases init-only.
+- `3d_ocean` — `dino` (delegation to legoESM `run_dino.py`), `bench` (delegation to legoESM `run_bench.py`) plus 10 matrix-lane idealized cases (delegation to the upstream ocean test matrix); all other cases init-only.
 - `barotropic_ocean` — `barotropic_wave` and `barotropic_double_gyre` via the same matrix delegation; other barotropic templates init-only.
 - `3d_ocean_realistic` — tripolar grids only (eORCA1 OMIP via `run_omip_core2.py`); other grid types init-only.
 - `coupled` — init-only.
@@ -19,7 +19,7 @@ Quick answer to "will `run_experiment run` execute my template?": find the templ
 | Mode | Init (YAML → config.yaml + tag) | Run (config.yaml → model → output) | Notes |
 |------|----------------------------------|-------------------------------------|-------|
 | `ocean_scm` | Working | **Working** | Native run path; see the `ocean_scm` subsection below. |
-| `3d_ocean` | Working | **Working: `dino` + 10 matrix-lane cases** | Two delegation lanes; see the `3d_ocean` subsection below. Other cases: init-only. |
+| `3d_ocean` | Working | **Working: `dino`, `bench` + 10 matrix-lane cases** | Three delegation lanes; see the `3d_ocean` subsection below. Other cases: init-only. |
 | `barotropic_ocean` | Working | **Working: `barotropic_wave`, `barotropic_double_gyre`** | Matrix delegation like the 3D lanes; see the `barotropic_ocean` subsection below. Other templates: init-only. |
 | `3d_ocean_realistic` | Working | **Working: tripolar grids** | Script delegation to `run_omip_core2.py`; see the `3d_ocean_realistic` subsection below. Other grid types: init-only. |
 | `coupled` | Working | **Implemented, untested** | Constructs `CoupledESMDriver`; no end-to-end run recorded. See the `coupled` subsection below. |
@@ -30,10 +30,12 @@ Constructs `OceanColumnModel` from the resolved config, runs the simulation, and
 
 ### 3d_ocean (dino and matrix lanes)
 
-Two delegation lanes; per-template receipts live in the Template test status table below.
+Three delegation lanes; per-template receipts live in the Template test status table below.
 
 - **`dino`** (lat-lon): `_run_dino` in `runners/run_experiment.py` delegates to legoESM `scripts/run/run_dino.py`, the standalone DINO production driver. It builds the paper-faithful R1 `DINOConfig` itself (Kamm et al. 2025 defaults: KPP + Visbeck GM/Redi + EVD convection, Wright EOS, zstar 36 lev, dt 2700), so the runner forwards only legitimate overrides: resolution (`grid.n_lon`), duration, snapshot cadence, scheme flags (forwarded only when ≠ template default, so `ocean.recipe` cards stand), recipe cards via `ocean.recipe`, plus the run-control lanes `run.n_devices` (lat-band SPMD; requires `n_lat % N == 0` — the R1 grid's 198 rows divide by 1 and 2 only), `run.restart_from` (snapshot NPZ; clock restarts at 0), `run.seed` (ensemble IC; 0 = canonical), and `run.timing_jsonl`. Multi-GPU, restart, seed and timing are upstream since PR climate-federation/legoESM#1926 (merged); patch 006 was dropped at the 2026-10-10 pin bump. Restart is verified bit-exact on CPU; SPMD parity within the re-association floor.
 - **Matrix-lane idealized cases** (`baroclinic_gyre`, `lock_exchange`, `overflow`, `acc_channel`, `geostrophic_adjustment`, `phillips_two_layer`, `global_overturning`, `neverworld2_lite`, `eady_instability`, `rest_state_stratified_no_land`): `_run_matrix_case` delegates to legoESM `scripts/matrix/run_ocean_test_matrix.py --only <case> --grid <grid>`. The upstream matrix runner owns the scientifically-validated configuration (grid geometry, ICs, physics, stability-verified dt/duration pairs — see legoESM `docs/dev-notes/ocean_experiments_reference.md`); the runner forwards only duration/dt/levels/resolution overrides. Template physics fields are the documented intent; the upstream baseline is what runs. NB: upstream `--only` is a substring match — `baroclinic_gyre` also runs the `baroclinic_gyre_cos` variant and `barotropic_double_gyre` also runs `_sin2` (extra runtime, both gated). `eady_instability` dispatches lat-lon templates onto the upstream `latlon_channel` lane (both eady lanes are channel-only; upstream excludes `mpas_channel` for eady_instability — it blows up). `neverworld2_lite` uses the upstream 180x360 lane resolution (not the 36x72 matrix default).
+
+- **`bench`** (lat-lon + synthetic tripole): `_run_bench` in `runners/run_experiment.py` delegates to legoESM `scripts/run/run_bench.py` (PR climate-federation/legoESM#1934), the standalone NEMO-BENCH timing harness (Irrmann et al. 2022 port; production-like `legoesm_nemo_like_v1` recipe + TKE, zero forcing, per-point unique ICs — results physically meaningless by design). The harness builds the `BenchConfig` itself, so the runner forwards only `run.preset` (`orca1_like` | `orca025_like` | `orca12_like` — sizing and the measured-stable dt travel together), `run.steps` (NEMO `nn_itend`; benchmarks count steps, not days — `time.duration_days` is nominal and NOT forwarded), `run.warmup_steps`, and `run.timing_jsonl` (run_dino-compatible record, absolutized to the experiment dir). `time.dt_seconds` forwards as `--dt` only when ≠ the template's nominal default (orca1_like 1200 s), so a preset override re-sizes dt with the grid instead of inheriting 1200 s above the orca025_like boundary (the baroclinic_gyre dt lesson; tests: `TestBenchLane`). `grid.type: tripole` selects the synthetic north-fold lane (`--n-lat` defaults to the preset's NEMO-exact j-count; `run.n_lat` overrides). No snapshots are written (no I/O perturbs the measurement); the exit code carries the pre-registered stability gates (finite fields, max speed < 1 m/s, max |eta| < 1 m). The 36x72 CI matrix lane stays upstream (`run_ocean_test_matrix.py --only bench`).
 
 All other `3d_ocean` cases: init + provenance only.
 
@@ -107,6 +109,7 @@ vice versa.
 | `global_ocean/` | `omip_jra55` | structural | — |
 | `global_ocean/` | `global_overturning` | run-tested | 2026-10-10, Mac CPU via matrix delegation: latlon 64x128, 10 d, upstream gates PASS, eta_drift 4.89e-17; dt 3600→300 |
 | `global_ocean/` | `neverworld2_lite` | run-tested | 2026-10-10, bigfoot V100 via matrix delegation, native OAR submission (`oarsub -S ./run.sh`): latlon 180x360, 50 lev, dt 300, 5 d, upstream gates 1/1 PASS — \|u\|max=0.643 m/s, "eddy-permitting"; ledger run `bigfoot_2026-10-10_nw2-wave1`; template aligned to lane design 180x360 / dt 300 / 365 d |
+| `global_ocean/` | `bench` | smoke-tested | 2026-10-11, Mac CPU end-to-end via `_run_bench` delegation at pin `294495454a` (both lanes): latlon 72×54×74 dt 1200, 20 steps (5 warmup) — gates PASS (max_speed 0.0579 m/s, max_eta 0.351 m), 61.7 ms/step steady, 53.2 SYPD; tripole 32×72×74 (fold active) — gates PASS (0.0753 m/s, 0.387 m), 87.4 SYPD; `timing_bench.jsonl` written both lanes; preset downsized via `grid.resolution=72x56` / `run.n_lat=32` |
 | `global_ocean/` | `omip_global` | structural | — |
 | `global_ocean/` | `omip_cubed_sphere` | structural | — |
 | `global_ocean/` | `omip_tripole` | smoke-tested | 2026-10-07 `macbook_2026-10-07_tripole-repin-5day`: 720 steps, no NaN, 2.85 s/step (M-series CPU, synthetic forcing; delegation verified at pin `c986cb989`). 2026-10-08 `bigfoot_2026-10-08_tripole-gpu-smoke` (V100): exit 0, 1.17 steps/s ≈ 3.3× CPU, diagnostics identical to the CPU run at print precision |

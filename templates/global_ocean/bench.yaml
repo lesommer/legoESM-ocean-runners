@@ -1,0 +1,62 @@
+# BENCH — NEMO performance-benchmark port (Irrmann et al. 2022, GMD 15,
+# 1567-1582, Sect. 2.2; NEMO tests/BENCH).
+#
+# Flat-bottom all-ocean global box, analytic ZERO forcing, per-point unique
+# initial conditions (the z2d ramp — an MPI/halo/sharding bug detector),
+# running the production-like legoesm_nemo_like_v1 dycore + TKE vertical
+# mixing so the benchmarked step cost is the production cost. Results are
+# PHYSICALLY MEANINGLESS by design; validation is stability-only (finite
+# fields, max speed < 1 m/s, max |eta| < 1 m).
+#
+# Maps to: legoesm.ocean.experiments.bench (BenchConfig, BENCH_PRESETS)
+# Run path: delegates to legoESM scripts/run/run_bench.py (standalone
+#           timing harness, run_dino-compatible timing JSONL, no I/O
+#           snapshots). The 36x72 CI matrix lane stays upstream.
+# Grid:    latlon (Mercator, truncated at lat_max_deg=80 — a full-sphere
+#          equirectangular row is barotropic-CFL-unstable at the pole,
+#          measured upstream 2026-10-10) or tripole (synthetic fold,
+#          --grid tripole; no mesh file).
+# Mode:    3d_ocean
+#
+# BENCHMARKS COUNT STEPS, NOT DAYS: time.duration_days below is nominal
+# (upstream default_duration); the run is governed by run.steps (NEMO
+# nn_itend default 1000, warmup 5 excluded from the steady-state mean).
+#
+# Resolution ladder (via -o run.preset=<name>, NOT new templates):
+#   orca1_like   (default): 360x278x74, dt 1200 s
+#   orca025_like:           1440x1116x74, dt 300 s
+#   orca12_like:            4320x3350x74, dt 120 s (extrapolated —
+#                           re-measure before long runs)
+# dt values are measured first-stable-guess boundaries halved for margin
+# (stability probes committed upstream, 2026-10-10). Do not override
+# time.dt_seconds above the preset boundary; the stability gates will
+# fail the run by design.
+
+experiment:
+  name: bench
+  mode: 3d_ocean
+  description: "NEMO BENCH performance benchmark: flat-bottom all-ocean box, zero forcing, per-point unique ICs (Irrmann et al. 2022)"
+
+requires: []
+
+grid:
+  type: latlon
+  resolution: 360x278   # orca1_like nominal (rows are Mercator-derived upstream)
+  nlev: 74              # NEMO nn_ksize=75 -> jpk=75 -> 74 wet levels
+
+ocean:
+  case: bench
+  H_max: 5000.0         # NEMO flat-bottom depth [m]
+  lat_max_deg: 80.0     # Mercator truncation latitude [deg]
+
+time:
+  duration_days: 5.0    # nominal only — the bench lane counts steps
+  dt_seconds: 1200      # orca1_like preset dt; forwarded to --dt only when overridden
+
+run:
+  preset: orca1_like    # orca1_like | orca025_like | orca12_like
+  steps: 1000           # NEMO nn_itend default
+  warmup_steps: 5       # JIT-plateau warmup excluded from the steady-state mean
+  timing_jsonl: timing_bench.jsonl   # run_dino-compatible timing record
+  # float32 benchmarking: -o run.float32=true (upstream --no-x64)
+  extra_args: []        # verbatim passthrough to run_bench.py
