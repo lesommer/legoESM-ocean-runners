@@ -210,14 +210,23 @@ requires_patches:
 
 Every initialized experiment produces an `experiment.tag` INI file with:
 - `[experiment]` — name, template, mode, creation timestamp
-- `[legoESM]` — pinned ref, commit hash, patches applied, requires_patches
+- `[legoESM]` — pinned ref, commit hash, patches applied (with per-patch content digests, `patch_sha256_<patch-stem> = sha256:<16hex>`), requires_patches
 - `[model]` — configuration, grid type, resolution, vertical levels, and the declared recipe (`recipe = <name>`, written when `ocean.recipe` is set)
 - `[run]` — duration, timestep
 - `[data]` — data_root, requires list, resolved file paths
 - `[machine]` — hostname, machine config
-- `[reproducibility]` — config hash, runner_tag (git tag in THIS repo), legoESM ref, Python/JAX versions
+- `[reproducibility]` — config hash, runner_tag (git tag in THIS repo; `untagged@<sha>` in the untagged window — reproduce.py checks out the sha), raw override list (`overrides = <JSON>`, written when overrides were given), legoESM ref, Python/JAX versions
 
 These tag files are intended to be archived alongside experiment output in a separate archive repository.
+
+### Manifest stamping (run-time layer identity)
+
+The run-time `run_manifest.json` (written by legoESM, a superset of `experiment.tag`) records the runners layer via the env-var channel (patch `006-manifest-runner-tag.patch` / upstream PR climate-federation/legoESM#2100): every generated `run.sh` computes and exports, at **run time**,
+
+- `LEGOESM_RUNNER_TAG` — `<legoesm-* tag | untagged@sha> template=<name>` (repo state at launch, not init: if the repo moved between init and launch, the manifest reports what actually ran)
+- `LEGOESM_RUNNER_PATCHES` — comma list of `patches/*.patch` names present at launch
+
+which `build_run_manifest()` lands in `[reproducibility].runner_tag` / `.patches`. Division of truth: `experiment.tag` = init-time snapshot; `run_manifest.json` = run-time truth. `tests/test_templates.py::TestOrchestratorProvenance` pins the whole channel, including a bash-execution probe of the generated snippet and an end-to-end env→manifest check against the pinned legoESM.
 
 ### Status documentation sync
 

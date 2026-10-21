@@ -1,0 +1,105 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index dbe83202b4..a004f0d597 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -5,6 +5,16 @@ All notable changes to legoESM. Format roughly follows
+ 
+ ## Unreleased
+ 
++### Added
++
++- **Orchestrator provenance env vars.** `build_run_manifest()` now reads
++  `LEGOESM_RUNNER_TAG` / `LEGOESM_RUNNER_PATCHES` (comma-separated list);
++  when set, they take precedence over the caller's per-script defaults, so a
++  downstream orchestrator (e.g. legoESM-ocean-runners' `run.sh`) can identify
++  itself and its patch chain on every lane — including the atmosphere driver
++  path, which passes neither field. No schema change: populating the optional
++  `reproducibility.runner_tag` / `patches` fields is not a bump.
++
+ ### Changed
+ 
+ - **License: MIT.** legoESM is now released under the MIT License, replacing
+diff --git a/packages/coupler/legoesm/driver/restart.py b/packages/coupler/legoesm/driver/restart.py
+index 5bab7d4f53..3c3a8b3237 100644
+--- a/packages/coupler/legoesm/driver/restart.py
++++ b/packages/coupler/legoesm/driver/restart.py
+@@ -493,6 +493,13 @@ def build_run_manifest(
+         so the run can be rebuilt.
+     command_line
+         The invoking command; defaults to ``" ".join(sys.argv)``.
++    runner_tag, patches
++        Free-form downstream-orchestrator identity and the patch chain it
++        applied, recorded under ``[reproducibility]``.  When the env vars
++        ``LEGOESM_RUNNER_TAG`` / ``LEGOESM_RUNNER_PATCHES`` (comma-separated
++        list) are set, they take precedence over the caller's values: the
++        orchestrator sits above the entry-point script, and the script
++        identity stays recorded in ``[run].command_line``.
+     state_digest
+         Filled after N steps by the reproduce/checkpoint path; ``None`` at start.
+     config_kind
+@@ -503,6 +510,17 @@ def build_run_manifest(
+ 
+     kind = config_kind or detect_config_kind(config)
+ 
++    # Downstream orchestrators (e.g. legoESM-ocean-runners' run.sh) identify
++    # themselves via env vars. An explicitly-set value wins over the caller's
++    # per-script defaults: the orchestrator sits above the entry script, and
++    # the script identity remains in [run].command_line.
++    env_runner_tag = os.environ.get("LEGOESM_RUNNER_TAG", "")
++    if env_runner_tag:
++        runner_tag = env_runner_tag
++    env_patches = os.environ.get("LEGOESM_RUNNER_PATCHES", "")
++    if env_patches:
++        patches = [p.strip() for p in env_patches.split(",") if p.strip()]
++
+     # Provenance of the IMPORTED package — the code that runs — not the CWD.
+     # If the CWD is a legoesm checkout at a different HEAD (launcher cd-ed into
+     # a pinned worktree while importing another tree), this RAISES unless
+diff --git a/tests/unit/test_run_manifest.py b/tests/unit/test_run_manifest.py
+index 4de41914c6..0cb4947059 100644
+--- a/tests/unit/test_run_manifest.py
++++ b/tests/unit/test_run_manifest.py
+@@ -78,6 +78,43 @@ def test_optional_provenance_fields_are_threaded() -> None:
+     assert m["result"]["model_weights_provenance"] == {"checkpoint": "physics.eqx"}
+ 
+ 
++def test_env_var_runner_provenance_overrides_caller_defaults(monkeypatch) -> None:
++    """Orchestrator env vars (LEGOESM_RUNNER_TAG/_PATCHES) win over the
++    caller's per-script defaults — the orchestrator sits above the entry
++    script, whose identity stays in [run].command_line."""
++    monkeypatch.setenv(
++        "LEGOESM_RUNNER_TAG",
++        "ocean-runners@legoesm-294495454a29 template=3d_idealized/baroclinic_gyre",
++    )
++    monkeypatch.setenv(
++        "LEGOESM_RUNNER_PATCHES",
++        "001-libm-lazy-load.patch, , 002-omip-core2-extensions.patch",
++    )
++    m = build_run_manifest(
++        _sample_config(), runner_tag="run_omip_core2", patches=["local.patch"]
++    )
++    assert m["reproducibility"]["runner_tag"] == (
++        "ocean-runners@legoesm-294495454a29 template=3d_idealized/baroclinic_gyre"
++    )
++    # Comma list parsed, whitespace stripped, empty entries dropped.
++    assert m["reproducibility"]["patches"] == [
++        "001-libm-lazy-load.patch",
++        "002-omip-core2-extensions.patch",
++    ]
++
++
++def test_env_var_runner_provenance_absent_keeps_caller_values(monkeypatch) -> None:
++    """Without the env vars (or with empty values) the caller's runner_tag
++    and patches pass through unchanged."""
++    monkeypatch.delenv("LEGOESM_RUNNER_TAG", raising=False)
++    monkeypatch.setenv("LEGOESM_RUNNER_PATCHES", "")  # set-but-empty = unset
++    m = build_run_manifest(
++        _sample_config(), runner_tag="run_omip_core2", patches=["p.patch"]
++    )
++    assert m["reproducibility"]["runner_tag"] == "run_omip_core2"
++    assert m["reproducibility"]["patches"] == ["p.patch"]
++
++
+ def test_dataset_provenance_entry_shape_and_checksum(tmp_path: Path) -> None:
+     """Entry records identity + cheap integrity facts; sha256 is opt-in."""
+     import hashlib

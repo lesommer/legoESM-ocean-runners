@@ -404,6 +404,185 @@ class TestRecipeValidation:
         assert "recipe = " not in tag
 
 
+class TestOrchestratorProvenance:
+    """Runners-layer provenance stamping (issue #8, Phase 2A): run.sh env
+    vars reach legoESM's run_manifest.json, and experiment.tag carries the
+    overrides + patch digests reproduce.py needs."""
+
+    @staticmethod
+    def _make_repo(path, tags=()):
+        """One-commit throwaway git repo; returns HEAD short sha."""
+        import subprocess
+
+        def git(*args):
+            subprocess.run(
+                ["git", "-C", str(path), "-c", "user.email=t@t",
+                 "-c", "user.name=t", *args],
+                check=True, capture_output=True, text=True,
+            )
+
+        path.mkdir(parents=True)
+        git("init", "-q")
+        git("commit", "--allow-empty", "-m", "x")
+        for t in tags:
+            git("tag", t)
+        r = subprocess.run(["git", "-C", str(path), "rev-parse", "--short", "HEAD"],
+                           check=True, capture_output=True, text=True)
+        return r.stdout.strip()
+
+    def test_get_current_tag_returns_legoesm_tag(self, tmp_path, monkeypatch):
+        import runners.run_experiment as rx
+        sha = self._make_repo(tmp_path / "r", tags=("legoesm-abc123def456-20261021",))
+        monkeypatch.setattr(rx, "_RUNNERS_ROOT", tmp_path / "r")
+        assert rx._get_current_tag() == "legoesm-abc123def456-20261021"
+
+    def test_get_current_tag_untagged_falls_back_to_sha(self, tmp_path, monkeypatch):
+        import runners.run_experiment as rx
+        sha = self._make_repo(tmp_path / "r", tags=())
+        monkeypatch.setattr(rx, "_RUNNERS_ROOT", tmp_path / "r")
+        assert rx._get_current_tag() == f"untagged@{sha}"
+
+    def test_get_current_tag_ignores_non_legoesm_tags(self, tmp_path, monkeypatch):
+        # A non-legoesm tag must NOT satisfy the identity (the repro-tag
+        # discipline is legoesm-* only).
+        import runners.run_experiment as rx
+        sha = self._make_repo(tmp_path / "r", tags=("v9",))
+        monkeypatch.setattr(rx, "_RUNNERS_ROOT", tmp_path / "r")
+        assert rx._get_current_tag() == f"untagged@{sha}"
+
+    def test_run_sh_exports_provenance_env_vars(self):
+        from runners.run_experiment import _generate_run_script
+        config = {"experiment": {"name": "smoke", "mode": "3d_ocean"}}
+        script = _generate_run_script(config, Path("expdir"), template_name="global_ocean/smoke")
+        lines = script.splitlines()
+        assert 'export LEGOESM_RUNNER_TAG="$_runner_tag template=$CONFIG_TEMPLATE"' in lines
+        assert 'case "$_runner_tag" in' in lines  # legoesm-* filter
+        assert "    legoesm-*) ;;" in lines
+        assert 'export LEGOESM_RUNNER_PATCHES="$_patch_list"' in lines
+        assert 'for _p in "$RUNNERS_ROOT"/patches/*.patch; do' in lines
+
+    def test_provenance_snippet_executes_in_bash(self):
+        """The generated snippet is valid bash and produces the contract:
+        LEGOESM_RUNNER_TAG = <legoesm-* tag | untagged@sha> template=<name>,
+        LEGOESM_RUNNER_PATCHES = comma list of patches/*.patch names."""
+        import re
+        import subprocess
+        from runners.run_experiment import _generate_run_script
+        config = {"experiment": {"name": "smoke", "mode": "3d_ocean"}}
+        script = _generate_run_script(config, Path("expdir"), template_name="global_ocean/smoke")
+        lines = script.splitlines()
+        start = lines.index("# ---------- Orchestrator provenance (run_manifest.json) ----------")
+        snippet = []
+        for line in lines[start + 1:]:
+            if not line.strip():
+                break
+            snippet.append(line)
+        probe = (
+            f"RUNNERS_ROOT={str(ROOT_DIR)!r}\n"
+            "CONFIG_TEMPLATE=global_ocean/smoke\n"
+            "set -u\n"
+            + "\n".join(snippet)
+            + '\nprintf "TAG=%s\\nPATCHES=%s\\n" "$LEGOESM_RUNNER_TAG" "$LEGOESM_RUNNER_PATCHES"\n'
+        )
+        out = subprocess.run(["bash", "-c", probe], capture_output=True, text=True)
+        assert out.returncode == 0, out.stderr
+        m = re.match(r"TAG=(.*)\nPATCHES=(.*)\n", out.stdout)
+        assert m, out.stdout
+        tag_val, patch_val = m.group(1), m.group(2)
+        assert re.fullmatch(
+            r"(legoesm-[0-9a-f]{12}-\d{8}[a-z]?|untagged@[0-9a-f]{7,40})"
+            r" template=global_ocean/smoke", tag_val), tag_val
+        if patch_val:
+            names = patch_val.split(",")
+            assert all(re.fullmatch(r"\d{3}-[a-z0-9-]+\.patch", n) for n in names), patch_val
+
+    def test_tag_records_overrides_as_json(self):
+        from runners.run_experiment import generate_tag, load_template
+        import json
+        cfg = load_template("3d_idealized/baroclinic_gyre")
+        overrides = ["grid.resolution=128x256", "time.duration_days=730"]
+        tag = generate_tag(cfg, "3d_idealized/baroclinic_gyre", overrides=overrides)
+        line = [l for l in tag.splitlines() if l.startswith("overrides = ")]
+        assert len(line) == 1
+        assert json.loads(line[0].split(" = ", 1)[1]) == overrides
+
+    def test_tag_omits_overrides_when_none_given(self):
+        from runners.run_experiment import generate_tag, load_template
+        cfg = load_template("3d_idealized/baroclinic_gyre")
+        tag = generate_tag(cfg, "3d_idealized/baroclinic_gyre")
+        assert "overrides = " not in tag
+
+    def test_tag_records_patch_sha256_digests(self):
+        """Every patches/*.patch gets a content digest — a same-named but
+        edited patch must be detectable at reproduce time."""
+        import hashlib
+        from runners.run_experiment import PATCHES_DIR, generate_tag, load_template
+        cfg = load_template("3d_idealized/baroclinic_gyre")
+        tag = generate_tag(cfg, "3d_idealized/baroclinic_gyre")
+        for p in sorted(PATCHES_DIR.glob("*.patch")):
+            digest = hashlib.sha256(p.read_bytes()).hexdigest()
+            assert f"patch_sha256_{p.stem} = sha256:{digest[:16]}" in tag, p.name
+
+    def test_reproduce_checkout_handles_untagged_sha(self, tmp_path, monkeypatch, capsys):
+        """checkout_tag('untagged@<sha>') checks out the recorded commit;
+        a bare 'untagged' still fails (no resolvable identity)."""
+        import subprocess
+        import reproduce
+
+        repo = tmp_path / "repo"
+        sha = self._make_repo(repo)
+        # second commit so checkout actually moves HEAD
+        subprocess.run(
+            ["git", "-C", str(repo), "-c", "user.email=t@t", "-c", "user.name=t",
+             "commit", "--allow-empty", "-m", "y"],
+            check=True, capture_output=True,
+        )
+        monkeypatch.setattr(reproduce, "ROOT_DIR", repo)
+
+        assert reproduce.checkout_tag(f"untagged@{sha}") is True
+        r = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"],
+                           check=True, capture_output=True, text=True)
+        assert r.stdout.strip().startswith(sha)
+        assert "untagged commit" in capsys.readouterr().out
+
+        assert reproduce.checkout_tag("untagged") is False
+
+    def test_env_vars_reach_pinned_legoesm_manifest(self, monkeypatch):
+        """End-to-end channel proof against the pinned legoESM: the env vars
+        run.sh exports land in [reproducibility] of build_run_manifest().
+        Skips where the pinned legoESM does not read them (patch 006 / PR
+        climate-federation/legoESM#2100) — e.g. CI Tier-2's unpatched pin
+        until the Phase 2B patch-gate fix applies the chain."""
+        pytest.importorskip("legoesm")
+        from legoesm.driver.config import DycoreConfig, ExperimentConfig, GridConfig
+        from legoesm.driver.restart import build_run_manifest
+
+        cfg = ExperimentConfig(
+            grid=GridConfig(grid_type="cubed_sphere", resolution=48, nlev=40),
+            dycore=DycoreConfig(model_type="shallow_water", discretization="cdgrid", dt=600.0),
+            days=5,
+        )
+        monkeypatch.setenv(
+            "LEGOESM_RUNNER_TAG",
+            "legoesm-294495454a29-20261021 template=3d_idealized/baroclinic_gyre",
+        )
+        monkeypatch.setenv(
+            "LEGOESM_RUNNER_PATCHES",
+            "001-libm-lazy-load.patch, , 006-manifest-runner-tag.patch",
+        )
+        m = build_run_manifest(cfg, runner_tag="run_omip_core2")
+        got = m["reproducibility"]["runner_tag"]
+        if got == "run_omip_core2":
+            pytest.skip(
+                "pinned legoESM does not read LEGOESM_RUNNER_TAG "
+                "(patch 006 not applied / PR climate-federation/legoESM#2100 not merged)"
+            )
+        assert got == "legoesm-294495454a29-20261021 template=3d_idealized/baroclinic_gyre"
+        assert m["reproducibility"]["patches"] == [
+            "001-libm-lazy-load.patch", "006-manifest-runner-tag.patch",
+        ]
+
+
 class TestRunScriptGeneration:
     """Test scheduler-directive generation in run.sh (#SBATCH / #OAR)."""
 

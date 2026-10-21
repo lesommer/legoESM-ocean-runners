@@ -266,15 +266,18 @@ python scripts/init_experiment.py global_ocean/omip_jra55 \
 
 ## Reproduce an experiment
 
-Every run produces an `experiment.tag` (INI format) recording the full software environment:
+Every run produces an `experiment.tag` (INI format) recording the full software environment, and every run-time `run_manifest.json` (written by legoESM) additionally carries the runners-layer identity (`[reproducibility] runner_tag` / `patches`, stamped via `LEGOESM_RUNNER_TAG` / `LEGOESM_RUNNER_PATCHES` from the generated `run.sh` — the manifest is the run-time superset of the tag):
 
 ```ini
 [legoESM]
 ref = main
 commit = 2ddb56f77e197a53c8411fec62a9540884bc42c9
+patches = 001-libm-lazy-load.patch,...
+patch_sha256_001-libm-lazy-load = sha256:d24e98bd7213fe6c
 
 [reproducibility]
 runner_tag = legoesm-2ddb56f77e19-20261010
+overrides = ["grid.resolution=128x256", "time.duration_days=730"]
 python_version = 3.12.12
 jax_version = 0.10.0
 ```

@@ -47,7 +47,11 @@ _RUNNERS_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _get_current_tag() -> str:
-    """Get the current git tag for HEAD that matches legoesm-*, or return 'untagged'."""
+    """Current legoesm-* tag at HEAD, or 'untagged@<sha>' in the untagged window.
+
+    A bare "untagged" loses the runners layer entirely; the commit fallback
+    keeps a resolvable identity (reproduce.py checks it out directly).
+    """
     try:
         result = subprocess.run(
             ["git", "describe", "--tags", "--exact-match", "HEAD"],
@@ -57,6 +61,12 @@ def _get_current_tag() -> str:
             tag = result.stdout.strip()
             if tag.startswith("legoesm-"):
                 return tag
+        sha = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, cwd=_RUNNERS_ROOT,
+        )
+        if sha.returncode == 0:
+            return f"untagged@{sha.stdout.strip()}"
         return "untagged"
     except Exception:
         return "untagged"
@@ -308,7 +318,7 @@ def init_experiment(
     with open(config_path, "w") as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=False)
 
-    tag = generate_tag(config, template_name, machine)
+    tag = generate_tag(config, template_name, machine, overrides=overrides)
     tag_path = exp_dir / "experiment.tag"
     with open(tag_path, "w") as f:
         f.write(tag)
@@ -329,8 +339,15 @@ def generate_tag(
     config: dict,
     template_name: str,
     machine: str | None = None,
+    overrides: list[str] | None = None,
 ) -> str:
-    """Generate an experiment.tag string (INI format) for reproducibility."""
+    """Generate an experiment.tag string (INI format) for reproducibility.
+
+    ``overrides`` is the raw CLI override list (``key=value`` strings) as
+    passed to init; recorded under ``[reproducibility]`` so reproduce.py can
+    re-apply them (without it, a reproduced run silently falls back to
+    template defaults).
+    """
     version_info = load_version_info()
     config_hash = hashlib.sha256(
         json.dumps(config, sort_keys=True).encode()
@@ -355,6 +372,11 @@ def generate_tag(
     patches = sorted(PATCHES_DIR.glob("*.patch"))
     if patches:
         lines.append(f"patches = {','.join(p.name for p in patches)}")
+        # Content digests: a filename can be reused with different content
+        # (patch edited, pin bumped); the sha256 pins what init actually saw.
+        for p in patches:
+            digest = hashlib.sha256(p.read_bytes()).hexdigest()
+            lines.append(f"patch_sha256_{p.stem} = sha256:{digest[:16]}")
 
     requires_patches = config.get("requires_patches", [])
     if requires_patches:
@@ -420,6 +442,12 @@ def generate_tag(
         lines.append(f"runner_tag = {runner_tag}")
     except Exception:
         lines.append("runner_tag = untagged")
+
+    # Raw override list (JSON) — the missing link for reproduce.py --run.
+    # Only when actually given: a template-defaults run records nothing,
+    # and the absence itself is the (true) statement.
+    if overrides:
+        lines.append(f"overrides = {json.dumps(overrides)}")
 
     lines.append(f"python_version = {platform.python_version()}")
 
@@ -631,6 +659,29 @@ def _generate_run_script(config: dict, exp_dir: Path, machine: str | None = None
         lines.append(f"LEGOESM_DIR={os.environ.get('LEGOESM_DIR', str(Path(__file__).resolve().parent.parent.parent / 'legoESM'))}")
     lines.append("# legoESM must be installed (uv sync or pip install -e .)")
     lines.append("")
+
+    # Orchestrator provenance (issue #8, Phase 2A): legoESM's
+    # build_run_manifest() records these in [reproducibility] of the run's
+    # run_manifest.json — the run-time truth of the runners layer (repo
+    # state + patch chain at launch), complementary to experiment.tag's
+    # init-time snapshot. Computed at RUN time, not embedded at init: if the
+    # repo moved between init and launch, the manifest reports what ran.
+    lines += [
+        "# ---------- Orchestrator provenance (run_manifest.json) ----------",
+        '_runner_tag="$(git -C "$RUNNERS_ROOT" describe --tags --exact-match HEAD 2>/dev/null || true)"',
+        'case "$_runner_tag" in',
+        "    legoesm-*) ;;",
+        '    *) _runner_tag="untagged@$(git -C "$RUNNERS_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)" ;;',
+        "esac",
+        'export LEGOESM_RUNNER_TAG="$_runner_tag template=$CONFIG_TEMPLATE"',
+        '_patch_list=""',
+        'for _p in "$RUNNERS_ROOT"/patches/*.patch; do',
+        '    [ -e "$_p" ] || continue',
+        '    _patch_list="${_patch_list:+$_patch_list,}$(basename "$_p")"',
+        "done",
+        'export LEGOESM_RUNNER_PATCHES="$_patch_list"',
+        "",
+    ]
 
     mpi_cfg = config.get("mpi", {})
     mpi_enabled = mpi_cfg.get("enabled", False)

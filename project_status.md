@@ -1,6 +1,6 @@
 # Project Status
 
-*Last verified: 2026-10-10 — legoESM pin 2ddb56f77e19, runner tag legoesm-2ddb56f77e19-20261010 (see legoESM_version.txt)*
+*Last verified: 2026-10-21 — legoESM pin 294495454a29, runner tag legoesm-294495454a29-20261021 (see legoESM_version.txt)*
 
 This document tracks what's currently implemented and tested in the runners. Consult it before assuming any capability.
 
@@ -27,6 +27,10 @@ Quick answer to "will `run_experiment run` execute my template?": find the templ
 ### Recipe identity validation (ocean.recipe)
 
 Added 2026-10-21 (recipe × setup integration with the pinned legoESM): templates declare their scheme identity via `ocean.recipe`. Matrix-lane templates MUST name the pinned `recipe_map` tag of their `ocean.case` (declared identity — the upstream matrix case owns the recipe; the field is not forwarded); the dino lane takes optional DINO recipe cards (`ocean.recipe` → `run_dino.py --recipe`, e.g. `nemo_dino_kamm_mlf`); the tripole OMIP lane is pinned to `omip_nemo_match_tripole_v1` (`omip_faithful_card` declares nothing — it overrides dycore fields via `run.extra_args`, and recipe names are fidelity claims). `scripts/validate_templates.py::validate_recipe` resolves every declaration against the pinned legoESM catalogs (`EXPERIMENT_RECIPES`, `DINO_RECIPES`; import-gated, so the semantic checks run where legoESM is installed — CI Tier-2 — and degrade under `--skip-imports`), and `generate_tag` records the declaration in `experiment.tag` `[model]`. An upstream recipe rename/re-tagging therefore breaks validation at pin-bump time instead of silently drifting (the `nemo_v1` → `legoesm_nemo_like_v1` lesson, 2026-09-02). Cases with no upstream tag (`barotropic_gyre`, `barotropic_double_gyre`, `rest_state_stratified_no_land`) must not declare a recipe. Mechanism tests: `tests/test_templates.py::TestRecipeValidation` (planted violations + a real-parity test against the pinned catalogs).
+
+### Manifest stamping (run-time layer identity)
+
+Added 2026-10-21 (issue #8, Phase 2A): the runners layer stamps itself into legoESM's per-run `run_manifest.json` — the run-time superset of `experiment.tag`, now actually carrying the runners identity. The generated `run.sh` computes and exports, at **run time**, `LEGOESM_RUNNER_TAG` (`<legoesm-* tag | untagged@sha> template=<name>`) and `LEGOESM_RUNNER_PATCHES` (comma list of `patches/*.patch`); `build_run_manifest()` — via patch `006-manifest-runner-tag.patch` (upstream PR climate-federation/legoESM#2100; remove when merged) — records them under `[reproducibility]`. Division of truth: `experiment.tag` is the init-time snapshot, the manifest the run-time truth (if the repo moved between init and launch, the manifest reports what actually ran). Companion `experiment.tag` additions: per-patch content digests (`patch_sha256_<stem> = sha256:<16hex>` — a re-edited same-named patch is detectable), the raw override list (`[reproducibility] overrides`, JSON — the missing link for `reproduce.py --run`), and `runner_tag` now falls back to `untagged@<sha>` in the untagged window (`reproduce.py` checks out the sha). Mechanism tests: `tests/test_templates.py::TestOrchestratorProvenance` (bash-execution probe of the generated snippet, planted-failure coverage, and an env→manifest end-to-end check against the pinned legoESM). Numbering note: an earlier, unrelated `006` patch (dino SPMD) was dropped at the 2026-10-10 pin bump after upstream merge — the number was reused.
 
 ### ocean_scm (native run path)
 

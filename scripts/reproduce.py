@@ -57,8 +57,15 @@ def get_current_tag() -> str | None:
 
 
 def checkout_tag(runner_tag: str, dry_run: bool = False) -> bool:
-    """Checkout a git tag in this repository."""
-    cmd = ["git", "checkout", runner_tag]
+    """Checkout a git tag (or untagged@<sha> fallback) in this repository."""
+    # The untagged-window fallback (run_experiment._get_current_tag):
+    # "untagged@<sha>" reproduces from the recorded commit; a bare
+    # "untagged" carries no resolvable identity and fails here.
+    ref = runner_tag
+    if ref.startswith("untagged@"):
+        ref = ref.split("@", 1)[1]
+        print(f"  NOTE: {runner_tag} records an untagged commit; checking out {ref}")
+    cmd = ["git", "checkout", ref]
     if dry_run:
         print(f"  Would run: {' '.join(cmd)} (in {ROOT_DIR})")
         return True
