@@ -4,28 +4,33 @@ Experiment templates, runners, and reproducibility tools for ocean simulations w
 
 ## Why this repo exists
 
-legoESM is a model repository. It ships the model itself, run scripts such as
-`scripts/run/run_omip_core2.py` (a large command-line surface, plus a
-`--config` YAML lane and a `legoesm run` entry point), versioned example
-configurations under `config/`, a per-run `run_manifest.json` (resolved
-configuration, config hash, final state digest), and `legoesm reproduce
---check` to re-run a manifest and bit-check the result.
+legoESM is a model repository — and it now ships its own reproducibility
+spine: versioned experiment templates under `config/templates/`, init
+ergonomics (`scripts/experiment/init_experiment.py`), a `legoesm run`
+entry point, a per-run `run_manifest.json` (resolved configuration,
+config hash, final state digest) written at run start, and `legoesm
+reproduce --check` to re-run a manifest and bit-check the result. The
+manifest is designed upstream as a **superset of this repo's
+`experiment.tag`** — same section names, plus `runner_tag`/`patches`
+fields that exist precisely for this repo to stamp itself into — and
+upstream asks downstreams not to build parallel provenance systems.
+This repo does not duplicate that spine.
 
-That is enough to execute a single run on a single machine. A typical user,
+That spine executes and re-verifies a single run. A typical user,
 however, wants to run *experiments*: a series of configured runs, across
-several machines, revisited over months. Between the model and that workflow
-there is a gap:
+several machines, revisited over months. Between the model and that
+workflow there is a gap:
 
-- **Named configurations.** The upstream `--config` lane is deliberately
-  narrow: it applies only `ocean.*` fields, only on lat-lon C-grid lanes,
-  and grid, mesh and most run controls remain command-line flags. There is
-  no way to say "the baroclinic gyre experiment, at 128x256, for 2 years"
-  once and then vary one parameter at a time.
+- **Named configurations.** Upstream's `--config` lane is deliberately
+  narrow (only `ocean.*` fields, only some lanes; grid/mesh/run controls
+  stay CLI flags), and its template library is generic. There is no way
+  to say "the NEMO-faithful card, at this resolution, for 2 years" once
+  and then vary one parameter at a time.
 
-- **Reproducibility across environments.** The manifest describes one run,
-  but it cannot reconstruct an environment that involved features not yet
-  merged into legoESM, and it carries no notion of *which* configuration
-  template a run came from.
+- **Reproducibility across environments.** The manifest describes one
+  run, but it cannot reconstruct an environment that involved features
+  not yet merged into legoESM, and it carries no notion of *which*
+  configuration template a run came from.
 
 - **Data.** Realistic runs need grids, bathymetry, forcing and initial
   conditions. Upstream accepts a path to already-staged data; where the
@@ -35,39 +40,69 @@ there is a gap:
 - **Machines.** Clusters differ in schedulers, accounts, storage paths and
   GPU setup. Nothing upstream adapts a configuration to where it runs.
 
-This repo fills that gap. It provides:
+This repo fills that gap as a **thin delta layer over legoESM's spine** —
+it owns what upstream does not (and should not) carry:
 
-- **Templates** — 31 version-controlled YAML configurations across five
-  modes (`ocean_scm`, `barotropic_ocean`, `3d_ocean`, `3d_ocean_realistic`,
-  `coupled`), dispatched to the matching legoESM configuration classes, with
-  dot-notation parameter overrides at init (`-o grid.resolution=128x256`).
+- **A curated ocean experiment set** — templates that declare their
+  scheme identity by naming legoESM **recipes** from the pinned catalog
+  (see *Recipes* below): the NEMO-faithful card, DINO recipe lanes, the
+  tripole OMIP lanes, Neverworld2-lite, the SCM set, and the idealized
+  matrix lanes. Generic templates graduate upstream as they stabilize
+  (merge-and-remove, like patches); the curated/personal ones stay here.
 
-- **A reproducibility chain anchored in git tags** — `legoESM_version.txt`
-  pins the model commit, validated `legoesm-<hash>-<date>` tags mark
-  compatibility points, and every run produces an `experiment.tag` whose
-  `runner_tag` lets `scripts/reproduce.py` reconstruct the full environment:
-  runner tag, legoESM commit, patches, data check. Upstream's manifest
-  verifies a rerun's digest; this chain reconstructs the run.
+- **The patch chain** — `legoESM_version.txt` pins the model commit,
+  validated `legoesm-<hash>-<date>` tags mark compatibility points, and
+  `patches/` holds pre-merge features. A run manifest *records* which
+  patches were applied; only this repo can *reconstruct* the patched
+  environment: `scripts/reproduce.py` walks runner tag → legoESM commit
+  → patches → data check. Upstream's manifest verifies a rerun's
+  digest; this chain reconstructs the run.
 
-- **A patch workflow** — `patches/` holds pre-merge changes that let
-  templates use features before they land in legoESM main; patches are
-  numbered, applied in order, and removed once merged upstream.
+- **A data catalog** — `data_catalog.yaml` is the single source of truth
+  for external files (URLs, checksums, sizes, access levels, citations),
+  and `scripts/fetch_data.py` checks, fetches and verifies them per
+  machine before a run starts.
 
-- **A data catalog** — `data_catalog.yaml` is the single source of truth for
-  external files (URLs, checksums, sizes, access levels), and
-  `scripts/fetch_data.py` checks, fetches and verifies them per machine.
-
-- **Machine adaptation** — templates are machine-agnostic; machine
-  configuration (scheduler, accounts, paths, environment) is passed at init
-  via `--machine` and the generated `run.sh` matches the machine's scheduler
-  (`slurm`, `oar`, pbs, lsf) or runs directly. SLURM machines get `#SBATCH`
-  directives (submit with `sbatch run.sh`); OAR machines (GRICAD/CIMENT:
-  bigfoot, dahu, kraken) get `#OAR` directives (submit with
-  `oarsub -S ./run.sh` — the path form is required).
-
-- **Validation** — `scripts/validate_templates.py` checks templates against
-  the pinned legoESM, and CI blocks pushes to `main` when
+- **Fleet operations** — templates are machine-agnostic; machine
+  configuration (scheduler, accounts, paths, environment) is passed at
+  init via `--machine` and the generated `run.sh` matches the machine's
+  scheduler: SLURM machines get `#SBATCH` directives (submit with
+  `sbatch run.sh`); OAR machines (GRICAD/CIMENT: bigfoot, dahu, kraken)
+  get `#OAR` directives (submit with `oarsub -S ./run.sh` — the path
+  form is required). Per-template run-tested receipts live in
+  `project_status.md`, and CI blocks pushes to `main` when
   reproducibility-affecting files change without a tag.
+
+- **Validation** — `scripts/validate_templates.py` checks templates
+  against the pinned legoESM, including `ocean.recipe` declarations
+  (below).
+
+### Recipes (scheme identity)
+
+In legoESM lingo, a **recipe** is the named *scheme identity* of an
+ocean configuration — which EOS, advection, pressure-gradient,
+barotropic solver and time integrators it uses — decoupled from the
+**setup** (grid, initial conditions, forcing, resolution-dependent
+parameters). A run is a (recipe, setup) pair. Recipes live in legoESM's
+catalog (`legoesm.ocean.recipes`); every upstream test-matrix case is
+tagged with the recipe it actually runs (`recipe_map.EXPERIMENT_RECIPES`),
+and those tags are verified upstream by tests, so they cannot drift.
+
+Templates in this repo declare their scheme identity with
+`ocean.recipe`:
+
+| Lane | `ocean.recipe` semantics |
+|------|---------------------------|
+| matrix lanes (`2d/`, `3d_idealized/`, `global_ocean/bench`, ...) | **required**; must equal the pinned recipe_map tag of `ocean.case` — the upstream case owns the recipe, the template declares it |
+| `dino` | optional; names an upstream DINO recipe *card* (`run_dino.py --recipe`: `nemo_dino_kamm`, `nemo_dino_kamm_mlf`, `veros`, ...); unset = paper-faithful DINOConfig defaults |
+| tripole OMIP (`omip_tripole`, `omip_core2_thin`) | the lane's fixed identity `omip_nemo_match_tripole_v1`; `omip_faithful_card` overrides dycore fields via `run.extra_args` and declares **nothing** (recipe names are fidelity claims — never declare an unverified identity) |
+| `ocean_scm`, `coupled` | no ocean dycore recipe applies |
+
+`scripts/validate_templates.py` resolves every declaration against the
+*pinned* legoESM catalogs, so an upstream recipe rename or re-tagging
+(`nemo_v1` → `legoesm_nemo_like_v1` happened, 2026-09-02) breaks
+validation at pin-bump time, not at run time. The declaration is
+recorded in `experiment.tag` (`[model] recipe = ...`).
 
 ### Position in the three-repo layout
 

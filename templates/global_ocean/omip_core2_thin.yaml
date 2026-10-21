@@ -52,10 +52,15 @@ grid:
   mesh_file: eORCA1.2_mesh_mask.nc
   nlev: 20                      # the 8089905 lane was 20 levels (HEAD default drifted to 40 — pinned)
 
-# ocean/physics intentionally ABSENT: the 8089905 lane is pure defaults —
-# no smag/A_h/vertadv flags, no closure (--tripole-vmix none), no bottom
-# drag, no SSS restoring, GM/Redi at its upstream default (ON). Any field
-# added here is a deviation from the receipt lane and must be A/B'd.
+# ocean/physics intentionally ABSENT below except `recipe`: the 8089905
+# lane is pure defaults — no smag/A_h/vertadv flags, no closure
+# (--tripole-vmix none), no bottom drag, no SSS restoring, GM/Redi at its
+# upstream default (ON). Any *physics* field added here is a deviation
+# from the receipt lane and must be A/B'd. `ocean.recipe` is declared
+# identity metadata (the lane assembles it via nemo_match_tripole_model_
+# config), not a forwarded knob.
+ocean:
+  recipe: omip_nemo_match_tripole_v1
 
 time:
   duration_days: 1460           # 4 x 365 (the receipt's --years 4)

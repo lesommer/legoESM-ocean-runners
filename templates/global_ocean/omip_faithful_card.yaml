@@ -56,6 +56,12 @@ grid:
   partial_cells: true
 
 ocean:
+  # No ocean.recipe: the tripole lane's base identity is
+  # omip_nemo_match_tripole_v1, but this card OVERRIDES three dycore
+  # fields via run.extra_args (--momentum-rk3, --pgf-scheme smc03,
+  # --tracer-advection superbee). No catalog name covers the overridden
+  # identity, and a recipe name is a fidelity claim — declaring the base
+  # name would overclaim. Leave unset until upstream names this card.
   C_smag_lap: 3.0
   smag_cfl_safety: 0.125
   adaptive_implicit_vertadv: true

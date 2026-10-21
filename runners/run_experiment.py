@@ -371,6 +371,13 @@ def generate_tag(
         lines.append(f"resolution = {grid.get('resolution', 'unknown')}")
         nlev = grid.get("n_levels", grid.get("nlev", "unknown"))
         lines.append(f"nlev = {nlev}")
+    # Recipe identity: the named scheme identity the run lane assembles
+    # (AGENTS.md "Recipes"). Absent = the lane's own default identity
+    # (e.g. dino without ocean.recipe runs the upstream DINOConfig
+    # paper-faithful defaults).
+    recipe = (config.get("ocean") or {}).get("recipe")
+    if recipe:
+        lines.append(f"recipe = {recipe}")
 
     lines += [
         "",

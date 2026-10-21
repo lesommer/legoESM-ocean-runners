@@ -6,6 +6,15 @@ This document explains the purpose, philosophy, boundaries, and working conventi
 
 This repository stores **experiment templates, runners, and reproducibility tools** for running ocean (and coupled) simulations with [legoESM](https://github.com/climate-federation/legoESM). It is not the model itself — legoESM lives in a separate repository and is referenced by a pinned commit in `legoESM_version.txt`.
 
+**Positioning (2026-10 re-scope): legoESM now ships its own reproducibility spine** — a template library (`config/templates/`), init ergonomics (`scripts/experiment/init_experiment.py`), `legoesm run`, a per-run `run_manifest.json` designed upstream as a **superset of this repo's `experiment.tag`**, `legoesm reproduce --check`, a data catalog, and machine profiles. This repo does **not** duplicate that spine (upstream explicitly asks downstreams not to build parallel provenance systems). It is the **thin ocean delta layer** over it:
+
+1. a curated ocean experiment set — templates that declare their scheme identity by naming legoESM **recipes** (see §5, "Recipes") from the pinned catalog;
+2. the **patch chain** — pin → `legoesm-*` tag → patches → environment reconstruction (`scripts/reproduce.py`; the manifest *records* patches, only this repo can *reconstruct* the patched checkout);
+3. the **ocean data catalog** (checksums, access levels, citations);
+4. **fleet operations** — machine adaptation for the machines we run on, per-template run-tested receipts (`project_status.md`), and the CI reproducibility-tag gate.
+
+Generic templates graduate upstream as they stabilize (merge-and-remove, like patches); the curated/personal ones stay here.
+
 **Reproducibility is the core guiding principle.** Every experiment must be reconstructable from its provenance records. The full chain `template + overrides → config.yaml → experiment.tag → reproduce.py` must be unbroken. If an experiment cannot be reproduced from what is committed, the system has failed.
 
 The repo serves three goals (in priority order):
@@ -46,6 +55,8 @@ template + overrides  →  config.yaml  →  experiment.tag  →  reproduce.py
 **Version control as reproducibility contract.** `main` always targets the latest legoESM. Git tags (`legoesm-<hash>-<date>[<letter>]`) mark validated compatibility points — every time `legoESM_version.txt` is updated and templates pass validation, a tag is created. If the same legoESM pin gets multiple tags (e.g., due to runner/template/patch changes), a letter suffix is appended: `b`, `c`, etc. Past experiments are reproduced by checking out the tag recorded in their `experiment.tag` file. Never create branches for different legoESM versions; use tags instead.
 
 **Reproducibility-affecting changes must be tagged.** Changes to `patches/`, `templates/`, `runners/`, `scripts/`, `legoESM_version.txt`, or `data_catalog.yaml` affect reproducibility and require a `legoesm-*` tag. Documentation-only changes (README, project_status, AGENTS.md, etc.) do not require a tag. CI enforces this: pushes to `main` fail if reproducibility-affecting files have changed since the last `legoesm-*` tag. After merging such changes, run `bash scripts/sync_legoesm.sh --tag-only` to validate and tag HEAD.
+
+**Recipe names are fidelity claims.** A template declares its scheme identity with `ocean.recipe` (see §5) — a name from the *pinned* legoESM recipe catalogs, never an invented or unverified identity. Upstream recipe renames or re-taggings (e.g. `nemo_v1` → `legoesm_nemo_like_v1`, 2026-09-02) must surface at pin-bump validation time, not at run time: `scripts/validate_templates.py` resolves every declaration against the pinned legoESM (`recipe_map.EXPERIMENT_RECIPES`, `DINO_RECIPES`, the tripole lane identity) and fails on drift. Never re-spell scheme selections in a template when a named recipe exists — name the recipe and keep only setup-dependent fields.
 
 **Machine-agnostic templates.** Templates contain no machine-specific paths or scheduler settings. Machine configuration lives in the experiments repo's `machines/*.yaml`, passed to the runners via `--machine <path>`.
 
@@ -104,9 +115,41 @@ grid:
   n_levels: <int>   # or nlev for ocean configs
 
 ocean: ...         # or atmosphere: ... or coupled: ... depending on mode
+  # recipe: <named legoESM scheme identity>  — see "Recipes" below
 time:
   duration_days: <int>    # or duration_hours for short tests
 ```
+
+### Recipes (scheme identity)
+
+In legoESM lingo, a **recipe** is the named *scheme identity* of an ocean
+configuration (EOS, advection, pressure-gradient, barotropic solver, time
+integrators), decoupled from the **setup** (grid, ICs, forcing,
+resolution-dependent parameters). A run is a (recipe, setup) pair. Recipes
+live in the pinned legoESM: the catalog
+`packages/ocean/legoesm/ocean/recipes.py`, the per-case tags
+`packages/ocean/legoesm/ocean/experiments/recipe_map.py`
+(`EXPERIMENT_RECIPES`, verified upstream by `tests/ocean/unit/test_recipe_map.py`),
+and the DINO cards `DINO_RECIPES` in
+`packages/ocean/legoesm/ocean/experiments/dino.py`.
+
+Templates declare scheme identity via `ocean.recipe`. Per-lane semantics
+(enforced by `scripts/validate_templates.py::validate_recipe`):
+
+| Lane | `ocean.recipe` rule |
+|------|---------------------|
+| matrix lanes (`2d/`, `3d_idealized/` cases with a `--only` dispatch, `global_ocean/bench`, ...) | **required**; must equal the pinned `recipe_map` tag of `ocean.case` — the upstream case owns the recipe, the template only declares it |
+| `dino` | optional; must be a `DINO_RECIPES` card (forwarded as `run_dino.py --recipe`); unset = upstream DINOConfig paper-faithful defaults |
+| tripole OMIP (`omip_tripole`, `omip_core2_thin`) | must be `omip_nemo_match_tripole_v1` (the lane's fixed identity via `nemo_match_tripole_model_config`) or absent |
+| templates overriding dycore fields via `run.extra_args` (`omip_faithful_card`) | must NOT declare a recipe — no catalog name covers the overridden identity |
+| `ocean_scm`, `coupled` | no ocean dycore recipe; declaring one is an error |
+| cases with no upstream `recipe_map` tag (`barotropic_gyre`, `barotropic_double_gyre`, `rest_state_stratified_no_land`) | must NOT declare a recipe — never declare an unverified identity; add the declaration when upstream tags the case |
+
+Other `ocean.*` scheme fields on matrix-lane templates are *documented
+intent* (never forwarded — the upstream baseline assembles the recipe);
+keep them consistent with the declared recipe. The declaration is recorded
+in `experiment.tag` (`[model] recipe = ...`) and validated at init-receipt
+time by CI Tier-2 against the pinned legoESM.
 
 ### Mode → Config Class Mapping
 
@@ -119,6 +162,15 @@ Templates are mode-aware. The runner dispatches based on `experiment.mode`:
 | `3d_ocean` | `LatLonCGridOceanConfig` / `OceanConfig` / `MPASOceanConfig` / `SpectralOceanConfig` (depends on `grid.type`) |
 | `3d_ocean_realistic` | Same as `3d_ocean` but with realistic bathymetry and forcing |
 | `coupled` | `ExperimentConfig` + `CoupledConfig` (selected by `coupled.preset`) |
+
+Scheme-identity (recipe) field mapping:
+
+| Template field | legoESM module | What it names |
+|----------------|-----------------|---------------|
+| `ocean.recipe` (matrix lanes) | `packages/ocean/legoesm/ocean/experiments/recipe_map.py` | the case's verified recipe tag (`EXPERIMENT_RECIPES`) |
+| `ocean.recipe` (dino) | `packages/ocean/legoesm/ocean/experiments/dino.py` | a `DINO_RECIPES` card |
+| `ocean.recipe` (tripole OMIP) | `packages/ocean/legoesm/ocean/fidelity/nemo_match_recipe.py` | the lane's NEMO-match identity (catalog: `omip_nemo_match_tripole_v1`) |
+| (all recipes) | `packages/ocean/legoesm/ocean/recipes.py` | the recipe catalog (`LATLON_RECIPES` / `MPAS_RECIPES`) |
 
 For field-level details, read the legoESM source code directly (`../legoESM/src/legoesm/driver/config.py` for atmosphere, `../legoESM/src/legoesm/ocean/state.py` for ocean).
 
@@ -159,7 +211,7 @@ requires_patches:
 Every initialized experiment produces an `experiment.tag` INI file with:
 - `[experiment]` — name, template, mode, creation timestamp
 - `[legoESM]` — pinned ref, commit hash, patches applied, requires_patches
-- `[model]` — configuration, grid type, resolution, vertical levels
+- `[model]` — configuration, grid type, resolution, vertical levels, and the declared recipe (`recipe = <name>`, written when `ocean.recipe` is set)
 - `[run]` — duration, timestep
 - `[data]` — data_root, requires list, resolved file paths
 - `[machine]` — hostname, machine config
@@ -190,11 +242,12 @@ These tag files are intended to be archived alongside experiment output in a sep
 3. Create the YAML in the appropriate `templates/<category>/` directory
 4. Include `experiment`, `requires`, `grid`, and `time` sections at minimum
 5. Use a valid `mode` (see table above)
-6. Reference data catalog IDs in `requires` — never invent new IDs without adding them to `data_catalog.yaml`
-7. If the template needs unmerged legoESM features, add `requires_patches` listing the patch filenames
-8. Run `python scripts/validate_templates.py --skip-imports` to verify
-9. Add a row to the project_status.md "Template test status" table with Status `structural`, then run `python scripts/render_readme_status.py` (CI fails without the row — template parity)
-10. Update the test count in `tests/test_templates.py` if needed
+6. If `ocean.case` has a tag in the pinned legoESM `recipe_map`, declare `ocean.recipe: <tag>` — validation enforces it (see "Recipes" above). Never invent or guess a recipe name.
+7. Reference data catalog IDs in `requires` — never invent new IDs without adding them to `data_catalog.yaml`
+8. If the template needs unmerged legoESM features, add `requires_patches` listing the patch filenames
+9. Run `python scripts/validate_templates.py --skip-imports` to verify
+10. Add a row to the project_status.md "Template test status" table with Status `structural`, then run `python scripts/render_readme_status.py` (CI fails without the row — template parity)
+11. Update the test count in `tests/test_templates.py` if needed
 
 ### Onboard a run lane (new case in `_MATRIX_CASES` or a new delegation handler)
 1. Audit the template against the upstream lane design (resolution, dt = lane `DEFAULT_DT`, duration) — a template dt larger than the lane default is forwarded as `--dt` and can blow up (baroclinic_gyre lesson, 2026-10-10)
@@ -259,6 +312,7 @@ This repository is public; external contributions follow the fork + PR flow desc
 - **Never modify `legoESM_version.txt` without tagging.** Every pin update should be accompanied by a `legoesm-<hash>-<date>` tag after validation passes.
 - **Never merge changes to `patches/`, `templates/`, `runners/`, `scripts/`, `legoESM_version.txt`, or `data_catalog.yaml` without tagging.** These affect reproducibility just as much as pin updates. Run `bash scripts/sync_legoesm.sh --tag-only` after merging.
 - **Never assume runner capabilities without checking `project_status.md`.** The runners support init + provenance tagging for all modes, but run path availability varies. Consult `project_status.md` for what's currently implemented and tested before assuming a template can be executed through the runners.
+- **Never declare an unanchored `ocean.recipe`.** A recipe declaration must resolve in the pinned legoESM (recipe_map tag, DINO card, or the tripole lane identity); `validate_templates.py` rejects anything else. Recipe names are fidelity claims — a case without an upstream tag declares nothing.
 - **Never modify runners or templates without updating `project_status.md`.** Any change that affects runner capabilities or template test status must be reflected in `project_status.md` before committing:
   - New runner functionality (e.g., implementing the `3d_ocean` run path) → update the "Runner implementation status" table and move affected templates from `structural` to `run-tested`
   - New template → add a row to the "Template test status" table (Status: `structural` only until run-tested)

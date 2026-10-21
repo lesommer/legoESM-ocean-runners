@@ -19,10 +19,14 @@ grid:
 
 ocean:
   case: stommel_gyre_tracer
+  # Scheme identity = the upstream matrix case's verified recipe tag
+  # (recipe_map.EXPERIMENT_RECIPES); NOT forwarded — the upstream baseline
+  # assembles it. Other ocean.* scheme fields are documented intent.
+  recipe: default_wright_v1
   A_h: 5.0e4
   K_h: 1000.0
   bottom_drag_r: 1.1e-3
-  eos: linear
+  eos: wright
 
 domain:
   lon_west: 0.0

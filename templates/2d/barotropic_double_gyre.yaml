@@ -26,6 +26,9 @@ grid:
 
 ocean:
   case: barotropic_double_gyre
+  # No ocean.recipe: this case has no verified tag in the pinned legoESM
+  # recipe_map yet (recipe names are fidelity claims — never declare an
+  # unverified identity). Add one when upstream tags the case.
   A_h: 5.0e4
   bottom_drag_r: 1.1e-3
   eos: linear

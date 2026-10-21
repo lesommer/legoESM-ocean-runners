@@ -38,6 +38,14 @@ grid:
 
 ocean:
   case: dino
+  # Scheme identity: unset = upstream DINOConfig paper-faithful defaults
+  # (recipe_map tag: nemo_dino_v1). Setting ocean.recipe selects an
+  # upstream DINO recipe CARD (run_dino.py --recipe; validated against
+  # DINO_RECIPES at template-validation time): e.g. nemo_dino_kamm,
+  # nemo_dino_kamm_mlf, veros, mitgcm, oceananigans. The card is
+  # authoritative — scheme flags are forwarded only when explicitly
+  # overridden (see _DINO_SCHEME_FLAGS).
+  # recipe: nemo_dino_kamm_mlf
   vmix: kpp
   eos: wright
   tracer_advection: tvd

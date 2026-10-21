@@ -26,6 +26,10 @@ grid:
 
 ocean:
   case: eady_instability
+  # Scheme identity = the upstream matrix case's verified recipe tag
+  # (recipe_map.EXPERIMENT_RECIPES); NOT forwarded — the upstream baseline
+  # assembles it. Other ocean.* scheme fields are documented intent.
+  recipe: legoesm_linear_v1
   A_h: 1.0e2
   K_h: 1.0e2
   eos: linear

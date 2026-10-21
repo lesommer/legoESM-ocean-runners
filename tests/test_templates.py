@@ -202,6 +202,208 @@ class TestDinoSchemeForwarding:
         assert _dino_scheme_flags(config["ocean"]) == []
 
 
+class TestRecipeValidation:
+    """ocean.recipe declarations are validated against the pinned legoESM.
+
+    Recipe sources are injected so planted-violation tests run without
+    legoESM installed; ``test_real_templates_against_pinned_legoesm``
+    additionally runs the full check against the REAL pinned catalogs
+    when legoESM is importable (CI Tier-2), so a fixture/reality drift
+    cannot pass silently.
+    """
+
+    # Mirror of the pinned legoESM recipe_map tags + DINO cards (subset
+    # needed by the fixtures below; the real-parity test uses the real
+    # catalogs).
+    SOURCES = {
+        "experiment_recipes": {
+            "baroclinic_gyre": "default_wright_v1",
+            "global_overturning": "legoesm_linear_v1",
+            "eady_instability": "legoesm_linear_v1",
+            "bench": "legoesm_nemo_like_v1",
+        },
+        "dino_recipes": {"legoesm_default", "nemo_paper", "nemo_dino_kamm",
+                         "nemo_dino_kamm_mlf", "veros", "mitgcm",
+                         "oceananigans"},
+    }
+
+    @staticmethod
+    def _validate(config, sources=None):
+        import validate_templates as vtpl
+        return vtpl.validate_recipe(config, **(sources or {}))
+
+    def test_matrix_recipe_required(self):
+        # PLANTED VIOLATION: tagged case without a declaration must fail.
+        errors = self._validate(
+            {"experiment": {"mode": "3d_ocean"},
+             "ocean": {"case": "baroclinic_gyre"}},
+            self.SOURCES)
+        assert len(errors) == 1
+        assert "declare" in errors[0] and "default_wright_v1" in errors[0]
+
+    def test_matrix_recipe_mismatch_rejected(self):
+        # PLANTED VIOLATION: a declaration disagreeing with the upstream
+        # recipe_map tag must fail (upstream renames break at pin-bump).
+        errors = self._validate(
+            {"experiment": {"mode": "3d_ocean"},
+             "ocean": {"case": "global_overturning",
+                       "recipe": "default_wright_v1"}},
+            self.SOURCES)
+        assert len(errors) == 1
+        assert "recipe_map" in errors[0] and "legoesm_linear_v1" in errors[0]
+
+    def test_matrix_recipe_match_accepted(self):
+        errors = self._validate(
+            {"experiment": {"mode": "3d_ocean"},
+             "ocean": {"case": "global_overturning",
+                       "recipe": "legoesm_linear_v1"}},
+            self.SOURCES)
+        assert errors == []
+
+    def test_untagged_case_rejects_declaration(self):
+        # PLANTED VIOLATION: recipe names are fidelity claims — a case
+        # without an upstream recipe_map tag must not declare one.
+        errors = self._validate(
+            {"experiment": {"mode": "barotropic_ocean"},
+             "ocean": {"case": "barotropic_gyre",
+                       "recipe": "default_wright_v1"}},
+            self.SOURCES)
+        assert len(errors) == 1
+        assert "no verified tag" in errors[0]
+
+    def test_untagged_case_undeclared_ok(self):
+        errors = self._validate(
+            {"experiment": {"mode": "barotropic_ocean"},
+             "ocean": {"case": "barotropic_double_gyre"}},
+            self.SOURCES)
+        assert errors == []
+
+    def test_dino_card_accepted(self):
+        errors = self._validate(
+            {"experiment": {"mode": "3d_ocean"},
+             "ocean": {"case": "dino", "recipe": "nemo_dino_kamm_mlf"}},
+            self.SOURCES)
+        assert errors == []
+
+    def test_dino_unset_ok(self):
+        # Unset = upstream DINOConfig paper-faithful defaults.
+        errors = self._validate(
+            {"experiment": {"mode": "3d_ocean"},
+             "ocean": {"case": "dino"}},
+            self.SOURCES)
+        assert errors == []
+
+    def test_dino_rejects_recipe_map_tag(self):
+        # PLANTED VIOLATION: the dino lane takes DINO recipe CARDS, not
+        # recipe_map dycore tags (nemo_dino_v1 would be forwarded as
+        # --recipe and rejected by run_dino.py's choices).
+        errors = self._validate(
+            {"experiment": {"mode": "3d_ocean"},
+             "ocean": {"case": "dino", "recipe": "nemo_dino_v1"}},
+            self.SOURCES)
+        assert len(errors) == 1
+        assert "DINO recipe card" in errors[0]
+
+    def test_tripole_lane_recipe_accepted(self):
+        errors = self._validate(
+            {"experiment": {"mode": "3d_ocean_realistic"},
+             "grid": {"type": "tripole"},
+             "ocean": {"recipe": "omip_nemo_match_tripole_v1"}},
+            self.SOURCES)
+        assert errors == []
+
+    def test_tripole_lane_wrong_recipe_rejected(self):
+        # PLANTED VIOLATION: the tripole lane's identity is fixed by
+        # upstream nemo_match_tripole_model_config.
+        errors = self._validate(
+            {"experiment": {"mode": "3d_ocean_realistic"},
+             "grid": {"type": "tripole"},
+             "ocean": {"recipe": "default_wright_v1"}},
+            self.SOURCES)
+        assert len(errors) == 1
+        assert "omip_nemo_match_tripole_v1" in errors[0]
+
+    def test_tripole_card_override_undeclared_ok(self):
+        # omip_faithful_card: dycore fields overridden via extra_args —
+        # no honest catalog name, so no recipe may be declared.
+        from runners.run_experiment import load_template
+        cfg = load_template("global_ocean/omip_faithful_card")
+        assert self._validate(cfg, self.SOURCES) == []
+        assert (cfg.get("ocean") or {}).get("recipe") is None
+
+    def test_scm_and_coupled_exempt_but_reject_recipe(self):
+        # PLANTED VIOLATION: recipe declared on a mode that has no ocean
+        # dycore recipe.
+        for mode in ("ocean_scm", "coupled"):
+            errors = self._validate(
+                {"experiment": {"mode": mode},
+                 "ocean": {"case": "rest_state",
+                           "recipe": "default_wright_v1"}},
+                self.SOURCES)
+            assert len(errors) == 1, mode
+            assert "no ocean dycore recipe" in errors[0]
+
+    def test_non_string_recipe_rejected(self):
+        errors = self._validate(
+            {"experiment": {"mode": "3d_ocean"},
+             "ocean": {"case": "baroclinic_gyre", "recipe": ["bogus"]}},
+            self.SOURCES)
+        assert len(errors) == 1
+        assert "must be a string" in errors[0]
+
+    def test_sources_absent_degrades_gracefully(self):
+        # --skip-imports: semantic checks degrade, no false failures.
+        errors = self._validate(
+            {"experiment": {"mode": "3d_ocean"},
+             "ocean": {"case": "baroclinic_gyre"}})
+        assert errors == []
+
+    def test_real_templates_pass_with_fixture_sources(self):
+        from runners.run_experiment import load_template
+        for name in ("3d_idealized/baroclinic_gyre",
+                     "3d_idealized/eady_instability",
+                     "global_ocean/global_overturning",
+                     "global_ocean/omip_tripole",
+                     "global_ocean/omip_core2_thin",
+                     "1d/ocean_scm"):
+            cfg = load_template(name)
+            assert self._validate(cfg, self.SOURCES) == [], name
+
+    def test_real_templates_against_pinned_legoesm(self):
+        """Full check against the REAL pinned catalogs (CI Tier-2).
+
+        Skips where legoESM is not importable; where it is, every
+        template's ocean.recipe must agree with the pinned legoESM —
+        this is the gate that turns an upstream recipe rename into a
+        pin-bump failure instead of a silent run-time drift.
+        """
+        pytest.importorskip("legoesm")
+        from legoesm.ocean.experiments.recipe_map import EXPERIMENT_RECIPES
+        from legoesm.ocean.experiments.dino import DINO_RECIPES
+        sources = {
+            "experiment_recipes": dict(EXPERIMENT_RECIPES),
+            "dino_recipes": set(DINO_RECIPES),
+        }
+        for yaml_file in sorted(TEMPLATES_DIR.rglob("*.yaml")):
+            with open(yaml_file) as f:
+                config = yaml.safe_load(f)
+            errors = self._validate(config, sources)
+            assert errors == [], f"{yaml_file.relative_to(TEMPLATES_DIR)}: {errors}"
+
+    def test_tag_records_recipe(self):
+        # generate_tag surfaces the declared recipe in [model].
+        from runners.run_experiment import generate_tag, load_template
+        cfg = load_template("3d_idealized/baroclinic_gyre")
+        tag = generate_tag(cfg, "3d_idealized/baroclinic_gyre")
+        assert "recipe = default_wright_v1" in tag
+
+    def test_tag_omits_recipe_when_undeclared(self):
+        from runners.run_experiment import generate_tag, load_template
+        cfg = load_template("3d_idealized/dino")
+        tag = generate_tag(cfg, "3d_idealized/dino")
+        assert "recipe = " not in tag
+
+
 class TestRunScriptGeneration:
     """Test scheduler-directive generation in run.sh (#SBATCH / #OAR)."""
 

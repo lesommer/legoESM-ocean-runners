@@ -28,6 +28,13 @@ grid:
   partial_cells: true
 
 ocean:
+  # Scheme identity = the tripole OMIP lane's recipe: run_omip_core2.py
+  # build_tripole -> run_omip._create_setup("tripole") ->
+  # nemo_match_tripole_model_config (catalog recipe, locked upstream by
+  # tests/ocean/unit/test_recipes.py). NOT forwarded — the lane always
+  # assembles it; template knobs (KPP, bottom drag, SSS restoring...) are
+  # physics = setup.
+  recipe: omip_nemo_match_tripole_v1
   smag_cfl_safety: 0.125
   adaptive_implicit_vertadv: true
 

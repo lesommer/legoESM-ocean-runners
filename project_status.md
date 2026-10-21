@@ -24,6 +24,10 @@ Quick answer to "will `run_experiment run` execute my template?": find the templ
 | `3d_ocean_realistic` | Working | **Working: tripolar grids** | Script delegation to `run_omip_core2.py`; see the `3d_ocean_realistic` subsection below. Other grid types: init-only. |
 | `coupled` | Working | **Implemented, untested** | Constructs `CoupledESMDriver`; no end-to-end run recorded. See the `coupled` subsection below. |
 
+### Recipe identity validation (ocean.recipe)
+
+Added 2026-10-21 (recipe × setup integration with the pinned legoESM): templates declare their scheme identity via `ocean.recipe`. Matrix-lane templates MUST name the pinned `recipe_map` tag of their `ocean.case` (declared identity — the upstream matrix case owns the recipe; the field is not forwarded); the dino lane takes optional DINO recipe cards (`ocean.recipe` → `run_dino.py --recipe`, e.g. `nemo_dino_kamm_mlf`); the tripole OMIP lane is pinned to `omip_nemo_match_tripole_v1` (`omip_faithful_card` declares nothing — it overrides dycore fields via `run.extra_args`, and recipe names are fidelity claims). `scripts/validate_templates.py::validate_recipe` resolves every declaration against the pinned legoESM catalogs (`EXPERIMENT_RECIPES`, `DINO_RECIPES`; import-gated, so the semantic checks run where legoESM is installed — CI Tier-2 — and degrade under `--skip-imports`), and `generate_tag` records the declaration in `experiment.tag` `[model]`. An upstream recipe rename/re-tagging therefore breaks validation at pin-bump time instead of silently drifting (the `nemo_v1` → `legoesm_nemo_like_v1` lesson, 2026-09-02). Cases with no upstream tag (`barotropic_gyre`, `barotropic_double_gyre`, `rest_state_stratified_no_land`) must not declare a recipe. Mechanism tests: `tests/test_templates.py::TestRecipeValidation` (planted violations + a real-parity test against the pinned catalogs).
+
 ### ocean_scm (native run path)
 
 Constructs `OceanColumnModel` from the resolved config, runs the simulation, and saves NetCDF output. All 5 templates are run-tested end-to-end.
@@ -121,7 +125,7 @@ vice versa.
 The `Status` column of the table above uses a controlled vocabulary
 (enforced by `scripts/render_readme_status.py` and CI):
 
-- **structural** (a.k.a. structurally validated) — `validate_templates.py --skip-imports` passes: the YAML has required sections (`experiment`, `grid`, `time`), a valid mode, a valid grid type, and `requires` references match entries in `data_catalog.yaml`. No legoESM code is exercised.
+- **structural** (a.k.a. structurally validated) — `validate_templates.py --skip-imports` passes: the YAML has required sections (`experiment`, `grid`, `time`), a valid mode, a valid grid type, and `requires` references match entries in `data_catalog.yaml`. No legoESM code is exercised (the `ocean.recipe` semantic checks are import-gated and run only with legoESM installed — CI Tier-2 / plain `validate_templates.py`).
 - **init-only** — `init_experiment()` successfully loads the template, applies overrides, writes `config.yaml`, `experiment.tag`, and `run.sh`; no end-to-end execution recorded.
 - **smoke-tested** — the runner executed a short/startup run (e.g. 0.5-day startup, synthetic forcing) and produced finite output; not a full-duration or fully-forced run.
 - **run-tested** — the runner executed the experiment through the delegated/production run path and produced output with upstream gates PASS (NetCDF, diagnostics JSON, etc.).

@@ -19,13 +19,13 @@ grid:
 
 ocean:
   case: overflow
+  # Scheme identity = the upstream matrix case's verified recipe tag
+  # (recipe_map.EXPERIMENT_RECIPES); NOT forwarded — the upstream baseline
+  # assembles it. Other ocean.* scheme fields are documented intent.
+  recipe: default_wright_v1
   A_h: 1.0e-2
   K_h: 1.0e-4
-  eos: linear
-  eos_linear:
-    rho_ref: 1025.0
-    alpha_T: 2.0e-4
-    T_reference: 10.0
+  eos: wright
 
 domain:
   H_max: 2000.0

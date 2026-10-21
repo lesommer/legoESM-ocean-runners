@@ -19,11 +19,20 @@ grid:
 
 ocean:
   case: global_overturning
+  # Scheme identity = the upstream case's verified recipe tag
+  # (recipe_map.EXPERIMENT_RECIPES; the factory's recipe= default); NOT
+  # forwarded — the upstream baseline assembles it. The linear EOS below
+  # matches the upstream factory's create_eos_config (T-only buoyancy).
+  recipe: legoesm_linear_v1
   A_h: 1.0e4
   K_h: 0.0
   bottom_drag_r: 1.1e-3
   tracer_advection: tvd
-  eos: wright
+  eos: linear
+  eos_linear:
+    rho_ref: 1025.0        # legoesm.constants.rho_ocean
+    alpha_T: 2.0e-4
+    beta_S: 0.0            # T-only buoyancy (Wolfe & Cessi)
 
 domain:
   H_max: 4000.0

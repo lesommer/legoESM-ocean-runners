@@ -19,10 +19,12 @@ grid:
 
 ocean:
   case: inertia_gravity_wave
+  # Scheme identity = the upstream matrix case's verified recipe tag
+  # (recipe_map.EXPERIMENT_RECIPES); NOT forwarded — the upstream baseline
+  # assembles it. Other ocean.* scheme fields are documented intent.
+  recipe: default_wright_v1
   A_h: 1.0e4
-  eos: linear
-  eos_linear:
-    rho_ref: 1025.0
+  eos: wright
 
 domain:
   H_max: 4500.0

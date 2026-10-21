@@ -46,6 +46,10 @@ grid:
 
 ocean:
   case: bench
+  # Scheme identity = the upstream BENCH recipe (recipe_map tag; recorded
+  # by run_bench.py in its run metadata). NOT forwarded — the upstream
+  # BenchConfig/preset assembles it.
+  recipe: legoesm_nemo_like_v1
   H_max: 5000.0         # NEMO flat-bottom depth [m]
   lat_max_deg: 80.0     # Mercator truncation latitude [deg]
 
