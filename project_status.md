@@ -1,6 +1,6 @@
 # Project Status
 
-*Last verified: 2026-10-21 — legoESM pin 294495454a29, runner tag legoesm-294495454a29-20261021 (see legoESM_version.txt)*
+*Last verified: 2026-10-23 — legoESM pin 1f6a1df4cf36, runner tag legoesm-1f6a1df4cf36-20261023c (see legoESM_version.txt)*
 
 This document tracks what's currently implemented and tested in the runners. Consult it before assuming any capability.
 

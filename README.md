@@ -50,6 +50,7 @@ git checkout $(grep '^commit:' ../legoESM-ocean-runners/legoESM_version.txt | cu
 # 3. Install legoESM (uv workspace — plain pip cannot resolve the
 #    federation package layout)
 uv sync
+source .venv/bin/activate
 
 # 4. Apply this repo's patches to the legoESM checkout (003-005 enable the
 #    tripolar-OMIP MPI lane, runoff-file overrides and a barotropic tuning
@@ -80,6 +81,8 @@ for:
 - `3d_ocean` for **DINO** (delegation to legoESM's `run_dino.py`, upstream
   since PR climate-federation/legoESM#1926: multi-GPU SPMD, restart,
   ensemble seed and timing)
+- `3d_ocean` for **BENCH** (delegation to legoESM's `run_bench.py`, the
+  NEMO-BENCH timing harness — `global_ocean/bench`)
 - `3d_ocean` and `barotropic_ocean` for the **matrix-lane idealized
   cases** (delegation to the upstream ocean test matrix; the upstream
   runner owns the scientifically-validated case config and gates)
@@ -124,7 +127,7 @@ cd my_dino && bash run.sh
 
 ### Idealized (no data needed)
 
-**Graduated templates** live in the pinned legoESM template library (`config/templates/ocean/<stem>.yaml`) and resolve by canonical name `ocean/<stem>` — pre-graduation names still resolve as legacy aliases. Graduated 2026-10-22: `baroclinic_gyre`, `acc_channel`, `eady_instability`, `geostrophic_adjustment`, `lock_exchange`, `overflow`, `phillips_two_layer`, `global_overturning`, `barotropic_wave`; also usable directly: `eady_uniform`, `held_larichev`, `munk_gyre`, `global_barotropic_wind`. The upstream lane's validated defaults apply (dt/duration/resolution); overrides are the curated layer.
+**Graduated templates** live in the pinned legoESM template library (`config/templates/ocean/<stem>.yaml`) and resolve by canonical name `ocean/<stem>` — pre-graduation names still resolve as legacy aliases. Graduated 2026-10-22: `baroclinic_gyre`, `acc_channel`, `eady_instability`, `geostrophic_adjustment`, `lock_exchange`, `overflow`, `phillips_two_layer`, `global_overturning`, `barotropic_wave`, `stommel_gyre_tracer`; also usable directly: `eady_uniform`, `held_larichev`, `munk_gyre`, `global_barotropic_wind`. The upstream lane's validated defaults apply (dt/duration/resolution); overrides are the curated layer.
 
 ```bash
 # 1. Check data availability (idealized experiments need no data)
