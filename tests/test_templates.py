@@ -219,6 +219,7 @@ class TestRecipeValidation:
         "experiment_recipes": {
             "baroclinic_gyre": "default_wright_v1",
             "barotropic_wave": "default_wright_v1",
+            "stommel_gyre_tracer": "default_wright_v1",
             "neverworld2_lite": "default_wright_v1",
             "acc_channel": "default_wright_v1",
             "geostrophic_adjustment": "default_wright_v1",
@@ -370,6 +371,7 @@ class TestRecipeValidation:
         for name in ("3d_idealized/baroclinic_gyre",  # legacy alias (graduated)
                      "ocean/baroclinic_gyre",         # canonical (3d_ocean)
                      "ocean/barotropic_wave",         # canonical (barotropic_ocean)
+                     "ocean/stommel_gyre_tracer",     # canonical (barotropic_ocean, 3B-4)
                      "global_ocean/neverworld2_lite",  # runners-owned matrix lane
                      "global_ocean/omip_tripole",
                      "global_ocean/omip_core2_thin",
@@ -495,22 +497,23 @@ class TestConsistencyGate:
         # The REAL per-template path must reach the gate: planted grid
         # drift surfaces via validate_template on the real template file
         # (guards the rel-name lookup itself — a silent no-op here means
-        # the gate matches nothing). stommel_gyre_tracer: a remaining
-        # runners-owned template with an upstream counterpart.
+        # the gate matches nothing). inertia_gravity_wave: a remaining
+        # runners-owned template with an upstream counterpart
+        # (stommel_gyre_tracer graduated 2026-10-22 and left the map).
         import validate_templates as vt
         drifted = self._upstream_checkout(
             tmp_path / "drifted",
-            {"stommel_gyre_tracer": self._counterpart_text(
-                name="stommel_gyre_tracer", grid="latlon_cgrid")})
-        path = TEMPLATES_DIR / "2d" / "stommel_gyre_tracer.yaml"
+            {"inertia_gravity_wave": self._counterpart_text(
+                name="inertia_gravity_wave", grid="latlon_cgrid")})
+        path = TEMPLATES_DIR / "2d" / "inertia_gravity_wave.yaml"
         errors = vt.validate_template(
             path, consistency_sources=self._sources(drifted))
         assert any("grid drift" in e for e in errors), errors
 
         healthy = self._upstream_checkout(
             tmp_path / "healthy",
-            {"stommel_gyre_tracer": self._counterpart_text(
-                name="stommel_gyre_tracer", grid="latlon")})
+            {"inertia_gravity_wave": self._counterpart_text(
+                name="inertia_gravity_wave", grid="latlon")})
         errors = vt.validate_template(
             path, consistency_sources=self._sources(healthy))
         assert errors == [], errors
@@ -627,7 +630,7 @@ class TestConsistencyGate:
         # consistency_sources=None (e.g. --skip-imports): the gate is
         # skipped without inventing errors.
         import validate_templates as vt
-        path = TEMPLATES_DIR / "2d" / "stommel_gyre_tracer.yaml"
+        path = TEMPLATES_DIR / "2d" / "inertia_gravity_wave.yaml"
         assert vt.validate_template(path, consistency_sources=None) == []
 
     def test_skip_imports_skips_gate_with_notice(self):
@@ -783,7 +786,7 @@ class TestGraduatedTemplates:
                      "ocean/eady_instability", "ocean/geostrophic_adjustment",
                      "ocean/lock_exchange", "ocean/overflow",
                      "ocean/phillips_two_layer", "ocean/global_overturning",
-                     "ocean/barotropic_wave")
+                     "ocean/barotropic_wave", "ocean/stommel_gyre_tracer")
         for name in graduated:
             cfg = load_template(name)
             assert validate_recipe(cfg, **TestRecipeValidation.SOURCES) == [], name
@@ -801,7 +804,7 @@ class TestGraduatedTemplates:
                      "ocean/eady_instability", "ocean/geostrophic_adjustment",
                      "ocean/lock_exchange", "ocean/overflow",
                      "ocean/phillips_two_layer", "ocean/global_overturning",
-                     "ocean/barotropic_wave"):
+                     "ocean/barotropic_wave", "ocean/stommel_gyre_tracer"):
             cfg = load_template(name)
             assert validate_recipe(cfg, **sources) == [], name
 
@@ -813,7 +816,7 @@ class TestGraduatedTemplates:
                      "ocean/eady_instability", "ocean/geostrophic_adjustment",
                      "ocean/lock_exchange", "ocean/overflow",
                      "ocean/phillips_two_layer", "ocean/global_overturning",
-                     "ocean/barotropic_wave"):
+                     "ocean/barotropic_wave", "ocean/stommel_gyre_tracer"):
             cfg = load_template(name)
             case = cfg["ocean"]["case"]
             grid = cfg["grid"]["type"]
@@ -1316,6 +1319,7 @@ class TestOceanCaseDispatch:
             ("3d_idealized", "rest_state_stratified_no_land"): "latlon",
             ("2d", "barotropic_wave"): "latlon",
             ("2d", "barotropic_double_gyre"): "latlon_regional",
+            ("2d", "stommel_gyre_tracer"): "latlon",
         }
         from runners.run_experiment import load_template
         for (category, tmpl), matrix_grid in dispatch.items():
@@ -1354,18 +1358,21 @@ class TestOceanCaseDispatch:
                      "ocean/eady_instability", "ocean/geostrophic_adjustment",
                      "ocean/lock_exchange", "ocean/overflow",
                      "ocean/phillips_two_layer", "ocean/global_overturning",
-                     "ocean/barotropic_wave")
-        for name in graduated + ("3d_idealized/baroclinic_gyre",):
+                     "ocean/barotropic_wave", "ocean/stommel_gyre_tracer")
+        for name in graduated + ("3d_idealized/baroclinic_gyre",
+                                 "2d/stommel_gyre_tracer"):
             cfg = load_template(name)
             assert "time" not in cfg, f"{name}: translated config must not declare time"
 
     def test_barotropic_matrix_lanes(self):
         # 2d barotropic templates ride the same matrix delegation as the
         # 3d_ocean lanes (mode barotropic_ocean is accepted by the
-        # dispatch since 2026-10-10 wave-1). barotropic_wave is graduated
-        # (3B-3): this is alias coverage on the translated config.
+        # dispatch since 2026-10-10 wave-1). barotropic_wave and
+        # stommel_gyre_tracer are graduated (3B-3/3B-4): alias coverage
+        # on the translated configs.
         from runners.run_experiment import load_template
-        for tmpl in ("barotropic_wave", "barotropic_double_gyre"):
+        for tmpl in ("barotropic_wave", "barotropic_double_gyre",
+                     "stommel_gyre_tracer"):
             cfg = load_template(f"2d/{tmpl}")
             assert cfg["experiment"]["mode"] == "barotropic_ocean"
             assert cfg["ocean"]["case"] == tmpl
@@ -1500,9 +1507,10 @@ class TestOceanTestMatrix:
     def test_build_test_matrix_all_categories(self):
         from runners.run_ocean_test_matrix import build_test_matrix
         cases = build_test_matrix()
-        # 7 runners-owned ocean templates remain in the fixed lists after
-        # the 3B-3 batch (9 graduated to the upstream library total).
-        assert len(cases) >= 7
+        # 6 runners-owned ocean templates remain in the fixed lists after
+        # the 3B-3 batch + the 3B-4 stommel graduation (10 graduated to
+        # the upstream library total).
+        assert len(cases) >= 6
 
     def test_build_test_matrix_grid_filter(self):
         from runners.run_ocean_test_matrix import build_test_matrix
@@ -1571,9 +1579,8 @@ class TestDataCatalog:
         idealized = [
             "1d/ocean_scm",
             "2d/barotropic_gyre",
-            "2d/stommel_gyre_tracer",
             "2d/inertia_gravity_wave",
-            # graduated (3B-2/3B-3) — requires via the adapter:
+            # graduated (3B-2/3B-3/3B-4) — requires via the adapter:
             "ocean/baroclinic_gyre",
             "ocean/acc_channel",
             "ocean/eady_instability",
@@ -1583,6 +1590,7 @@ class TestDataCatalog:
             "ocean/phillips_two_layer",
             "ocean/global_overturning",
             "ocean/barotropic_wave",
+            "ocean/stommel_gyre_tracer",
             # runners-owned:
             "3d_idealized/dino",
             "3d_idealized/isomip_plus",

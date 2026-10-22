@@ -19,7 +19,6 @@ TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 
 OCEAN_2D_TEMPLATES = [
     "2d/barotropic_gyre",
-    "2d/stommel_gyre_tracer",
     "2d/inertia_gravity_wave",
 ]
 

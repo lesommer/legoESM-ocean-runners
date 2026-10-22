@@ -154,13 +154,15 @@ with canonical names `ocean/<stem>`. A legacy alias map
   (2026-10-22, Phases 3B-2/3B-3):** `baroclinic_gyre` (pilot),
   `acc_channel`, `eady_instability`, `geostrophic_adjustment`,
   `lock_exchange`, `overflow`, `phillips_two_layer`,
-  `global_overturning`, `barotropic_wave` — canonical `ocean/<stem>`,
-  aliases keep the pre-graduation names resolving. Still curated
-  (counterpart-gated): `bench` (the `run.preset/steps/warmup_steps`
-  lanes have no upstream `setup:` equivalent),
-  `stommel_gyre_tracer`, `inertia_gravity_wave` (no run receipt /
-  upstream gate defect). Upstream-only cases (`ocean/eady_uniform`,
-  `ocean/held_larichev`, `ocean/munk_gyre`,
+  `global_overturning`, `barotropic_wave` (batch), and
+  `stommel_gyre_tracer` (3B-4, 2026-10-22: wired into `_MATRIX_CASES`,
+  lane verified, graduated, post-graduation receipt) — canonical
+  `ocean/<stem>`, aliases keep the pre-graduation names resolving. Still
+  curated (counterpart-gated): `bench` (the `run.preset/steps/warmup_steps`
+  lanes have no upstream `setup:` equivalent — terminal state; upstream
+  dialect-extension proposal: climate-federation/legoESM#2113),
+  `inertia_gravity_wave` (upstream gate defect). Upstream-only cases
+  (`ocean/eady_uniform`, `ocean/held_larichev`, `ocean/munk_gyre`,
   `ocean/global_barotropic_wind`) resolve the same way without ever
   having had a runners YAML — receipts are upstream's business.
 

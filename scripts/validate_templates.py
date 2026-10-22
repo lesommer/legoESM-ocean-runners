@@ -76,19 +76,18 @@ TRIPOLE_OMIP_LANE_RECIPE = "omip_nemo_match_tripole_v1"
 # single source of truth.
 UPSTREAM_COUNTERPARTS = {
     "2d/inertia_gravity_wave": "ocean/inertia_gravity_wave",
-    "2d/stommel_gyre_tracer": "ocean/stommel_gyre_tracer",
     "global_ocean/bench": "ocean/bench",
 }
 
 # Grids the runners lane accepts for counterpart cases that are NOT in the
 # matrix dispatch table (_MATRIX_CASES in runners/run_experiment.py):
 #   bench — _run_bench dispatches the latlon and synthetic-tripole lanes
-#   inertia_gravity_wave / stommel_gyre_tracer — stub lanes; their
-#     templates declare grid.type latlon
+#   inertia_gravity_wave — stub lane; its template declares grid.type latlon
+#   (stommel_gyre_tracer left the table 2026-10-22: wired into _MATRIX_CASES
+#     and graduated — the gate now reads its grid family from _MATRIX_CASES)
 COUNTERPART_FALLBACK_GRIDS = {
     "bench": {"latlon", "tripole"},
     "inertia_gravity_wave": {"latlon"},
-    "stommel_gyre_tracer": {"latlon"},
 }
 
 

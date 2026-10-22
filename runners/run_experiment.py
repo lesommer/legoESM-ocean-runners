@@ -42,6 +42,7 @@ _MATRIX_CASES = {
     "rest_state_stratified_no_land": {"latlon": "latlon"},
     "barotropic_wave": {"latlon": "latlon"},
     "barotropic_double_gyre": {"latlon": "latlon_regional"},
+    "stommel_gyre_tracer": {"latlon": "latlon"},
 }
 
 # --- Graduated templates (issue #8, Phase 3B-2) --------------------------------
@@ -66,6 +67,8 @@ LEGACY_TEMPLATE_ALIASES = {
     "3d_idealized/phillips_two_layer": "ocean/phillips_two_layer",
     "global_ocean/global_overturning": "ocean/global_overturning",
     "2d/barotropic_wave": "ocean/barotropic_wave",
+    # 3B-4: run-tested barotropic matrix lane
+    "2d/stommel_gyre_tracer": "ocean/stommel_gyre_tracer",
 }
 
 # Canonical upstream template -> the runners run mode its lane dispatches.
