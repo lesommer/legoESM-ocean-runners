@@ -704,6 +704,55 @@ class TestGraduatedTemplates:
         with pytest.raises(FileNotFoundError, match="_UPSTREAM_TEMPLATE_MODES"):
             load_template("ocean/some-future-upstream-case")
 
+    def test_namespace_package_install_does_not_crash_resolution(self,
+                                                                 tmp_path,
+                                                                 monkeypatch):
+        # Planted (CI Tier-2 lesson, 2026-10-22): the federation install
+        # exposes legoesm as a NAMESPACE package (__file__ is None), and
+        # the CI layout keeps the checkout at <repo>/legoESM (no sibling).
+        # Resolution must find the repo-root checkout — and must NEVER
+        # crash with a bare TypeError out of the package probe.
+        import sys
+        import types
+
+        # A namespace-style legoesm: no __file__, only __path__
+        fake = types.ModuleType("legoesm")
+        fake.__path__ = [str(tmp_path / "site" / "legoesm")]
+        (tmp_path / "site" / "legoesm").mkdir(parents=True)
+        monkeypatch.setitem(sys.modules, "legoesm", fake)
+
+        # The CI layout: <runners-root>/legoESM with a real template library
+        legoesm = tmp_path / "runners" / "legoESM"
+        ocean = legoesm / "config" / "templates" / "ocean"
+        ocean.mkdir(parents=True)
+        (ocean / "baroclinic_gyre.yaml").write_text(
+            "experiment:\n  description: gyre\n  data: []\n"
+            "model:\n  name: ocean-baroclinic-gyre\n"
+            "setup:\n  name: baroclinic_gyre\n  grid: latlon_regional\n")
+        # And the pinned recipe_map the adapter needs
+        experiments = (legoesm / "packages" / "ocean" / "legoesm"
+                       / "ocean" / "experiments")
+        experiments.mkdir(parents=True)
+        (experiments / "recipe_map.py").write_text(
+            "EXPERIMENT_RECIPES = {'baroclinic_gyre': 'default_wright_v1'}\n")
+
+        import runners.run_experiment as rx
+        monkeypatch.setattr(rx, "_RUNNERS_ROOT", tmp_path / "runners")
+        monkeypatch.delenv("LEGOESM_DIR", raising=False)
+
+        assert rx._find_legoesm_dir() == legoesm
+        cfg = rx.load_template("ocean/baroclinic_gyre")
+        assert cfg["ocean"]["recipe"] == "default_wright_v1"
+
+    def test_hostile_legoesm_dir_falls_through(self, monkeypatch):
+        # Planted: an env var pointing at a non-checkout must not shadow
+        # a real candidate — every candidate is validated by the
+        # config/templates check.
+        import runners.run_experiment as rx
+        monkeypatch.setenv("LEGOESM_DIR", "/nonexistent")
+        found = rx._find_legoesm_dir()
+        assert found is None or (found / "config" / "templates").is_dir()
+
     def test_file_based_recipe_loader_matches_pinned_catalog(self):
         # The adapter's EXPERIMENT_RECIPES source: loaded BY FILE PATH from
         # the pinned checkout (works without legoesm installed as a

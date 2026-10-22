@@ -207,23 +207,64 @@ def resolve_legoesm_path() -> Path:
         sys.exit(1)
 
 
+def _package_dir_candidates() -> list[Path]:
+    """Best-effort legoESM checkout candidates from an installed package.
+
+    The uv-workspace federation install can expose ``legoesm`` as a
+    NAMESPACE package — ``__file__`` is None — so deriving paths from
+    ``__file__`` unconditionally raised TypeError out of alias resolution
+    (CI Tier-2, 2026-10-22). Seeds come from ``__file__`` (regular
+    installs) and/or ``__path__`` (namespace installs); the checkout root
+    is 2-3 parents above a package dir, and every candidate is validated
+    by the caller's config/templates check — generous is safe here.
+    """
+    try:
+        import legoesm
+    except ImportError:
+        return []
+    seeds: list[Path] = []
+    pkg_file = getattr(legoesm, "__file__", None)
+    if pkg_file:
+        seeds.append(Path(pkg_file).resolve().parent)
+    seeds.extend(Path(p).resolve()
+                 for p in getattr(legoesm, "__path__", []) or [])
+    candidates: list[Path] = []
+    for seed in seeds:
+        node = seed
+        for _ in range(3):
+            node = node.parent
+            candidates.append(node)
+    return candidates
+
+
+def _legoesm_dir_candidates() -> list[Path]:
+    """Checkout candidates, in trust order (first validated hit wins)."""
+    candidates: list[Path] = []
+    env_dir = os.environ.get("LEGOESM_DIR")
+    if env_dir:
+        candidates.append(Path(env_dir))
+    # CI Tier-2 checks legoESM out at <runners-repo>/legoESM; the local
+    # workspace layout keeps it as a sibling of the runners repo.
+    candidates.append(_RUNNERS_ROOT / "legoESM")
+    candidates.append(_RUNNERS_ROOT.parent / "legoESM")
+    candidates.extend(_package_dir_candidates())
+    return candidates
+
+
 def _find_legoesm_dir() -> Path | None:
     """resolve_legoesm_path's soft sibling: None instead of sys.exit.
 
     Template resolution must raise a *template* error (FileNotFoundError)
-    when the pinned checkout is absent, not kill the process.
+    when the pinned checkout is absent, not kill the process. Every
+    candidate must actually look like the legoESM repo (a
+    ``config/templates/`` directory) — an env var or package location
+    pointing elsewhere falls through instead of producing a confusing
+    downstream miss.
     """
-    env_dir = os.environ.get("LEGOESM_DIR")
-    if env_dir:
-        return Path(env_dir)
-    sibling = Path(__file__).resolve().parent.parent.parent / "legoESM"
-    if sibling.is_dir():
-        return sibling
-    try:
-        import legoesm
-        return Path(legoesm.__file__).resolve().parent.parent
-    except ImportError:
-        return None
+    for cand in _legoesm_dir_candidates():
+        if (cand / "config" / "templates").is_dir():
+            return cand
+    return None
 
 
 def deep_merge(base: dict, override: dict) -> dict:
