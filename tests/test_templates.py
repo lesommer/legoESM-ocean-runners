@@ -702,11 +702,16 @@ class TestReproduceVerify:
         )
         tag_file = tmp_path / "exp.tag"
         tag_file.write_text(tag_text)
-        r = subprocess.run(
-            [sys.executable, str(ROOT_DIR / "scripts" / "reproduce.py"),
-             str(tag_file), "--run", "--dry-run"],
-            capture_output=True, text=True,
-        )
+        # legoESM lives at ../legoESM in the workspace layout but
+        # <repo>/legoESM in CI's Tier-2 layout — reproduce.py's default is
+        # the sibling, so point it wherever the checkout actually is.
+        cmd = [sys.executable, str(ROOT_DIR / "scripts" / "reproduce.py"),
+               str(tag_file), "--run", "--dry-run"]
+        for cand in (ROOT_DIR / "legoESM", ROOT_DIR.parent / "legoESM"):
+            if cand.is_dir():
+                cmd += ["--legoesm-dir", str(cand)]
+                break
+        r = subprocess.run(cmd, capture_output=True, text=True)
         assert r.returncode == 0, r.stderr
         assert "Would init:" in r.stdout
         for ov in self.OVERRIDES:
