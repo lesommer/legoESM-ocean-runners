@@ -642,6 +642,303 @@ class TestConsistencyGate:
             capture_output=True, text=True)
         assert r.returncode == 0, r.stdout + r.stderr
         assert "Consistency gate: skipped" in r.stdout, r.stdout
+        assert "Lane coverage gate: skipped" in r.stdout, r.stdout
+
+
+class TestLaneCoverageGate:
+    """Ocean lane screening gate (issue #10).
+
+    The Phase-3B gates watch runners templates; nothing detected a NEW
+    UPSTREAM LANE (matrix case, recipe-catalog entry, ocean driver script,
+    non-ocean/ template). check_ocean_lane_coverage() enumerates the pinned
+    surface import-free and fails on any lane without a disposition in
+    docs/ocean_lane_dispositions.yaml — and on any stale entry. Every
+    check ships a planted violation (house rule: controls must be able to
+    fail); the enumeration itself fails closed on idioms it cannot parse.
+    """
+
+    MATRIX_SRC = '''\
+GRID_TYPES = ["latlon", "mpas"]
+_OPTIONAL_GRIDS = ["tripole"] + (["fesom"] if _fesom_available() else [])
+RUNNERS = {
+    "case_a": run_a,
+    "case_b": run_b,
+}
+
+
+def _build_test_matrix():
+    matrix = []
+    for g in GRID_TYPES + _OPTIONAL_GRIDS:
+        if g == "mpas":
+            continue
+        matrix.append(TestCase("case_a", g, res[g], 1.0, 0.1))
+    for g in ["latlon_regional"]:
+        matrix.append(TestCase("case_b", g, res[g], 5.0, 1.0))
+    return matrix
+
+
+TEST_MATRIX = _build_test_matrix()
+'''
+
+    RECIPES_SRC = (
+        'LATLON_RECIPES = {"r_lat": {}, "r_lat2": {}}\n'
+        'MPAS_RECIPES = {"r_mpas": {}}\n'
+    )
+    RECIPE_MAP_SRC = 'EXPERIMENT_RECIPES = {"case_a": "r_lat"}\n'
+
+    @staticmethod
+    def _write_dispositions(tmp_path, lanes):
+        path = tmp_path / "dispositions.yaml"
+        path.write_text(yaml.safe_dump({"schema_version": 1, "lanes": lanes}))
+        return path
+
+    def _fixture_checkout(self, tmp_path, *, matrix_src=None,
+                          extra_scripts=(), extra_templates=(),
+                          recipes_src=None, recipe_map_src=None):
+        checkout = tmp_path / "legoESM"
+        matrix_dir = checkout / "scripts" / "matrix"
+        run_dir = checkout / "scripts" / "run"
+        tpl_dir = checkout / "config" / "templates"
+        recipes_dir = (checkout / "packages" / "ocean" / "legoesm"
+                       / "ocean" / "experiments")
+        for d in (matrix_dir, run_dir, tpl_dir / "ocean", tpl_dir / "sea_ice",
+                  recipes_dir / "experiments"):
+            d.mkdir(parents=True, exist_ok=True)
+        # recipes live at .../ocean/recipes.py and .../experiments/recipe_map.py
+        (checkout / "packages" / "ocean" / "legoesm" / "ocean"
+         / "recipes.py").write_text(recipes_src or self.RECIPES_SRC)
+        (recipes_dir / "recipe_map.py").write_text(
+            recipe_map_src or self.RECIPE_MAP_SRC)
+        (matrix_dir / "run_ocean_test_matrix.py").write_text(
+            matrix_src or self.MATRIX_SRC)
+        # The explicit SW inclusions exist upstream — the enumerator's
+        # fail-closed contract requires them in any faithful fixture.
+        for rel in ("scripts/matrix/run_atmosphere_test_matrix.py",
+                    "scripts/run/run_w2_mpas_convergence.py"):
+            p = checkout / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text("import sys\n")
+        (run_dir / "ocean_lane.py").write_text(
+            "from legoesm.ocean.state import X\n")
+        (run_dir / "not_ocean.py").write_text("import os\n")
+        (run_dir / "subdir").mkdir(exist_ok=True)
+        (run_dir / "subdir" / "research.py").write_text(
+            "import legoesm.ocean.physics\n")
+        for rel in extra_scripts:
+            p = checkout / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text("from legoesm.ocean.state import X\n")
+        for rel in extra_templates:
+            p = checkout / "config" / "templates" / f"{rel}.yaml"
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text("setup:\n  name: x\n")
+        (tpl_dir / "ocean" / "case_a.yaml").write_text("setup:\n  name: x\n")
+        (tpl_dir / "sea_ice" / "one.yaml").write_text("setup:\n  name: x\n")
+        return checkout
+
+    def _healthy_lanes(self):
+        return {
+            "matrix:case_a": {"status": "backlog",
+                              "grids": ["fesom", "latlon", "tripole"]},
+            "matrix:case_b": {"status": "onboarded",
+                              "grids": ["latlon_regional"]},
+            "recipe:r_lat": {"status": "onboarded", "note": "x"},
+            "recipe:r_lat2": {"status": "upstream_only", "note": "x"},
+            "recipe:r_mpas": {"status": "backlog", "note": "x"},
+            "experiment_recipe:case_a": {"status": "backlog", "note": "x"},
+            "script:scripts/run/ocean_lane.py": {
+                "status": "onboarded", "note": "x"},
+            "script:scripts/matrix/run_atmosphere_test_matrix.py": {
+                "status": "backlog", "note": "x"},
+            "script:scripts/run/run_w2_mpas_convergence.py": {
+                "status": "backlog", "note": "x"},
+            "script:scripts/run/subdir/": {
+                "status": "declined", "reason": "research subtree"},
+            "template:ocean/case_a": {"status": "backlog", "note": "x"},
+            "template:sea_ice/": {
+                "status": "declined", "reason": "out of scope"},
+        }
+
+    def _coverage(self, checkout, lanes):
+        import validate_templates as vt
+        disp_dir = checkout.parent / "disp"
+        disp_dir.mkdir(parents=True, exist_ok=True)
+        path = self._write_dispositions(disp_dir, lanes)
+        return vt.check_ocean_lane_coverage(checkout, dispositions_path=path)
+
+    def test_happy_path(self, tmp_path):
+        # Every enumerated lane carries a disposition; the prefix entries
+        # cover their subtrees; the not-ocean script is not enumerated.
+        errors, counts = self._coverage(
+            self._fixture_checkout(tmp_path), self._healthy_lanes())
+        assert errors == [], errors
+        assert counts == {"matrix": 2, "recipe": 3, "experiment_recipe": 1,
+                          "script": 4, "template": 2}, counts
+
+    def test_prefix_entry_covers_new_subtree_member(self, tmp_path):
+        # A NEW file inside a prefix-dispositioned subtree stays covered —
+        # the blanket-declined semantics (e.g. sea_ice/, research decks).
+        checkout = self._fixture_checkout(
+            tmp_path, extra_scripts=("scripts/run/subdir/new_research.py",))
+        errors, _ = self._coverage(checkout, self._healthy_lanes())
+        assert errors == [], errors
+
+    def test_new_matrix_case_fails(self, tmp_path):
+        # Planted violation: upstream adds a dispatch case (+ TestCase arm)
+        # — the gate fails until a disposition exists.
+        matrix = self.MATRIX_SRC.replace(
+            '    "case_b": run_b,', '    "case_b": run_b,\n    "case_c": run_c,'
+        ).replace(
+            '        matrix.append(TestCase("case_b", g, res[g], 5.0, 1.0))',
+            '        matrix.append(TestCase("case_b", g, res[g], 5.0, 1.0))\n'
+            '        matrix.append(TestCase("case_c", g, res[g], 5.0, 1.0))')
+        checkout = self._fixture_checkout(tmp_path, matrix_src=matrix)
+        errors, _ = self._coverage(checkout, self._healthy_lanes())
+        assert any("un-dispositioned ocean lane: matrix:case_c" in e
+                   for e in errors), errors
+
+    def test_grid_drift_fails(self, tmp_path):
+        # Planted violation: upstream adds a grid arm to a dispositioned
+        # case (blocking by decision 2026-10-23).
+        matrix = self.MATRIX_SRC.replace(
+            'for g in ["latlon_regional"]:',
+            'for g in ["latlon_regional", "mpas_regional"]:')
+        checkout = self._fixture_checkout(tmp_path, matrix_src=matrix)
+        errors, _ = self._coverage(checkout, self._healthy_lanes())
+        assert any("grid drift for matrix:case_b" in e for e in errors), errors
+
+    def test_new_script_and_template_and_recipe_fail(self, tmp_path):
+        checkout = self._fixture_checkout(
+            tmp_path,
+            extra_scripts=("scripts/run/new_ocean.py",),
+            extra_templates=("ocean/new_case",),
+            recipe_map_src='EXPERIMENT_RECIPES = {"case_a": "r_lat",'
+                           ' "new_case": "r_lat"}\n')
+        errors, _ = self._coverage(checkout, self._healthy_lanes())
+        assert any("script:scripts/run/new_ocean.py" in e for e in errors)
+        assert any("template:ocean/new_case" in e for e in errors)
+        assert any("experiment_recipe:new_case" in e for e in errors)
+
+    def test_removed_lane_is_stale(self, tmp_path):
+        # Planted violation (other direction): a disposition whose lane
+        # vanished from the pinned surface must fail, not linger.
+        checkout = self._fixture_checkout(
+            tmp_path, recipe_map_src='EXPERIMENT_RECIPES = {}\n')
+        errors, _ = self._coverage(checkout, self._healthy_lanes())
+        assert any("stale lane disposition: experiment_recipe:case_a" in e
+                   for e in errors), errors
+
+    def test_declined_without_reason_fails(self, tmp_path):
+        lanes = dict(self._healthy_lanes())
+        lanes["matrix:case_b"] = {"status": "declined",
+                                  "grids": ["latlon_regional"]}
+        with pytest.raises(Exception, match="declined.*requires a reason"):
+            self._coverage(self._fixture_checkout(tmp_path), lanes)
+
+    def test_unknown_status_fails(self, tmp_path):
+        lanes = dict(self._healthy_lanes())
+        lanes["recipe:r_mpas"] = {"status": "maybe", "note": "x"}
+        with pytest.raises(Exception, match="not in"):
+            self._coverage(self._fixture_checkout(tmp_path), lanes)
+
+    def test_matrix_entry_without_grids_fails(self, tmp_path):
+        lanes = dict(self._healthy_lanes())
+        lanes["matrix:case_b"] = {"status": "onboarded"}
+        with pytest.raises(Exception, match="grids"):
+            self._coverage(self._fixture_checkout(tmp_path), lanes)
+
+    def test_unknown_namespace_fails(self, tmp_path):
+        lanes = dict(self._healthy_lanes())
+        lanes["wedge:thing"] = {"status": "backlog"}
+        with pytest.raises(Exception, match="namespace"):
+            self._coverage(self._fixture_checkout(tmp_path), lanes)
+
+    def test_unparseable_matrix_idiom_fails_closed(self, tmp_path):
+        # The enumerator must never silently skip: an idiom it cannot
+        # evaluate is an error, not a smaller surface.
+        matrix = self.MATRIX_SRC.replace(
+            'for g in GRID_TYPES + _OPTIONAL_GRIDS:',
+            'for g in make_grids():')
+        checkout = self._fixture_checkout(tmp_path, matrix_src=matrix)
+        import validate_templates as vt
+        with pytest.raises(vt._SurfaceEnumerationError, match="make_grids"):
+            vt.enumerate_ocean_surface(checkout)
+
+    def test_missing_recipe_catalog_fails_closed(self, tmp_path):
+        checkout = self._fixture_checkout(tmp_path)
+        (checkout / "packages" / "ocean" / "legoesm" / "ocean"
+         / "recipes.py").unlink()
+        import validate_templates as vt
+        with pytest.raises(vt._SurfaceEnumerationError, match="recipes.py"):
+            vt.enumerate_ocean_surface(checkout)
+
+    def test_pinned_checkout_passes_with_real_dispositions(self):
+        # Live integration: the REAL pinned surface is fully covered by the
+        # REAL dispositions file (CI Tier-2 has the checkout at ./legoESM,
+        # the workspace at ../legoESM).
+        checkout = TestConsistencyGate._find_checkout()
+        if checkout is None:
+            pytest.skip("pinned legoESM checkout not available")
+        import validate_templates as vt
+        errors, counts = vt.check_ocean_lane_coverage(checkout, verbose=True)
+        assert errors == [], errors
+        assert counts["matrix"] >= 29
+        assert "eady_weno5_v1" in vt.enumerate_ocean_surface(checkout)["recipe"]
+
+    def test_pinned_surface_details(self):
+        # Pin the enumerated shape at the current pin (guards the AST
+        # evaluator against silent drift): isomip_plus arm, the lock
+        # exchange regional arm, the fesom-union behaviour, and the
+        # rest-state family splitting.
+        checkout = TestConsistencyGate._find_checkout()
+        if checkout is None:
+            pytest.skip("pinned legoESM checkout not available")
+        import validate_templates as vt
+        surface = vt.enumerate_ocean_surface(checkout)
+        m = surface["matrix"]
+        assert m["isomip_plus"] == ["latlon_regional"]
+        assert "latlon_regional" in m["lock_exchange"]
+        assert "fesom" in m["rest_state_stratified_with_land"]
+        assert "fesom" not in m["rest_state_stratified_no_land"]
+        assert m["barotropic_gyre"] == []  # no TestCase arm at the pin
+        assert set(surface["experiment_recipe"]) >= {"regional_gyre", "rest_state"}
+        assert "scripts/run/run_omip_core2_mpi.py" in surface["script"]
+
+    def test_lanes_warn_mode_warns_and_exits_zero(self, tmp_path, capsys,
+                                                  monkeypatch):
+        # --lanes-warn: drift is a WARNING + exit 0; enumeration failure
+        # is an ::error:: + exit 1.
+        import validate_templates as vt
+        checkout = self._fixture_checkout(
+            tmp_path, matrix_src=self.MATRIX_SRC.replace(
+                '    "case_b": run_b,', '    "case_b": run_b,\n    "case_c": run_c,'))
+        disp_dir = tmp_path / "disp"
+        disp_dir.mkdir(parents=True, exist_ok=True)
+        path = self._write_dispositions(disp_dir, self._healthy_lanes())
+        monkeypatch.setattr(vt, "DISPOSITIONS_FILE", path)
+        assert vt._run_lanes_warn(checkout) == 0
+        out = capsys.readouterr().out
+        assert "::warning::un-dispositioned ocean lane at upstream: " \
+               "matrix:case_c" in out
+
+        broken = self._fixture_checkout(
+            tmp_path / "broken",
+            matrix_src="for g in make_grids():\n    pass\n")
+        assert vt._run_lanes_warn(broken) == 1
+        assert "::error::" in capsys.readouterr().out
+
+    def test_lanes_warn_cli_against_pinned_checkout(self):
+        # The weekly sync-check invocation shape: exit 0 against the pinned
+        # checkout (surface == dispositions there).
+        checkout = TestConsistencyGate._find_checkout()
+        if checkout is None:
+            pytest.skip("pinned legoESM checkout not available")
+        import subprocess
+        r = subprocess.run(
+            [_sys_exe(), str(ROOT_DIR / "scripts" / "validate_templates.py"),
+             "--lanes-warn", "--legoesm-dir", str(checkout)],
+            capture_output=True, text=True)
+        assert r.returncode == 0, r.stdout + r.stderr
 
 
 class TestGraduatedTemplates:

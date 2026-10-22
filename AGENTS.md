@@ -166,6 +166,30 @@ with canonical names `ocean/<stem>`. A legacy alias map
   `ocean/global_barotropic_wind`) resolve the same way without ever
   having had a runners YAML — receipts are upstream's business.
 
+### Ocean lane screening gate (issue #10)
+
+The template-facing gates (registry parity, auto-discovery, counterpart
+drift) cannot see a NEW UPSTREAM LANE. `scripts/validate_templates.py::
+check_ocean_lane_coverage()` enumerates the pinned legoESM ocean surface
+IMPORT-FREE (AST parse of the matrix dispatch + TestCase grid sets,
+file-path-loaded `recipes.py`/`recipe_map.py`, AST import scan of
+`scripts/run/**.py`, glob of `config/templates/**` — all categories) and
+fails validation on any lane without a disposition in
+`docs/ocean_lane_dispositions.yaml` (and on stale entries, matrix
+grid-set drift, schema violations). It blocks where validation already
+runs with the checkout present — pin bumps (`sync_legoesm.sh` validates
+before the atomic pin write) and CI Tier-2 — and is skipped under
+`--skip-imports` (CI Tier-1). The weekly sync-check runs
+`--lanes-warn` against upstream main and warns about lanes that will
+need a disposition at the next bump. **At a pin bump, when the gate
+fails on a new lane: add a disposition entry (status vocabulary
+`onboarded | graduated | upstream_only | delegation | declined(reason) |
+backlog` — never silently skip), and when onboarding, flip the lane's
+`matrix:`/`experiment_recipe:`/`template:` entries in the same commit as
+the wiring + receipt.** The enumeration is fail-closed: an idiom the
+AST evaluator cannot parse fails the gate until the evaluator is
+extended — never let a surface shrink silently.
+
 ### Recipes (scheme identity)
 
 In legoESM lingo, a **recipe** is the named *scheme identity* of an ocean

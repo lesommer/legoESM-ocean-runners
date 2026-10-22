@@ -213,3 +213,13 @@ jobs:
           if [ "$PINNED" != "$LATEST" ]; then
             echo "::warning::legoESM has been updated. Run scripts/sync_legoesm.sh and validate templates."
           fi
+
+      - name: Screen the ocean lane surface at upstream main (warn-only, issue #10)
+        # Informational companion of the blocking lane gate: enumerate the
+        # surface AT UPSTREAM MAIN and warn about lanes that will need a
+        # disposition at the next pin bump. Import-free (AST + file-path
+        # parse), so no legoESM install — a shallow clone + pyyaml suffice.
+        run: |
+          pip install pyyaml
+          git clone --depth 1 https://github.com/climate-federation/legoESM.git legoESM-main
+          python scripts/validate_templates.py --lanes-warn --legoesm-dir legoESM-main

@@ -1,0 +1,439 @@
+# Ocean lane dispositions — the data behind the lane screening gate (issue #10)
+#
+# EVERY ocean-relevant lane in the pinned legoESM carries exactly one
+# disposition here. scripts/validate_templates.py::check_ocean_lane_coverage()
+# enumerates the pinned surface IMPORT-FREE (AST parse of the matrix
+# dispatch + file-path-loaded recipe catalogs + script import scan + template
+# glob) and FAILS validation (pin bumps + CI Tier-2) on:
+#   * an enumerated lane with no entry (exact, or prefix for script/template),
+#   * an entry matching no enumerated lane (stale),
+#   * a matrix entry whose recorded grid set drifted from the pinned
+#     TestCase grid set,
+#   * schema violations (unknown status; declined without reason).
+# The weekly sync-check enumerates upstream main in warn-only mode
+# (validate_templates.py --lanes-warn) and warns about lanes that will need
+# a disposition at the next pin bump.
+#
+# Key = "<namespace>:<id>". Namespaces:
+#   matrix:<case>            - run_ocean_test_matrix.py RUNNERS dispatch cases
+#                              (grids = the pinned TestCase arm set; the gate
+#                              fails on drift)
+#   recipe:<name>            - recipes.py LATLON_RECIPES + MPAS_RECIPES keys
+#   experiment_recipe:<case> - recipe_map.py EXPERIMENT_RECIPES keys (mirror
+#                              the owning case's matrix disposition)
+#   script:<path>            - ocean-relevant scripts (AST import scan of
+#                              scripts/run/**.py + explicit SW inclusions);
+#                              a trailing "/" declares a PREFIX entry
+#   template:<cat>/<stem>    - config/templates/**.yaml (ALL categories);
+#                              a trailing "/" declares a PREFIX entry
+#
+# Status vocabulary:
+#   onboarded      - runners run lane exists (matrix dispatch); receipt recorded
+#   graduated      - onboarded + template resolved from the pinned upstream
+#                    library (canonical ocean/<stem>, legacy alias map)
+#   upstream_only  - init via ocean/<stem> works; receipts are upstream's business
+#   delegation     - served by a dedicated delegation lane (dino, bench)
+#   declined       - out of scope / variant / defect - reason REQUIRED
+#   backlog        - pending onboarding (issue #10 tiers)
+#
+# Onboarding workflow: flip the case's matrix: + experiment_recipe: entries
+# (and the owning template: entry when one exists) in the same commit as the
+# wiring + receipt, then sync_legoesm.sh --tag-only.
+
+schema_version: 1
+lanes:
+  matrix:acc_channel:
+    status: onboarded
+    grids: [latlon_channel, mpas_channel]
+    note: "graduated 3B-3; matrix lane via _MATRIX_CASES"
+  matrix:baroclinic_gyre:
+    status: onboarded
+    grids: [latlon_regional, mpas_regional]
+    note: "graduated 3B-2 (pilot); matrix lane via _MATRIX_CASES"
+  matrix:baroclinic_gyre_cos:
+    status: declined
+    grids: [latlon_regional, mpas_regional]
+    reason: "cosine-wind variant of the onboarded baroclinic_gyre case (issue #10 declined list)"
+  matrix:barotropic_double_gyre:
+    status: onboarded
+    grids: [latlon_regional, mpas_regional]
+    note: "runners-owned 2d/ template, matrix lane via _MATRIX_CASES"
+  matrix:barotropic_double_gyre_sin2:
+    status: declined
+    grids: [latlon_regional, mpas_regional]
+    reason: "sin2-wind variant of the onboarded barotropic_double_gyre case (issue #10 declined list)"
+  matrix:barotropic_gyre:
+    status: backlog
+    grids: []
+    note: "Tier 1 (issue #10). CAUTION verified at the pin: NO TestCase arm in _build_test_matrix — '--only barotropic_gyre' is a bare-filter no-op, so wiring _MATRIX_CASES before an upstream arm exists would silently run nothing"
+  matrix:barotropic_wave:
+    status: onboarded
+    grids: [fesom, latlon, mpas, tripole]
+    note: "graduated 3B-3; matrix lane via _MATRIX_CASES"
+  matrix:bench:
+    status: delegation
+    grids: [latlon]
+    note: "runners _run_bench lane (NEMO-BENCH timing harness); counterpart-gated terminal state (#2113 dialect proposal)"
+  matrix:dino:
+    status: delegation
+    grids: [latlon, mpas]
+    note: "runners _run_dino lane (run_dino.py paper-faithful driver)"
+  matrix:eady_instability:
+    status: onboarded
+    grids: [latlon_channel]
+    note: "graduated 3B-3; matrix lane via _MATRIX_CASES"
+  matrix:eady_uniform:
+    status: backlog
+    grids: [latlon_channel, mpas_channel]
+    note: "Tier 1 (issue #10): wire _MATRIX_CASES; designed recipe eady_weno5_v1; upstream template ocean/eady_uniform exists"
+  matrix:geostrophic_adjustment:
+    status: onboarded
+    grids: [fesom, latlon, mpas, tripole]
+    note: "graduated 3B-3; matrix lane via _MATRIX_CASES"
+  matrix:global_barotropic_wind:
+    status: backlog
+    grids: [latlon, mpas]
+    note: "Tier 1 (issue #10): upstream template exists; mode barotropic_ocean"
+  matrix:global_barotropic_wind_1lev:
+    status: declined
+    grids: [latlon, mpas]
+    reason: "single-level variant of global_barotropic_wind (issue #10 declined list)"
+  matrix:global_overturning:
+    status: onboarded
+    grids: [latlon, mpas]
+    note: "graduated 3B-3; matrix lane via _MATRIX_CASES"
+  matrix:held_larichev:
+    status: backlog
+    grids: [latlon_channel, mpas_channel]
+    note: "Tier 1 (issue #10); tag legoesm_linear_v1; upstream template exists"
+  matrix:inertia_gravity_wave:
+    status: declined
+    grids: [fesom, latlon, mpas, tripole]
+    reason: "upstream global-case gate defect (climate-federation/legoESM#2114); the channel variant is the verified lane"
+  matrix:inertia_gravity_wave_channel:
+    status: backlog
+    grids: [latlon_channel]
+    note: "Tier 1 (issue #10): the verified IGW lane (f-plane channel, exact eigenmode); new runners template, no upstream counterpart"
+  matrix:isomip_plus:
+    status: backlog
+    grids: [latlon_regional]
+    note: "Tier 1 (issue #10), first wiring: template dt 120 -> lane DEFAULT_DT 300, quick 5 d receipt"
+  matrix:lock_exchange:
+    status: onboarded
+    grids: [fesom, latlon, latlon_regional, mpas, tripole]
+    note: "graduated 3B-3; matrix lane via _MATRIX_CASES"
+  matrix:munk_gyre:
+    status: backlog
+    grids: [latlon_regional, mpas_regional]
+    note: "Tier 1 (issue #10); tag default_wright_v1; upstream template exists"
+  matrix:neverworld2_lite:
+    status: onboarded
+    grids: [latlon]
+    note: "runners-owned global_ocean/ template, matrix lane via _MATRIX_CASES"
+  matrix:overflow:
+    status: onboarded
+    grids: [latlon]
+    note: "graduated 3B-3; matrix lane via _MATRIX_CASES"
+  matrix:phillips_two_layer:
+    status: onboarded
+    grids: [fesom, latlon, mpas, tripole]
+    note: "graduated 3B-3; matrix lane via _MATRIX_CASES"
+  matrix:rest_state_stratified_no_land:
+    status: onboarded
+    grids: [latlon, mpas]
+    note: "runners-owned 3d_idealized/ template, matrix lane via _MATRIX_CASES"
+  matrix:rest_state_stratified_with_land:
+    status: backlog
+    grids: [fesom, latlon, mpas, tripole]
+    note: "Tier 1 (issue #10): rest-state sibling"
+  matrix:rest_state_uniform_no_land:
+    status: backlog
+    grids: [latlon, mpas]
+    note: "Tier 1 (issue #10): rest-state sibling"
+  matrix:rest_state_uniform_with_land:
+    status: backlog
+    grids: [fesom, latlon, mpas, tripole]
+    note: "Tier 1 (issue #10): rest-state sibling"
+  matrix:stommel_gyre_tracer:
+    status: onboarded
+    grids: [latlon, mpas]
+    note: "graduated 3B-4 (2026-10-22); matrix lane via _MATRIX_CASES"
+  recipe:default_wright_mpas_v1:
+    status: backlog
+    note: "Tier 2 (issue #10): global MPAS arms"
+  recipe:default_wright_v1:
+    status: onboarded
+    note: "declared by the onboarded latlon matrix lanes + isomip_plus"
+  recipe:eady_weno5_v1:
+    status: backlog
+    note: "designed recipe of eady_uniform — flips onboarded with the Tier 1 wiring"
+  recipe:legoesm_linear_mpas_v1:
+    status: backlog
+    note: "Tier 2 (issue #10): global MPAS arms"
+  recipe:legoesm_linear_v1:
+    status: onboarded
+    note: "global_overturning / eady_instability / held_larichev identity"
+  recipe:legoesm_nemo_like_v1:
+    status: delegation
+    note: "bench identity (run_bench lane)"
+  recipe:mitgcm_v1:
+    status: upstream_only
+    note: "cross-model comparison recipe (fidelity tooling; no runners lane)"
+  recipe:nemo_dino_v1:
+    status: delegation
+    note: "dino identity (run_dino lane)"
+  recipe:oceananigans_v1:
+    status: upstream_only
+    note: "cross-model comparison recipe (fidelity tooling; no runners lane)"
+  recipe:omip_nemo_match_mpas_v1:
+    status: backlog
+    note: "Tier 2 (issue #10): global MPAS NEMO-match identity"
+  recipe:omip_nemo_match_tripole_v1:
+    status: onboarded
+    note: "tripole OMIP lane identity (nemo_match_tripole_model_config)"
+  recipe:veros_faithful_v1:
+    status: onboarded
+    note: "acc_channel identity (build_acc_recipe)"
+  experiment_recipe:acc_channel:
+    status: onboarded
+    note: "recipe_map tag of matrix case 'acc_channel': graduated 3B-3; matrix lane via _MATRIX_CASES"
+  experiment_recipe:baroclinic:
+    status: declined
+    reason: "recipe_map key without a matching matrix case (base/family tag)"
+  experiment_recipe:baroclinic_gyre:
+    status: onboarded
+    note: "recipe_map tag of matrix case 'baroclinic_gyre': graduated 3B-2 (pilot); matrix lane via _MATRIX_CASES"
+  experiment_recipe:barotropic_wave:
+    status: onboarded
+    note: "recipe_map tag of matrix case 'barotropic_wave': graduated 3B-3; matrix lane via _MATRIX_CASES"
+  experiment_recipe:bench:
+    status: delegation
+    note: "recipe_map tag of matrix case 'bench': runners _run_bench lane (NEMO-BENCH timing harness); counterpart-gated terminal state (#2113 dialect proposal)"
+  experiment_recipe:dino:
+    status: delegation
+    note: "recipe_map tag of matrix case 'dino': runners _run_dino lane (run_dino.py paper-faithful driver)"
+  experiment_recipe:eady_instability:
+    status: onboarded
+    note: "recipe_map tag of matrix case 'eady_instability': graduated 3B-3; matrix lane via _MATRIX_CASES"
+  experiment_recipe:eady_uniform:
+    status: backlog
+    note: "recipe_map tag of matrix case 'eady_uniform': Tier 1 (issue #10): wire _MATRIX_CASES; designed recipe eady_weno5_v1; upstream template ocean/eady_uniform exists"
+  experiment_recipe:geostrophic_adjustment:
+    status: onboarded
+    note: "recipe_map tag of matrix case 'geostrophic_adjustment': graduated 3B-3; matrix lane via _MATRIX_CASES"
+  experiment_recipe:global_barotropic_wind:
+    status: backlog
+    note: "recipe_map tag of matrix case 'global_barotropic_wind': Tier 1 (issue #10): upstream template exists; mode barotropic_ocean"
+  experiment_recipe:global_overturning:
+    status: onboarded
+    note: "recipe_map tag of matrix case 'global_overturning': graduated 3B-3; matrix lane via _MATRIX_CASES"
+  experiment_recipe:held_larichev:
+    status: backlog
+    note: "recipe_map tag of matrix case 'held_larichev': Tier 1 (issue #10); tag legoesm_linear_v1; upstream template exists"
+  experiment_recipe:inertia_gravity_wave:
+    status: declined
+    reason: "recipe_map tag of matrix case 'inertia_gravity_wave': upstream global-case gate defect (climate-federation/legoESM#2114); the channel variant is the verified lane"
+  experiment_recipe:isomip_plus:
+    status: backlog
+    note: "recipe_map tag of matrix case 'isomip_plus': Tier 1 (issue #10), first wiring: template dt 120 -> lane DEFAULT_DT 300, quick 5 d receipt"
+  experiment_recipe:lock_exchange:
+    status: onboarded
+    note: "recipe_map tag of matrix case 'lock_exchange': graduated 3B-3; matrix lane via _MATRIX_CASES"
+  experiment_recipe:munk_gyre:
+    status: backlog
+    note: "recipe_map tag of matrix case 'munk_gyre': Tier 1 (issue #10); tag default_wright_v1; upstream template exists"
+  experiment_recipe:neverworld2_lite:
+    status: onboarded
+    note: "recipe_map tag of matrix case 'neverworld2_lite': runners-owned global_ocean/ template, matrix lane via _MATRIX_CASES"
+  experiment_recipe:overflow:
+    status: onboarded
+    note: "recipe_map tag of matrix case 'overflow': graduated 3B-3; matrix lane via _MATRIX_CASES"
+  experiment_recipe:phillips_two_layer:
+    status: onboarded
+    note: "recipe_map tag of matrix case 'phillips_two_layer': graduated 3B-3; matrix lane via _MATRIX_CASES"
+  experiment_recipe:regional_gyre:
+    status: declined
+    reason: "recipe_map key without a matching matrix case (base module, not a lane)"
+  experiment_recipe:rest_state:
+    status: declined
+    reason: "rest-state family tag (the four rest_state_* matrix cases are the lanes)"
+  experiment_recipe:stommel_gyre_tracer:
+    status: onboarded
+    note: "recipe_map tag of matrix case 'stommel_gyre_tracer': graduated 3B-4 (2026-10-22); matrix lane via _MATRIX_CASES"
+  script:scripts/run/global_overturning/:
+    status: declined
+    reason: "restart-dependent long-run campaign suite (diagnostics, plot tools, 10-200 yr continuations); the base global_overturning lane is onboarded via the matrix"
+  script:scripts/run/mpas_realistic_geometry/:
+    status: declined
+    reason: "realistic-geometry research decks (ETopo spinup, seamount, vertex-thickness diagnostics)"
+  script:scripts/run/ocean_long_runs/:
+    status: declined
+    reason: "long-run research/infra (centennial spinup, climate post-processing); run_omip2.py and run_bryan_thc.py carry exact backlog entries"
+  script:scripts/run/run_geometric_stage0.py:
+    status: declined
+    reason: "geometric-optimization research deck (identifiability/ETKI stage-0 studies)"
+  script:scripts/run/run_geometric_stage0_etki.py:
+    status: declined
+    reason: "geometric-optimization research deck (identifiability/ETKI stage-0 studies)"
+  script:scripts/run/run_geometric_stage0_identifiability.py:
+    status: declined
+    reason: "geometric-optimization research deck (identifiability/ETKI stage-0 studies)"
+  script:scripts/matrix/run_atmosphere_test_matrix.py:
+    status: backlog
+    note: "Tier 3 (issue #10): Williamson delegation target — SW is outside the runners mode set; needs a delegation-lane design before any template"
+  script:scripts/run/_drake_momentum_budget_runner.py:
+    status: declined
+    reason: "restart-dependent research deck / campaign tooling (issue #10 declined list)"
+  script:scripts/run/continue_eady_uniform.py:
+    status: declined
+    reason: "restart-dependent research deck / campaign tooling (issue #10 declined list)"
+  script:scripts/run/run_advection_convergence.py:
+    status: backlog
+    note: "Tier 2 (issue #10): bench-like verification lane"
+  script:scripts/run/run_advection_convergence_2d.py:
+    status: backlog
+    note: "Tier 2 (issue #10): bench-like verification lane"
+  script:scripts/run/run_advection_convergence_3d.py:
+    status: backlog
+    note: "Tier 2 (issue #10): bench-like verification lane"
+  script:scripts/run/run_baroclinic_wave_benchmark.py:
+    status: declined
+    reason: "restart-dependent research deck / campaign tooling (issue #10 declined list)"
+  script:scripts/run/run_bench.py:
+    status: delegation
+    note: "run_bench lane (NEMO-BENCH timing harness)"
+  script:scripts/run/run_coupled.py:
+    status: declined
+    reason: "coupled run path not onboarded in the runners (mode init-only)"
+  script:scripts/run/run_dino.py:
+    status: delegation
+    note: "dino lane driver"
+  script:scripts/run/run_drake_momentum_budget.py:
+    status: declined
+    reason: "restart-dependent research deck / campaign tooling (issue #10 declined list)"
+  script:scripts/run/run_drake_momentum_budget_divdamp.py:
+    status: declined
+    reason: "restart-dependent research deck / campaign tooling (issue #10 declined list)"
+  script:scripts/run/run_drake_momentum_budget_implicit.py:
+    status: declined
+    reason: "restart-dependent research deck / campaign tooling (issue #10 declined list)"
+  script:scripts/run/run_drake_sensitivity.py:
+    status: declined
+    reason: "restart-dependent research deck / campaign tooling (issue #10 declined list)"
+  script:scripts/run/run_eady_advection_comparison.py:
+    status: declined
+    reason: "research comparison deck (issue #10 declined list)"
+  script:scripts/run/run_eady_rebuilt.py:
+    status: declined
+    reason: "rebuilt-eady research deck (issue #10 declined list)"
+  script:scripts/run/run_fesom_core2.py:
+    status: backlog
+    note: "Tier 2 (issue #10): FESOM2 CORE2 hindcast (3rd dycore); needs fesom_jax optional-dep management + data-catalog entries (CORE2 mesh Zenodo 21324319, PHC3.0, JRA55-1958); note upstream #2102 (FESOM manifests fail validate_run_manifest)"
+  script:scripts/run/run_geoadj_fluxform.py:
+    status: declined
+    reason: "restart-dependent research deck / campaign tooling (issue #10 declined list)"
+  script:scripts/run/run_gyre_hires.py:
+    status: declined
+    reason: "restart-dependent research deck / campaign tooling (issue #10 declined list)"
+  script:scripts/run/run_ocean_spectral_tests.py:
+    status: backlog
+    note: "Tier 3 (issue #10): spectral direction check (files still present at the pin; verify upstream intent, then disposition)"
+  script:scripts/run/run_omip.py:
+    status: backlog
+    note: "Tier 2 (issue #10): wires the runners omip_global/omip_jra55/omip_cubed_sphere init-only templates; GRID_TYPES = cubed_sphere, latlon, mpas, spectral, tripole"
+  script:scripts/run/run_omip2_io_smoke.py:
+    status: declined
+    reason: "IO-smoke infra deck (issue #10 declined list)"
+  script:scripts/run/run_omip_core2.py:
+    status: onboarded
+    note: "tripole arm in service (the runners OMIP tripole lane delegates here); latlon_bathy/mpas/fesom/cubed_sphere arms = Tier 2 backlog"
+  script:scripts/run/run_omip_core2_mpi.py:
+    status: onboarded
+    note: "MPI variant of the tripole lane (_run_tripolar_omip MPI branch); patch-added at this pin (003-omip-core2-mpi.patch)"
+  script:scripts/run/run_rce.py:
+    status: declined
+    reason: "not an ocean lane (RCE column experiments)"
+  script:scripts/run/run_silvestri_baroclinic_jet.py:
+    status: backlog
+    note: "Tier 2 (issue #10): canonical recipes upstream, no recipe_map tags — declare none until tagged"
+  script:scripts/run/run_silvestri_turbulence_2d.py:
+    status: backlog
+    note: "Tier 2 (issue #10): canonical recipes upstream, no recipe_map tags — declare none until tagged"
+  script:scripts/run/run_slide28_logtime_snapshots.py:
+    status: declined
+    reason: "restart-dependent research deck / campaign tooling (issue #10 declined list)"
+  script:scripts/run/run_swg_double_gyre.py:
+    status: backlog
+    note: "Tier 2 (issue #10): NEMO SWG Maddison fidelity testcase (nemo_testcase_recipe.SWG_MADDISON_NAMELIST + build_swg_card), latlon C-grid, data-free"
+  script:scripts/run/run_w2_mpas_convergence.py:
+    status: backlog
+    note: "Tier 3 (issue #10): Williamson-2 MPAS convergence (SW scope)"
+  template:3d_idealized/:
+    status: declined
+    reason: "out of scope (issue #10 blanket: atmospheric idealized templates)"
+  template:atmosphere/:
+    status: declined
+    reason: "out of scope (issue #10 blanket)"
+  template:sea_ice/:
+    status: declined
+    reason: "out of scope (issue #10 blanket)"
+  template:2d/williamson2_sw:
+    status: backlog
+    note: "Tier 3 (issue #10): Williamson 2 — SW outside the runners mode set; delegation design pending; routes to run_atmosphere_test_matrix.py --test williamson2"
+  template:2d/williamson5_sw:
+    status: backlog
+    note: "Tier 3 (issue #10): Williamson 5 — same delegation design"
+  template:global_ocean/omip_latlon:
+    status: backlog
+    note: "Tier 3 (issue #10): full-config latlon OMIP (upstream init_only); semantically overlaps runners omip_global/omip_jra55 — mirror/decline decision pending"
+  template:global_ocean/omip_latlon_kpp:
+    status: backlog
+    note: "Tier 3 (issue #10): same counterpart decision as omip_latlon"
+  template:ocean/acc_channel:
+    status: graduated
+    note: "canonical ocean/acc_channel; legacy alias 3d_idealized/acc_channel"
+  template:ocean/baroclinic_gyre:
+    status: graduated
+    note: "canonical ocean/baroclinic_gyre (3B-2 pilot)"
+  template:ocean/barotropic_wave:
+    status: graduated
+    note: "canonical ocean/barotropic_wave"
+  template:ocean/bench:
+    status: delegation
+    note: "runners-owned counterpart-gated template (terminal state; upstream dialect proposal #2113)"
+  template:ocean/eady_instability:
+    status: graduated
+    note: "canonical ocean/eady_instability"
+  template:ocean/eady_uniform:
+    status: upstream_only
+    note: "init via ocean/eady_uniform; Tier 1 wiring flips to onboarded"
+  template:ocean/geostrophic_adjustment:
+    status: graduated
+    note: "canonical ocean/geostrophic_adjustment"
+  template:ocean/global_barotropic_wind:
+    status: upstream_only
+    note: "init via ocean/global_barotropic_wind (mode barotropic_ocean); Tier 1 wiring flips to onboarded"
+  template:ocean/global_overturning:
+    status: graduated
+    note: "canonical ocean/global_overturning"
+  template:ocean/held_larichev:
+    status: upstream_only
+    note: "init via ocean/held_larichev; Tier 1 wiring flips to onboarded"
+  template:ocean/inertia_gravity_wave:
+    status: declined
+    reason: "upstream gate defect (climate-federation/legoESM#2114); runners 2d/ counterpart stays drift-gated, excluded from onboarding"
+  template:ocean/lock_exchange:
+    status: graduated
+    note: "canonical ocean/lock_exchange"
+  template:ocean/munk_gyre:
+    status: upstream_only
+    note: "init via ocean/munk_gyre; Tier 1 wiring flips to onboarded"
+  template:ocean/overflow:
+    status: graduated
+    note: "canonical ocean/overflow"
+  template:ocean/phillips_two_layer:
+    status: graduated
+    note: "canonical ocean/phillips_two_layer"
+  template:ocean/stommel_gyre_tracer:
+    status: graduated
+    note: "canonical ocean/stommel_gyre_tracer (3B-4)"
