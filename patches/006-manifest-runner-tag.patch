@@ -1,13 +1,11 @@
 diff --git a/CHANGELOG.md b/CHANGELOG.md
-index dbe83202b4..a004f0d597 100644
+index 1b854913ea..6bf4a2c3df 100644
 --- a/CHANGELOG.md
 +++ b/CHANGELOG.md
-@@ -5,6 +5,16 @@ All notable changes to legoESM. Format roughly follows
- 
- ## Unreleased
- 
-+### Added
-+
+@@ -15,6 +15,13 @@ All notable changes to legoESM. Format roughly follows
+   `--forcing-scale` scales surface forcing amplitude (sensitivity tests /
+   cold-start shock reduction). Contributed from the
+   legoESM-ocean-runners tripole-OMIP orchestration lane.
 +- **Orchestrator provenance env vars.** `build_run_manifest()` now reads
 +  `LEGOESM_RUNNER_TAG` / `LEGOESM_RUNNER_PATCHES` (comma-separated list);
 +  when set, they take precedence over the caller's per-script defaults, so a
@@ -15,15 +13,14 @@ index dbe83202b4..a004f0d597 100644
 +  itself and its patch chain on every lane — including the atmosphere driver
 +  path, which passes neither field. No schema change: populating the optional
 +  `reproducibility.runner_tag` / `patches` fields is not a bump.
-+
+ 
  ### Changed
  
- - **License: MIT.** legoESM is now released under the MIT License, replacing
 diff --git a/packages/coupler/legoesm/driver/restart.py b/packages/coupler/legoesm/driver/restart.py
-index 5bab7d4f53..3c3a8b3237 100644
+index ede59c4228..9ccfdc3b00 100644
 --- a/packages/coupler/legoesm/driver/restart.py
 +++ b/packages/coupler/legoesm/driver/restart.py
-@@ -493,6 +493,13 @@ def build_run_manifest(
+@@ -1241,6 +1241,13 @@ def build_run_manifest(
          so the run can be rebuilt.
      command_line
          The invoking command; defaults to ``" ".join(sys.argv)``.
@@ -37,7 +34,7 @@ index 5bab7d4f53..3c3a8b3237 100644
      state_digest
          Filled after N steps by the reproduce/checkpoint path; ``None`` at start.
      config_kind
-@@ -503,6 +510,17 @@ def build_run_manifest(
+@@ -1251,6 +1258,17 @@ def build_run_manifest(
  
      kind = config_kind or detect_config_kind(config)
  
@@ -56,7 +53,7 @@ index 5bab7d4f53..3c3a8b3237 100644
      # If the CWD is a legoesm checkout at a different HEAD (launcher cd-ed into
      # a pinned worktree while importing another tree), this RAISES unless
 diff --git a/tests/unit/test_run_manifest.py b/tests/unit/test_run_manifest.py
-index 4de41914c6..0cb4947059 100644
+index 5fdfe8762d..443f333ead 100644
 --- a/tests/unit/test_run_manifest.py
 +++ b/tests/unit/test_run_manifest.py
 @@ -78,6 +78,43 @@ def test_optional_provenance_fields_are_threaded() -> None:
