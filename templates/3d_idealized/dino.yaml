@@ -12,6 +12,17 @@
 # Grid:    latlon (Mercator; n_lon=50 -> 198 rows = paper 1deg R1)
 # Mode:    3d_ocean
 #
+#requires_patches gates patch 007 (--tke-n2-evaluation-stage, runners-side
+# CLI flag on run_dino.py): the certified card nemo_dino_kamm_mlf pins
+# tke_n2_evaluation_stage='step_entry', which requires NEMO's raw mesh
+# fields and therefore only runs on the --nemo-faithful-grid R1 mesh. The
+# HI-RES certified-dev lane ("certified-minus-one-switch": --recipe
+# nemo_dino_kamm_mlf + run.extra_args ["--tke-n2-evaluation-stage",
+# "implicit_solve_state"] + grid.n_lon override) needs the flag to resolve
+# the fail-loud guard; R1/paper lanes never pass it (no-op for them).
+# Remove this requires_patches entry (and the patch) when the flag merges
+# upstream.
+#
 # Defaults are the DINOConfig paper-faithful values: KPP + Visbeck GM/Redi
 # (triads) + enhanced-diffusion convection, Wright EOS, zstar 36 levels,
 # dt=2700s, implicit-CN barotropic. Do not override numeric physics here
@@ -29,6 +40,9 @@ experiment:
   description: "DINO: diabatic pole-to-pole ocean dynamics (Kamm et al. 2025, R1)"
 
 requires: []
+
+requires_patches:
+  - 007-dino-tke-n2-stage-flag.patch
 
 grid:
   type: latlon

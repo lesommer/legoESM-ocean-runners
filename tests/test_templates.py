@@ -1588,7 +1588,10 @@ class TestOceanCaseDispatch:
         # The delegation lanes read these; assert the contract.
         assert cfg["grid"]["n_lon"] == 50          # R1
         assert cfg["time"]["dt_seconds"] == 2700   # paper dt
-        assert cfg.get("requires_patches", []) == []  # patch 006 merged upstream (PR #1926)
+        # Patch 006 merged upstream (PR #1926); 007 gates the hi-res
+        # certified-dev lane (--tke-n2-evaluation-stage CLI flag).
+        assert cfg.get("requires_patches", []) == [
+            "007-dino-tke-n2-stage-flag.patch"]
 
     def test_dino_requires_patches_exist(self):
         from runners.run_experiment import PATCHES_DIR

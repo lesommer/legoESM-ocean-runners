@@ -1,0 +1,37 @@
+diff --git a/scripts/run/run_dino.py b/scripts/run/run_dino.py
+index ca1e1746f8..4c583e235e 100644
+--- a/scripts/run/run_dino.py
++++ b/scripts/run/run_dino.py
+@@ -215,6 +215,22 @@ def _parse_args():
+              "off (default): constant Pr=10. Effective only for --vmix tke. "
+              "The nemo_dino_kamm recipe sets it on.",
+     )
++    p.add_argument(
++        "--tke-n2-evaluation-stage", default=None,
++        choices=("implicit_solve_state", "step_entry"),
++        help="TKE buoyancy (N^2) evaluation stage (DINOConfig."
++             "tke_n2_evaluation_stage). 'step_entry' consumes NEMO's raw "
++             "nemo_gdept_0/nemo_gdepw_0/nemo_e3t_0 mesh fields, which exist "
++             "ONLY on the --nemo-faithful-grid mesh (the guard refuses it "
++             "elsewhere — the 1-D/reconstructed ladder is not a faithful "
++             "eosbn2/zdftke operand). 'implicit_solve_state' is the generic "
++             "ladder's stage and works on every resolution. Default: the "
++             "recipe card's value (nemo_dino_kamm_mlf sets 'step_entry'; "
++             "pass 'implicit_solve_state' to run that card's otherwise-"
++             "faithful scheme set on an off-mesh resolution — a declared "
++             "deviation from the certified card, one switch off the "
++             "validated set).",
++    )
+     p.add_argument(
+         "--evd-momentum", choices=("on", "off"), default=None,
+         help="Enhanced vertical diffusion on MOMENTUM (DINOConfig."
+@@ -772,6 +788,9 @@ def main():
+     if args.tke_prandtl_ri is not None:
+         cfg = dataclasses.replace(
+             cfg, tke_prandtl_ri=(args.tke_prandtl_ri == "on"))
++    if args.tke_n2_evaluation_stage is not None:
++        cfg = dataclasses.replace(
++            cfg, tke_n2_evaluation_stage=args.tke_n2_evaluation_stage)
+     if args.barotropic_coriolis is not None:
+         cfg = dataclasses.replace(
+             cfg, barotropic_coriolis=args.barotropic_coriolis)
