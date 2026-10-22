@@ -160,7 +160,7 @@ lanes:
     note: "graduated 3B-4 (2026-10-22); matrix lane via _MATRIX_CASES"
   recipe:default_wright_mpas_v1:
     status: backlog
-    note: "Tier 2 (issue #10): global MPAS arms"
+    note: "Tier 2 (issue #10): global MPAS arms; findings in #12"
   recipe:default_wright_v1:
     status: onboarded
     note: "declared by the onboarded latlon matrix lanes + isomip_plus"
@@ -169,7 +169,7 @@ lanes:
     note: "designed recipe of eady_uniform — flips onboarded with the Tier 1 wiring"
   recipe:legoesm_linear_mpas_v1:
     status: backlog
-    note: "Tier 2 (issue #10): global MPAS arms"
+    note: "Tier 2 (issue #10): global MPAS arms; findings in #12"
   recipe:legoesm_linear_v1:
     status: onboarded
     note: "global_overturning / eady_instability / held_larichev identity"
@@ -187,7 +187,7 @@ lanes:
     note: "cross-model comparison recipe (fidelity tooling; no runners lane)"
   recipe:omip_nemo_match_mpas_v1:
     status: backlog
-    note: "Tier 2 (issue #10): global MPAS NEMO-match identity"
+    note: "Tier 2 (issue #10): global MPAS NEMO-match identity; findings in #12"
   recipe:omip_nemo_match_tripole_v1:
     status: onboarded
     note: "tripole OMIP lane identity (nemo_match_tripole_model_config)"
@@ -328,7 +328,7 @@ lanes:
     reason: "rebuilt-eady research deck (issue #10 declined list)"
   script:scripts/run/run_fesom_core2.py:
     status: backlog
-    note: "Tier 2 (issue #10): FESOM2 CORE2 hindcast (3rd dycore); needs fesom_jax optional-dep management + data-catalog entries (CORE2 mesh Zenodo 21324319, PHC3.0, JRA55-1958); note upstream #2102 (FESOM manifests fail validate_run_manifest)"
+    note: "Tier 2 (issue #10): FESOM2 CORE2 hindcast (3rd dycore); needs fesom_jax optional-dep management + data-catalog entries (CORE2 mesh Zenodo 21324319, PHC3.0, JRA55-1958); note upstream #2102 (FESOM manifests fail validate_run_manifest); findings in #13"
   script:scripts/run/run_geoadj_fluxform.py:
     status: declined
     reason: "restart-dependent research deck / campaign tooling (issue #10 declined list)"
