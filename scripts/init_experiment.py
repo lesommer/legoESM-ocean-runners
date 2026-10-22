@@ -25,7 +25,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Initialize a legoESM experiment from a template")
-    parser.add_argument("template", help="Template name (e.g. 3d_idealized/baroclinic_gyre)")
+    parser.add_argument("template", help="Template name (runners-owned, ocean/<stem> canonical, or legacy alias)")
     parser.add_argument("--name", help="Experiment name (default: from template)")
     parser.add_argument("-o", "--override", action="append", default=[],
                         help="Override in KEY=VALUE format (dot-notation)")

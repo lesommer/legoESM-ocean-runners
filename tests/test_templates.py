@@ -361,6 +361,7 @@ class TestRecipeValidation:
     def test_real_templates_pass_with_fixture_sources(self):
         from runners.run_experiment import load_template
         for name in ("3d_idealized/baroclinic_gyre",
+                     "ocean/baroclinic_gyre",   # canonical (graduated)
                      "3d_idealized/eady_instability",
                      "global_ocean/global_overturning",
                      "global_ocean/omip_tripole",
@@ -394,8 +395,23 @@ class TestRecipeValidation:
         # generate_tag surfaces the declared recipe in [model].
         from runners.run_experiment import generate_tag, load_template
         cfg = load_template("3d_idealized/baroclinic_gyre")
-        tag = generate_tag(cfg, "3d_idealized/baroclinic_gyre")
+        tag = generate_tag(cfg, "ocean/baroclinic_gyre")
         assert "recipe = default_wright_v1" in tag
+
+    def test_tag_records_graduated_provenance(self):
+        # Graduated template: the tag records the CANONICAL name and the
+        # template_source (Phase 3B-2); a runners-owned template records
+        # neither (absence is the true statement).
+        from runners.run_experiment import generate_tag, load_template
+        cfg = load_template("ocean/baroclinic_gyre")
+        tag = generate_tag(cfg, "ocean/baroclinic_gyre",
+                           template_source="upstream")
+        assert "template = ocean/baroclinic_gyre" in tag
+        assert "template_source = upstream" in tag
+        assert "recipe = default_wright_v1" in tag
+        runners_tag = generate_tag(load_template("3d_idealized/dino"),
+                                   "3d_idealized/dino")
+        assert "template_source = " not in runners_tag
 
     def test_tag_omits_recipe_when_undeclared(self):
         from runners.run_experiment import generate_tag, load_template
@@ -476,15 +492,17 @@ class TestConsistencyGate:
         import validate_templates as vt
         drifted = self._upstream_checkout(
             tmp_path / "drifted",
-            {"baroclinic_gyre": self._counterpart_text(grid="latlon_cgrid")})
-        path = TEMPLATES_DIR / "3d_idealized" / "baroclinic_gyre.yaml"
+            {"acc_channel": self._counterpart_text(
+                name="acc_channel", grid="latlon_cgrid")})
+        path = TEMPLATES_DIR / "3d_idealized" / "acc_channel.yaml"
         errors = vt.validate_template(
             path, consistency_sources=self._sources(drifted))
         assert any("grid drift" in e for e in errors), errors
 
         healthy = self._upstream_checkout(
             tmp_path / "healthy",
-            {"baroclinic_gyre": self._counterpart_text()})
+            {"acc_channel": self._counterpart_text(
+                name="acc_channel", grid="latlon_channel")})
         errors = vt.validate_template(
             path, consistency_sources=self._sources(healthy))
         assert errors == [], errors
@@ -601,7 +619,7 @@ class TestConsistencyGate:
         # consistency_sources=None (e.g. --skip-imports): the gate is
         # skipped without inventing errors.
         import validate_templates as vt
-        path = TEMPLATES_DIR / "3d_idealized" / "baroclinic_gyre.yaml"
+        path = TEMPLATES_DIR / "3d_idealized" / "acc_channel.yaml"
         assert vt.validate_template(path, consistency_sources=None) == []
 
     def test_skip_imports_skips_gate_with_notice(self):
@@ -613,6 +631,140 @@ class TestConsistencyGate:
             capture_output=True, text=True)
         assert r.returncode == 0, r.stdout + r.stderr
         assert "Consistency gate: skipped" in r.stdout, r.stdout
+
+
+class TestGraduatedTemplates:
+    """Graduated templates (issue #8, Phase 3B-2): the pilot graduation of
+    baroclinic_gyre to the pinned upstream template library, with the
+    legacy alias keeping pre-graduation names resolving."""
+
+    @staticmethod
+    def _find_checkout():
+        for cand in (ROOT_DIR / "legoESM", ROOT_DIR.parent / "legoESM"):
+            if (cand / "config" / "templates" / "ocean").is_dir():
+                return cand
+        return None
+
+    def test_alias_and_canonical_resolve_identically(self):
+        # The old runners name resolves to the SAME translated config as
+        # the canonical upstream name, with canonical provenance.
+        from runners.run_experiment import resolve_template
+        cfg_alias, prov_alias = resolve_template("3d_idealized/baroclinic_gyre")
+        cfg_canon, prov_canon = resolve_template("ocean/baroclinic_gyre")
+        assert prov_alias == prov_canon == {
+            "canonical": "ocean/baroclinic_gyre", "source": "upstream"}
+        cfg = cfg_alias
+        # The runners dialect the pipeline reads (validate_template's
+        # REQUIRED_KEYS + the dispatch/generate_tag contracts):
+        assert cfg["experiment"]["name"] == "ocean-baroclinic-gyre"
+        assert cfg["experiment"]["mode"] == "3d_ocean"
+        assert cfg["experiment"]["description"]
+        assert cfg["requires"] == []
+        assert cfg["grid"]["type"] == "latlon"   # reverse of latlon_regional
+        assert cfg["ocean"]["case"] == "baroclinic_gyre"
+        # The identity claim survives graduation: recipe emitted from the
+        # PINNED EXPERIMENT_RECIPES, never re-spelled here.
+        assert cfg["ocean"]["recipe"] == "default_wright_v1"
+        # The upstream case owns the configuration — no curated copies of
+        # dt/duration/resolution/scheme fields survive the translation.
+        assert "time" not in cfg
+        assert "output" not in cfg
+        assert "domain" not in cfg
+        assert "physics" not in cfg
+        assert "resolution" not in cfg["grid"]
+        assert "nlev" not in cfg["grid"]
+
+    def test_runners_owned_template_wins_over_upstream(self):
+        # Resolution order: a runners-owned file at the requested name
+        # always wins (dino is not registered upstream; the runners file
+        # is the single source of truth for it).
+        from runners.run_experiment import resolve_template
+        _, prov = resolve_template("3d_idealized/dino")
+        assert prov == {"canonical": "3d_idealized/dino", "source": "runners"}
+
+    def test_registry_matches_pinned_checkout(self):
+        # The mode registry must cover EXACTLY the upstream ocean
+        # templates at the pin — an upstream addition is a conscious
+        # registration, never an untested generic lookup.
+        checkout = self._find_checkout()
+        if checkout is None:
+            pytest.skip("pinned legoESM checkout not available")
+        from runners.run_experiment import _UPSTREAM_TEMPLATE_MODES
+        upstream_stems = {
+            f"ocean/{p.stem}" for p in
+            (checkout / "config" / "templates" / "ocean").glob("*.yaml")}
+        assert set(_UPSTREAM_TEMPLATE_MODES) == upstream_stems
+        assert _UPSTREAM_TEMPLATE_MODES["ocean/barotropic_wave"] == "barotropic_ocean"
+        assert _UPSTREAM_TEMPLATE_MODES["ocean/baroclinic_gyre"] == "3d_ocean"
+
+    def test_unregistered_upstream_name_raises(self):
+        # Planted: an upstream template stem exists but is not registered
+        # — mode is a dispatch decision, never guessed.
+        from runners.run_experiment import load_template
+        with pytest.raises(FileNotFoundError, match="_UPSTREAM_TEMPLATE_MODES"):
+            load_template("ocean/some-future-upstream-case")
+
+    def test_file_based_recipe_loader_matches_pinned_catalog(self):
+        # The adapter's EXPERIMENT_RECIPES source: loaded BY FILE PATH from
+        # the pinned checkout (works without legoesm installed as a
+        # package — the two-python verification protocol depends on it).
+        checkout = self._find_checkout()
+        if checkout is None:
+            pytest.skip("pinned legoESM checkout not available")
+        from runners.run_experiment import _load_pinned_experiment_recipes
+        recipes = _load_pinned_experiment_recipes(checkout)
+        assert recipes["baroclinic_gyre"] == "default_wright_v1"
+        assert recipes["bench"] == "legoesm_nemo_like_v1"
+
+    def test_recipe_validation_holds_for_translated_config(self):
+        # Phase-1 recipe validation holds for translated templates: the
+        # emitted recipe matches the pinned recipe_map tag for the case.
+        from validate_templates import validate_recipe
+        from runners.run_experiment import load_template
+        cfg = load_template("ocean/baroclinic_gyre")
+        assert validate_recipe(cfg, **TestRecipeValidation.SOURCES) == []
+
+    def test_graduated_config_dispatches_through_matrix_lane(self):
+        # The run lane reads the translated config: case + grid.type must
+        # hit the _MATRIX_CASES dispatch (latlon -> latlon_regional).
+        from runners.run_experiment import _MATRIX_CASES, load_template
+        cfg = load_template("ocean/baroclinic_gyre")
+        case = cfg["ocean"]["case"]
+        grid = cfg["grid"]["type"]
+        assert grid in _MATRIX_CASES[case]
+        assert _MATRIX_CASES[case][grid] == "latlon_regional"
+
+    def test_init_end_to_end_canonical_and_alias(self, tmp_path):
+        # init produces the identical resolved experiment from the
+        # canonical name and the legacy alias; the tag records the
+        # canonical template + template_source + the pinned recipe tag.
+        import configparser
+        from runners.run_experiment import init_experiment
+        dir_canon = tmp_path / "canon"
+        dir_alias = tmp_path / "alias"
+        init_experiment("ocean/baroclinic_gyre", "smoke",
+                        ["time.duration_days=1"], None, dir_canon)
+        init_experiment("3d_idealized/baroclinic_gyre", "smoke",
+                        ["time.duration_days=1"], None, dir_alias)
+        assert (dir_canon / "config.yaml").read_text() == \
+               (dir_alias / "config.yaml").read_text()
+
+        tag = configparser.ConfigParser()
+        tag.read(dir_canon / "experiment.tag")
+        assert tag["experiment"]["template"] == "ocean/baroclinic_gyre"
+        assert tag["experiment"]["template_source"] == "upstream"
+        assert tag["model"]["recipe"] == "default_wright_v1"
+        # Not declared by the translated template — the upstream lane
+        # default applies (recorded as unknown by design).
+        assert tag["model"]["resolution"] == "unknown"
+        assert tag["run"]["duration_days"] == "1"   # the applied override
+
+        run_sh = (dir_canon / "run.sh").read_text()
+        assert "CONFIG_TEMPLATE='ocean/baroclinic_gyre'" in run_sh
+        # fetch_data check inside run.sh resolves the canonical name
+        # (load_template_requires delegates to the runners resolver):
+        import fetch_data
+        assert fetch_data.load_template_requires("ocean/baroclinic_gyre") == []
 
 
 class TestOrchestratorProvenance:
@@ -812,9 +964,11 @@ class TestReproduceVerify:
         import json
 
         from runners.run_experiment import apply_overrides, load_template
-        cfg = apply_overrides(load_template("3d_idealized/baroclinic_gyre"), cls.OVERRIDES)
+        # Canonical (graduated) name — the post-3B-2 flow; the alias-drift
+        # semantics for pre-graduation tags have their own planted test.
+        cfg = apply_overrides(load_template("ocean/baroclinic_gyre"), cls.OVERRIDES)
         return {
-            "experiment": {"template": "3d_idealized/baroclinic_gyre"},
+            "experiment": {"template": "ocean/baroclinic_gyre"},
             "reproducibility": {
                 "config_hash": f"sha256:{cls._expected_hash(cfg)}",
                 "overrides": json.dumps(cls.OVERRIDES),
@@ -839,7 +993,7 @@ class TestReproduceVerify:
         import reproduce
         from runners.run_experiment import load_template
         tag = self._good_tag()
-        tag["reproducibility"]["config_hash"] = f"sha256:{self._expected_hash(load_template('3d_idealized/baroclinic_gyre'))}"
+        tag["reproducibility"]["config_hash"] = f"sha256:{self._expected_hash(load_template('ocean/baroclinic_gyre'))}"
         problems = reproduce.verify_tag(tag)
         assert any("config_hash mismatch" in p for p in problems), problems
 
@@ -867,6 +1021,20 @@ class TestReproduceVerify:
         problems = reproduce.verify_tag(tag)
         assert problems and "not found" in problems[0], problems
 
+    def test_verify_pre_graduation_alias_drift_is_hash_mismatch(self):
+        # Planted: a PRE-graduation tag (template = the legacy runners
+        # name) audited against post-graduation HEAD. The alias still
+        # RESOLVES (translated config), so the honest failure is a
+        # config_hash mismatch — NOT "template not found". Pre-graduation
+        # runs reproduce via their recorded runner_tag checkout, where the
+        # runners-owned template still exists (documented in AGENTS.md).
+        import reproduce
+        tag = {"experiment": {"template": "3d_idealized/baroclinic_gyre"},
+               "reproducibility": {"config_hash": "sha256:0123456789abcdef"}}
+        problems = reproduce.verify_tag(tag)
+        assert any("config_hash mismatch" in p for p in problems), problems
+        assert not any("not found" in p for p in problems), problems
+
     def test_verify_cli_end_to_end(self, tmp_path):
         """The real CLI: a genuine generated tag verifies (exit 0); a
         tampered config_hash fails (exit 1). Mirrors init_experiment:
@@ -875,10 +1043,10 @@ class TestReproduceVerify:
         import subprocess
         import sys
         from runners.run_experiment import apply_overrides, generate_tag, load_template
-        cfg = apply_overrides(load_template("3d_idealized/baroclinic_gyre"),
-                             self.OVERRIDES)
+        cfg = apply_overrides(load_template("ocean/baroclinic_gyre"),
+                              self.OVERRIDES)
         tag_text = generate_tag(
-            cfg, "3d_idealized/baroclinic_gyre", overrides=self.OVERRIDES,
+            cfg, "ocean/baroclinic_gyre", overrides=self.OVERRIDES,
         )
         good = tmp_path / "good.tag"
         good.write_text(tag_text)
@@ -906,10 +1074,10 @@ class TestReproduceVerify:
         import subprocess
         import sys
         from runners.run_experiment import apply_overrides, generate_tag, load_template
-        cfg = apply_overrides(load_template("3d_idealized/baroclinic_gyre"),
-                             self.OVERRIDES)
+        cfg = apply_overrides(load_template("ocean/baroclinic_gyre"),
+                              self.OVERRIDES)
         tag_text = generate_tag(
-            cfg, "3d_idealized/baroclinic_gyre", overrides=self.OVERRIDES,
+            cfg, "ocean/baroclinic_gyre", overrides=self.OVERRIDES,
         )
         tag_file = tmp_path / "exp.tag"
         tag_file.write_text(tag_text)
@@ -1070,9 +1238,11 @@ class TestOceanCaseDispatch:
         # Template dt is forwarded as --dt which overrides the upstream
         # lane's stability-verified DEFAULT_DT = 300; anything larger is
         # the latent-blowup class found 2026-10-10 (baroclinic_gyre).
+        # baroclinic_gyre itself is GRADUATED (3B-2): its translated
+        # config carries no time section at all, so the upstream lane
+        # default applies by construction — asserted separately below.
         from runners.run_experiment import load_template
-        lanes = [("3d_idealized", "baroclinic_gyre"),
-                 ("3d_idealized", "acc_channel"),
+        lanes = [("3d_idealized", "acc_channel"),
                  ("3d_idealized", "geostrophic_adjustment"),
                  ("3d_idealized", "phillips_two_layer"),
                  ("global_ocean", "global_overturning"),
@@ -1086,6 +1256,16 @@ class TestOceanCaseDispatch:
             assert cfg["time"]["dt_seconds"] == 300, (
                 f"{tmpl}: dt_seconds {cfg['time']['dt_seconds']} != "
                 "lane DEFAULT_DT 300")
+
+    def test_graduated_matrix_lane_inherits_lane_dt(self):
+        # Graduated (3B-2): the translated config declares NO time section
+        # — the upstream lane's stability-verified DEFAULT_DT and duration
+        # apply by construction (the 2026-10-10 blowup class cannot recur
+        # via a stale template dt). duration/dt stay overridable.
+        from runners.run_experiment import load_template
+        for name in ("ocean/baroclinic_gyre", "3d_idealized/baroclinic_gyre"):
+            cfg = load_template(name)
+            assert "time" not in cfg, f"{name}: translated config must not declare time"
 
     def test_barotropic_matrix_lanes(self):
         # 2d barotropic templates ride the same matrix delegation as the
@@ -1227,7 +1407,9 @@ class TestOceanTestMatrix:
     def test_build_test_matrix_all_categories(self):
         from runners.run_ocean_test_matrix import build_test_matrix
         cases = build_test_matrix()
-        assert len(cases) >= 15
+        # 14 runners-owned ocean templates (baroclinic_gyre graduated to
+        # the upstream library, Phase 3B-2 — no longer in the fixed list).
+        assert len(cases) >= 14
 
     def test_build_test_matrix_grid_filter(self):
         from runners.run_ocean_test_matrix import build_test_matrix
@@ -1298,7 +1480,7 @@ class TestDataCatalog:
             "2d/barotropic_gyre",
             "2d/stommel_gyre_tracer",
             "2d/inertia_gravity_wave",
-            "3d_idealized/baroclinic_gyre",
+            "ocean/baroclinic_gyre",   # graduated (3B-2) — requires via adapter
             "3d_idealized/lock_exchange",
             "3d_idealized/overflow",
             "3d_idealized/eady_instability",
@@ -1311,12 +1493,13 @@ class TestDataCatalog:
         ]
         from runners.run_experiment import load_template
         for tmpl in idealized:
-            path = TEMPLATES_DIR / f"{tmpl}.yaml"
-            if path.exists():
-                config = load_template(tmpl)
-                assert config.get("requires") == [], (
-                    f"{tmpl} should require no external data, got: {config.get('requires')}"
-                )
+            try:
+                config = load_template(tmpl)  # resolves graduated names too
+            except FileNotFoundError:
+                continue
+            assert config.get("requires") == [], (
+                f"{tmpl} should require no external data, got: {config.get('requires')}"
+            )
 
     def test_realistic_templates_require_data(self):
         """Realistic experiments should require external data."""

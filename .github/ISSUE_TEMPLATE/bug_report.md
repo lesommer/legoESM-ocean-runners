@@ -16,7 +16,7 @@ assignees: ""
 
 ## Experiment details
 
-- **Template + mode**: <!-- e.g. 3d_idealized/baroclinic_gyre, mode 3d_ocean; list any `-o` overrides -->
+- **Template + mode**: <!-- e.g. ocean/baroclinic_gyre (graduated) or 3d_idealized/dino, mode 3d_ocean; list any `-o` overrides -->
 - **legoESM pin** (from `legoESM_version.txt`): <!-- ref + commit, e.g. main / 2ddb56f77e19 -->
 - **Machine / environment**: <!-- hostname, scheduler, GPU or CPU, Python and JAX versions -->
 

@@ -51,6 +51,8 @@ Three delegation lanes; per-template receipts live in the Template test status t
 
 All other `3d_ocean` cases: init + provenance only.
 
+**Graduated templates** (issue #8, Phase 3B-2): templates whose upstream counterpart in the pinned legoESM template library (`config/templates/ocean/<stem>.yaml`) is the single source of truth are RESOLVED from there — canonical name `ocean/<stem>`, translated to the runners dialect by `runners/run_experiment.py::_adapt_upstream_template` (recipe emitted from the pinned `EXPERIMENT_RECIPES`; no time/output; duration/dt/resolution/nlev forwardable as overrides). `baroclinic_gyre` graduated 2026-10-22 (pilot; legacy alias `3d_idealized/baroclinic_gyre` keeps old names and pre-graduation tags resolving); run-receipts for graduated templates live in the experiment ledger / upstream's own status docs, not in the table below. `scripts/validate_templates.py` gates the remaining runners-owned templates against their upstream counterparts (Phase 3B-1).
+
 ### barotropic_ocean (matrix lanes)
 
 Added 2026-10-10: the `_run_ocean` dispatch accepts `barotropic_ocean` mode for matrix-lane cases and routes them through `_run_matrix_case` like the 3D lanes — the upstream ocean test matrix executes them with the same 3D machinery. Other barotropic templates (`barotropic_gyre`, `stommel_gyre_tracer`, `inertia_gravity_wave`): init + provenance only.
@@ -105,7 +107,6 @@ vice versa.
 | `2d/` | `barotropic_wave` | run-tested | 2026-10-10, Mac CPU via matrix delegation: latlon 48x72, 0.2 d, upstream gates PASS — eta_cons 0.814, min_final_amp 0.171 m, energy_ratio 0.294 |
 | `2d/` | `stommel_gyre_tracer` | structural | — |
 | `2d/` | `inertia_gravity_wave` | structural | — (known upstream gate defect; excluded from onboarding) |
-| `3d_idealized/` | `baroclinic_gyre` | run-tested | 2026-10-10, Mac CPU via matrix delegation: latlon_regional 64x128, 1 d, upstream drift gates 2/2 PASS incl. `baroclinic_gyre_cos`; also bigfoot V100 OAR-native smoke (ledger `bigfoot_2026-10-10_oar-native-smoke`) |
 | `3d_idealized/` | `lock_exchange` | run-tested | 2026-10-10, Mac CPU via matrix delegation: latlon 64x64, 0.5 d, RPE 2.9e-9 PASS |
 | `3d_idealized/` | `overflow` | run-tested | 2026-10-10, Mac CPU via matrix delegation: latlon 64x64, 0.5 d, PE drift 2.2e-8 PASS |
 | `3d_idealized/` | `eady_instability` | run-tested | 2026-10-10, Mac CPU via matrix delegation: latlon_channel 24x72, 5 d, upstream gates PASS, T_drift 3.20e-14; template aligned same day to the upstream lane design (case `eady_uniform`→`eady_instability`, 64x128→24x72, dt 1800→300, duration 84→60 d) |

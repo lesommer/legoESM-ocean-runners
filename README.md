@@ -191,7 +191,7 @@ receipts and history live in
 
 - `1d/` — 5 templates: 5 run-tested
 - `2d/` — 5 templates: 2 run-tested, 3 structural
-- `3d_idealized/` — 10 templates: 9 run-tested, 1 structural
+- `3d_idealized/` — 9 templates: 8 run-tested, 1 structural
 - `coupled/` — 3 templates: 3 structural
 - `global_ocean/` — 9 templates: 2 run-tested, 3 smoke-tested, 4 structural
 
@@ -216,14 +216,17 @@ cd my_dino && bash run.sh
 
 ### Idealized (no data needed)
 
+`baroclinic_gyre` is a **graduated** template: it lives in the pinned legoESM template library (`config/templates/ocean/baroclinic_gyre.yaml`) and is resolved by its canonical name `ocean/baroclinic_gyre` (the pre-graduation name `3d_idealized/baroclinic_gyre` still resolves as a legacy alias).
+
 ```bash
 # 1. Check data availability (idealized experiments need no data)
-python scripts/fetch_data.py check 3d_idealized/baroclinic_gyre
+python scripts/fetch_data.py check ocean/baroclinic_gyre
 
-# 2. Initialize (--output-dir is required). Tip: for a first quick look,
-#    shorten the run with -o time.duration_days=1 — the template default
-#    is the full validated duration (baroclinic_gyre: 365 d).
-python scripts/init_experiment.py 3d_idealized/baroclinic_gyre \
+# 2. Initialize (--output-dir is required). The upstream lane's validated
+#    defaults apply (36x72, dt 300, 60 d); tip: for a first quick look,
+#    shorten with -o time.duration_days=1. The pre-graduation workhorse
+#    values come back as overrides:
+python scripts/init_experiment.py ocean/baroclinic_gyre \
     --name my_gyre --output-dir ./my_gyre \
     -o time.duration_days=1
 
@@ -251,11 +254,11 @@ cd orca1_phase0 && bash run.sh
 Templates are the starting point. Override any parameter with dot-notation `-o` flags:
 
 ```bash
-# Higher resolution and stronger lateral viscosity
-python scripts/init_experiment.py 3d_idealized/baroclinic_gyre \
+# Higher resolution and longer run (graduated template: overrides are the
+# only curated layer — the upstream lane owns dt/duration/resolution)
+python scripts/init_experiment.py ocean/baroclinic_gyre \
     --name gyre_hires --output-dir ./gyre_hires \
     -o grid.resolution=128x256 \
-    -o ocean.A_h=1e6 \
     -o time.duration_days=730
 
 # Change vertical mixing scheme

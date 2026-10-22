@@ -24,7 +24,6 @@ OCEAN_2D_TEMPLATES = [
 ]
 
 OCEAN_3D_IDEALIZED_TEMPLATES = [
-    "3d_idealized/baroclinic_gyre",
     "3d_idealized/lock_exchange",
     "3d_idealized/overflow",
     "3d_idealized/eady_instability",

@@ -44,6 +44,54 @@ _MATRIX_CASES = {
     "barotropic_double_gyre": {"latlon": "latlon_regional"},
 }
 
+# --- Graduated templates (issue #8, Phase 3B-2) --------------------------------
+#
+# Templates that have graduated to the upstream legoESM template library
+# (config/templates/ocean/<stem>.yaml — upstream's `setup:`-pointer
+# dialect) are resolved from the PINNED checkout and translated to the
+# runners dialect by _adapt_upstream_template. Canonical names are
+# `ocean/<stem>`; legacy aliases keep pre-graduation names (old
+# experiment.tags, ledger run.yaml files) resolving.
+
+# Pre-graduation runners name -> canonical upstream name.
+LEGACY_TEMPLATE_ALIASES = {
+    "3d_idealized/baroclinic_gyre": "ocean/baroclinic_gyre",
+}
+
+# Canonical upstream template -> the runners run mode its lane dispatches.
+# Mode is a real dispatch decision (never guessed): every upstream ocean
+# template at the pin is registered, and tests pin the registry against
+# the pinned checkout — an upstream addition must be consciously
+# registered, and a lookup of an unregistered name is an error.
+_UPSTREAM_TEMPLATE_MODES = {
+    # barotropic (2d-style) lanes
+    "ocean/barotropic_wave": "barotropic_ocean",
+    "ocean/inertia_gravity_wave": "barotropic_ocean",
+    "ocean/stommel_gyre_tracer": "barotropic_ocean",
+    "ocean/global_barotropic_wind": "barotropic_ocean",
+    # 3d lanes
+    "ocean/acc_channel": "3d_ocean",
+    "ocean/baroclinic_gyre": "3d_ocean",
+    "ocean/bench": "3d_ocean",
+    "ocean/eady_instability": "3d_ocean",
+    "ocean/eady_uniform": "3d_ocean",
+    "ocean/geostrophic_adjustment": "3d_ocean",
+    "ocean/global_overturning": "3d_ocean",
+    "ocean/held_larichev": "3d_ocean",
+    "ocean/lock_exchange": "3d_ocean",
+    "ocean/munk_gyre": "3d_ocean",
+    "ocean/overflow": "3d_ocean",
+    "ocean/phillips_two_layer": "3d_ocean",
+}
+
+# Upstream setup.grid value -> runners grid.type (the reverse of the
+# _MATRIX_CASES translation: the family, not the specific lane grid).
+_UPSTREAM_GRID_FAMILY = {
+    "latlon": "latlon",
+    "latlon_regional": "latlon",
+    "latlon_channel": "latlon",
+}
+
 
 def load_catalog() -> dict:
     """Load the data catalog YAML."""
@@ -159,6 +207,25 @@ def resolve_legoesm_path() -> Path:
         sys.exit(1)
 
 
+def _find_legoesm_dir() -> Path | None:
+    """resolve_legoesm_path's soft sibling: None instead of sys.exit.
+
+    Template resolution must raise a *template* error (FileNotFoundError)
+    when the pinned checkout is absent, not kill the process.
+    """
+    env_dir = os.environ.get("LEGOESM_DIR")
+    if env_dir:
+        return Path(env_dir)
+    sibling = Path(__file__).resolve().parent.parent.parent / "legoESM"
+    if sibling.is_dir():
+        return sibling
+    try:
+        import legoesm
+        return Path(legoesm.__file__).resolve().parent.parent
+    except ImportError:
+        return None
+
+
 def deep_merge(base: dict, override: dict) -> dict:
     """Recursively merge *override* into *base*, returning a new dict."""
     result = base.copy()
@@ -170,13 +237,135 @@ def deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
-def load_template(template_name: str) -> dict:
-    """Load a template YAML by name (e.g. '3d_idealized/baroclinic_gyre')."""
-    path = TEMPLATES_DIR / f"{template_name}.yaml"
+def _load_pinned_experiment_recipes(legoesm_dir: Path) -> dict:
+    """EXPERIMENT_RECIPES from the pinned checkout, loaded BY FILE PATH.
+
+    recipe_map.py is import-standalone (no intra-package imports), so the
+    graduated-template adapter does NOT need legoesm installed as a
+    package — the checkout (pin + patches) is the source. This keeps
+    alias resolution working under the system python (the repo's
+    two-python verification protocol) and in the CI Tier-2 layout.
+    """
+    import importlib.util
+    path = (Path(legoesm_dir) / "packages" / "ocean" / "legoesm" / "ocean"
+            / "experiments" / "recipe_map.py")
     if not path.exists():
-        raise FileNotFoundError(f"Template not found: {path}")
-    with open(path) as f:
-        return yaml.safe_load(f)
+        raise FileNotFoundError(
+            f"pinned legoESM recipe_map not found at {path} — graduated "
+            "templates need the pinned checkout (set LEGOESM_DIR)")
+    spec = importlib.util.spec_from_file_location(
+        "_runners_pinned_recipe_map", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return dict(module.EXPERIMENT_RECIPES)
+
+
+def _adapt_upstream_template(raw: dict, canonical: str, mode: str,
+                             legoesm_dir: Path) -> dict:
+    """Translate an upstream `setup:`-pointer template to the runners dialect.
+
+    The upstream case owns the configuration — the run lane assembles
+    the recipe and applies its own validated dt/duration/resolution
+    defaults; only duration/dt/resolution/nlev remain overridable (the
+    matrix lane forwards them when present). The adapter emits exactly
+    what the runners pipeline reads:
+
+      experiment.name    <- model.name       experiment.mode <- registry
+      experiment.description <- upstream     requires <- experiment.data
+      ocean.case         <- setup.name       grid.type <- grid-family map
+      ocean.recipe        <- pinned EXPERIMENT_RECIPES[case] (never
+                            invented; omitted only if upstream has no tag)
+
+    Upstream fields with different ownership semantics are DROPPED:
+    ``output.path`` (the runners lanes own the output layout) and the
+    upstream ``experiment:`` metadata block apart from the description.
+    No ``time`` section is emitted — the upstream lane defaults apply.
+    """
+    experiment = raw.get("experiment") or {}
+    model = raw.get("model") or {}
+    setup = raw.get("setup") or {}
+
+    case = setup.get("name")
+    if not case:
+        raise ValueError(
+            f"upstream template {canonical!r} has no setup.name — not a "
+            "setup-pointer template")
+    grid = setup.get("grid")
+    if grid not in _UPSTREAM_GRID_FAMILY:
+        raise ValueError(
+            f"upstream template {canonical!r} declares setup.grid={grid!r}, "
+            "which has no runners grid family (extend _UPSTREAM_GRID_FAMILY)")
+    description = " ".join(str(experiment.get("description") or "").split())
+    config = {
+        "experiment": {
+            "name": model.get("name", case),
+            "mode": mode,
+            "description": description,
+        },
+        "requires": list(experiment.get("data") or []),
+        "grid": {"type": _UPSTREAM_GRID_FAMILY[grid]},
+        "ocean": {"case": case},
+    }
+    recipes = _load_pinned_experiment_recipes(legoesm_dir)
+    if case in recipes:
+        # The pinned upstream case's verified recipe tag — the identity
+        # claim survives graduation (recipe names are fidelity claims;
+        # never invented, never re-spelled).
+        config["ocean"]["recipe"] = recipes[case]
+    return config
+
+
+def resolve_template(template_name: str) -> tuple[dict, dict]:
+    """Resolve a template name to (config, provenance).
+
+    Resolution order (issue #8, Phase 3B-2):
+      1. ``templates/<name>.yaml`` in this repo (runners-owned)
+      2. ``LEGACY_TEMPLATE_ALIASES`` -> the pinned upstream template
+         library, translated by ``_adapt_upstream_template``
+      3. direct lookup of ``<name>`` (canonical ``ocean/<stem>``) in the
+         pinned upstream template library
+
+    provenance records the canonical name and the source:
+    ``{"canonical": <name>, "source": "runners" | "upstream"}``.
+    """
+    path = TEMPLATES_DIR / f"{template_name}.yaml"
+    if path.exists():
+        with open(path) as f:
+            return yaml.safe_load(f), {
+                "canonical": template_name, "source": "runners"}
+
+    canonical = LEGACY_TEMPLATE_ALIASES.get(template_name, template_name)
+    if canonical != template_name or canonical in _UPSTREAM_TEMPLATE_MODES:
+        legoesm_dir = _find_legoesm_dir()
+        if legoesm_dir is None:
+            raise FileNotFoundError(
+                f"Template {template_name!r} is a graduated (upstream) "
+                "template but no legoESM checkout was found — set "
+                "LEGOESM_DIR or keep the sibling checkout")
+        upstream_path = (legoesm_dir / "config" / "templates"
+                         / f"{canonical}.yaml")
+        mode = _UPSTREAM_TEMPLATE_MODES.get(canonical)
+        if mode is None or not upstream_path.exists():
+            raise FileNotFoundError(
+                f"Template not found: {template_name} (looked for {path}, "
+                f"then upstream {upstream_path})")
+        with open(upstream_path) as f:
+            raw = yaml.safe_load(f)
+        config = _adapt_upstream_template(raw, canonical, mode, legoesm_dir)
+        return config, {"canonical": canonical, "source": "upstream"}
+
+    hint = ""
+    if template_name.startswith("ocean/"):
+        hint = (" — an upstream template with this stem exists in the "
+                "pinned legoESM but is not registered in "
+                "runners/run_experiment.py (_UPSTREAM_TEMPLATE_MODES)")
+    raise FileNotFoundError(f"Template not found: {path}{hint}")
+
+
+def load_template(template_name: str) -> dict:
+    """Load a template YAML by name — runners-owned, legacy alias, or
+    canonical upstream library name (see resolve_template)."""
+    return resolve_template(template_name)[0]
 
 
 def apply_overrides(config: dict, overrides: list[str]) -> dict:
@@ -313,7 +502,7 @@ def init_experiment(
     if output_dir is None:
         raise ValueError("--output-dir is required (e.g. runs/<experiment-name>/)")
 
-    config = load_template(template_name)
+    config, provenance = resolve_template(template_name)
 
     if overrides:
         config = apply_overrides(config, overrides)
@@ -339,12 +528,19 @@ def init_experiment(
     with open(config_path, "w") as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=False)
 
-    tag = generate_tag(config, template_name, machine, overrides=overrides)
+    # The tag and run script record the CANONICAL template name (a
+    # legacy alias resolves to its graduated identity) and, for graduated
+    # templates, where the config was translated from.
+    canonical = provenance["canonical"]
+    template_source = (None if provenance["source"] == "runners"
+                       else provenance["source"])
+    tag = generate_tag(config, canonical, machine, overrides=overrides,
+                       template_source=template_source)
     tag_path = exp_dir / "experiment.tag"
     with open(tag_path, "w") as f:
         f.write(tag)
 
-    run_script = _generate_run_script(config, exp_dir, machine, template_name)
+    run_script = _generate_run_script(config, exp_dir, machine, canonical)
     run_path = exp_dir / "run.sh"
     with open(run_path, "w") as f:
         f.write(run_script)
@@ -361,6 +557,7 @@ def generate_tag(
     template_name: str,
     machine: str | None = None,
     overrides: list[str] | None = None,
+    template_source: str | None = None,
 ) -> str:
     """Generate an experiment.tag string (INI format) for reproducibility.
 
@@ -372,6 +569,10 @@ def generate_tag(
     them; passing an un-overridden config with ``overrides`` produces a tag
     whose config_hash contradicts its own recorded overrides, and
     ``reproduce.py --verify`` will (correctly) reject it.
+
+    ``template_source`` records graduated-template provenance
+    (``upstream`` = translated from the pinned upstream template library);
+    absent = runners-owned template.
     """
     version_info = load_version_info()
     config_hash = hashlib.sha256(
@@ -386,6 +587,13 @@ def generate_tag(
         "[experiment]",
         f"name = {config.get('experiment', {}).get('name', 'unknown')}",
         f"template = {template_name}",
+    ]
+    if template_source:
+        # Graduated template: the config was translated from the pinned
+        # upstream template library (AGENTS.md "Tag Files"). Absence =
+        # runners-owned template.
+        lines.append(f"template_source = {template_source}")
+    lines += [
         f"mode = {config.get('experiment', {}).get('mode', 'unknown')}",
         f"created = {now}",
         "",
@@ -1392,7 +1600,7 @@ def main():
     run_p.add_argument("config", type=Path, help="Path to config.yaml")
 
     init_p = subparsers.add_parser("init", help="Initialize an experiment from a template")
-    init_p.add_argument("template", help="Template name (e.g. 3d_idealized/baroclinic_gyre)")
+    init_p.add_argument("template", help="Template name (e.g. ocean/baroclinic_gyre)")
     init_p.add_argument("--name", help="Experiment name (default: from template)")
     init_p.add_argument("-o", "--override", action="append", default=[], help="Override (key=value)")
     init_p.add_argument("--machine", help="Machine config name")

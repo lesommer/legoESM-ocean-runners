@@ -120,6 +120,39 @@ time:
   duration_days: <int>    # or duration_hours for short tests
 ```
 
+### Graduated templates (upstream library)
+
+Templates whose upstream counterpart in the pinned legoESM template
+library (`config/templates/ocean/<stem>.yaml` — upstream's `setup:`
+pointer dialect) is the single source of truth are **graduated**: no YAML
+in `templates/`, resolved by `runners/run_experiment.py::resolve_template`
+with canonical names `ocean/<stem>`. A legacy alias map
+(`LEGACY_TEMPLATE_ALIASES`) keeps pre-graduation names (old
+`experiment.tag`s, ledger `run.yaml`s) resolving to the same experiment.
+
+- Resolution order: (1) `templates/<name>.yaml` (runners-owned — always
+  wins), (2) legacy alias → pinned upstream library, (3) direct
+  `ocean/<stem>` lookup in the pinned upstream library.
+- `_adapt_upstream_template` translates the upstream dialect to the
+  runners dialect: `experiment.name ← model.name`, `experiment.mode ←`
+  the mode registry (`_UPSTREAM_TEMPLATE_MODES` — every upstream ocean
+  template at the pin is registered; an unregistered lookup is an error,
+  never a guessed default), `ocean.case ← setup.name`, `grid.type ←` the
+  grid-family map, `requires ← experiment.data`, and **`ocean.recipe ←`
+  the pinned `EXPERIMENT_RECIPES[case]`** (file-loaded from the checkout
+  — the identity claim survives graduation; Phase-1 recipe validation
+  holds for translated configs).
+- The upstream case owns the configuration: the translated config
+  carries **no** `time`, `output`, resolution/nlev or scheme fields — the
+  run lane's validated defaults apply, and `duration_days` / `dt_seconds`
+  / `grid.resolution` / `nlev` remain overridable (the only curated
+  layer). `fetch_data.py` resolves graduated names the same way (the
+  generated `run.sh` depends on it).
+- Remaining runners-owned templates with upstream counterparts are gated
+  for structural drift by `scripts/validate_templates.py`
+  (`UPSTREAM_COUNTERPARTS`, Phase 3B-1); graduation removes the entry
+  and the status row (upstream's own status docs own it from then on).
+
 ### Recipes (scheme identity)
 
 In legoESM lingo, a **recipe** is the named *scheme identity* of an ocean
@@ -209,7 +242,7 @@ requires_patches:
 ### Tag Files
 
 Every initialized experiment produces an `experiment.tag` INI file with:
-- `[experiment]` — name, template, mode, creation timestamp
+- `[experiment]` — name, template (the CANONICAL name — a legacy alias is resolved to its graduated identity), template_source (`upstream` for graduated templates, i.e. translated from the pinned upstream template library; absent = runners-owned), mode, creation timestamp
 - `[legoESM]` — pinned ref, commit hash, patches applied (with per-patch content digests, `patch_sha256_<patch-stem> = sha256:<16hex>`), requires_patches
 - `[model]` — configuration, grid type, resolution, vertical levels, and the declared recipe (`recipe = <name>`, written when `ocean.recipe` is set)
 - `[run]` — duration, timestep
@@ -374,11 +407,15 @@ canonical location).
 
 ### "I want to run baroclinic_gyre on my laptop"
 ```bash
-# 1. Check data availability (idealized = no data needed)
-python scripts/fetch_data.py check 3d_idealized/baroclinic_gyre
+# baroclinic_gyre is a graduated template (canonical name ocean/<stem>;
+# the pre-graduation name 3d_idealized/baroclinic_gyre still resolves)
 
-# 2. Initialize the experiment (--output-dir is required)
-python scripts/init_experiment.py 3d_idealized/baroclinic_gyre --name my_gyre --output-dir /path/to/experiment
+# 1. Check data availability (idealized = no data needed)
+python scripts/fetch_data.py check ocean/baroclinic_gyre
+
+# 2. Initialize the experiment (--output-dir is required; upstream lane
+#    defaults apply — overrides are the curated layer)
+python scripts/init_experiment.py ocean/baroclinic_gyre --name my_gyre --output-dir /path/to/experiment
 
 # 3. Run it
 cd /path/to/experiment && bash run.sh
@@ -439,6 +476,11 @@ python scripts/reproduce.py path/to/experiment.tag --verify
 #   - recomputes config_hash from template + the recorded overrides
 #   - checks every recorded patch content digest (sha256) against patches/
 # Exits 1 on drift — run it after checking out the tag, before rerunning.
+# NB pre-graduation tags (e.g. template = 3d_idealized/baroclinic_gyre)
+# verified against post-graduation HEAD fail HONESTLY with a config_hash
+# mismatch (the legacy alias resolves to the translated upstream config):
+# pre-graduation runs are reproduced from their recorded runner_tag
+# checkout, where the runners-owned template still exists.
 
 # Full reproduction with rerun:
 python scripts/reproduce.py path/to/experiment.tag --run
@@ -460,9 +502,10 @@ cd ../legoESM && git checkout c78680b839de
 # 4. Apply any patches listed in the tag
 cd ../legoESM-ocean-runners && bash scripts/apply_patches.sh
 
-# 5. Fetch data and run (--output-dir is required)
-python scripts/fetch_data.py check 3d_idealized/baroclinic_gyre
-python scripts/init_experiment.py 3d_idealized/baroclinic_gyre --name reproduced_run --output-dir /path/to/experiment
+# 5. Fetch data and run (--output-dir is required; graduated templates
+#    use their canonical ocean/<stem> name)
+python scripts/fetch_data.py check ocean/baroclinic_gyre
+python scripts/init_experiment.py ocean/baroclinic_gyre --name reproduced_run --output-dir /path/to/experiment
 cd /path/to/experiment && bash run.sh
 ```
 

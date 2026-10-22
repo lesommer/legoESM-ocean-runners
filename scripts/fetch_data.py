@@ -25,6 +25,12 @@ import yaml
 ROOT_DIR = Path(__file__).resolve().parent.parent
 CATALOG_PATH = ROOT_DIR / "data_catalog.yaml"
 TEMPLATES_DIR = ROOT_DIR / "templates"
+# fetch_data needs the runners package for template resolution (graduated
+# templates resolve from the pinned upstream library via
+# runners.run_experiment.load_template); it lives in the repo root, this
+# script in scripts/ (same insert as scripts/reproduce.py).
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 DEFAULT_DATA_ROOT = ROOT_DIR / "data"
 
@@ -50,12 +56,15 @@ def find_data_root() -> Path:
 
 
 def load_template_requires(template_name: str) -> list[str]:
-    """Load the requires list from a template YAML."""
-    path = TEMPLATES_DIR / f"{template_name}.yaml"
-    if not path.exists():
-        raise FileNotFoundError(f"Template not found: {path}")
-    with open(path) as f:
-        config = yaml.safe_load(f)
+    """Load the requires list for a template.
+
+    Delegates to the runners' template resolution so runners-owned,
+    legacy-alias, and canonical graduated (upstream) template names all
+    resolve identically to init — the generated run.sh runs
+    ``fetch_data.py check "$CONFIG_TEMPLATE"`` with the canonical name.
+    """
+    from runners.run_experiment import load_template
+    config = load_template(template_name)
     return config.get("requires", [])
 
 

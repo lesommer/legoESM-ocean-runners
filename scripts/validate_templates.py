@@ -79,7 +79,6 @@ UPSTREAM_COUNTERPARTS = {
     "2d/inertia_gravity_wave": "ocean/inertia_gravity_wave",
     "2d/stommel_gyre_tracer": "ocean/stommel_gyre_tracer",
     "3d_idealized/acc_channel": "ocean/acc_channel",
-    "3d_idealized/baroclinic_gyre": "ocean/baroclinic_gyre",
     "3d_idealized/eady_instability": "ocean/eady_instability",
     "3d_idealized/geostrophic_adjustment": "ocean/geostrophic_adjustment",
     "3d_idealized/lock_exchange": "ocean/lock_exchange",
