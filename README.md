@@ -354,14 +354,14 @@ format, machine-config template, and the bin/ helpers.
 
 ## License
 
-This repository is MIT-licensed (see [LICENSE](LICENSE)), **except** the
-files under `patches/`: they are modifications to
+This repository is MIT-licensed (see [LICENSE](LICENSE)). The files under
+`patches/` are modifications to
 [legoESM](https://github.com/climate-federation/legoESM), which is licensed
-under **PolyForm Noncommercial 1.0.0**. As derivatives of legoESM, the
-patches follow legoESM's terms — if you apply them to a legoESM checkout
-(or run an experiment whose `experiment.tag` lists patches), that combined
-work is subject to the PolyForm Noncommercial license. The rest of this
-repo (templates, runners, scripts, docs) is MIT.
+under the **MIT License** (relicensed from PolyForm Noncommercial 1.0.0 in
+October 2026). As derivatives of legoESM, the patches follow legoESM's
+terms — if you apply them to a legoESM checkout (or run an experiment whose
+`experiment.tag` lists patches), that combined work is subject to the MIT
+license. The rest of this repo (templates, runners, scripts, docs) is MIT.
 
 External data files referenced by `data_catalog.yaml` keep their own
 upstream licenses and citations (recorded per-entry in the catalog).

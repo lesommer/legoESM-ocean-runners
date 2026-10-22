@@ -22,15 +22,15 @@ SOFTWARE.
 
 ---
 
-Exception — patches/
+Note — patches/
 
 The files under patches/ are modifications to legoESM
 (https://github.com/climate-federation/legoESM), which is licensed under the
-PolyForm Noncommercial License 1.0.0. As derivatives of legoESM, the patches
-follow the legoESM license terms (noncommercial use only), NOT the MIT
-license above. Applying a patch to legoESM, or running a legoESM checkout with
-patches applied, subjects that work to the PolyForm Noncommercial 1.0.0
-license of legoESM.
+MIT License (relicensed from PolyForm Noncommercial 1.0.0 in October 2026).
+As derivatives of legoESM, the patches follow the legoESM license terms,
+which are the MIT terms above. Applying a patch to legoESM, or running a
+legoESM checkout with patches applied, subjects that work to the MIT license
+of legoESM.
 
 Everything else in this repository (templates, runners, scripts,
 documentation) is MIT-licensed as stated above.
