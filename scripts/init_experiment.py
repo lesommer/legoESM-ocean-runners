@@ -5,9 +5,8 @@ Usage:
     python scripts/init_experiment.py <template_name> --output-dir <dir> [-o KEY=VALUE...]
 
 Example:
-    python scripts/init_experiment.py 3d_idealized/baroclinic_gyre \\
+    python scripts/init_experiment.py ocean/baroclinic_gyre \\
         --output-dir runs/my_gyre_run \\
-        -o ocean.A_h=1e6 \\
         -o time.duration_days=730
 """
 
@@ -33,7 +32,19 @@ def main():
     parser.add_argument("--output-dir", type=Path, required=True, help="Write files to this directory (required)")
 
     args = parser.parse_args()
-    exp_dir = init_experiment(args.template, args.name, args.override, args.machine, args.output_dir)
+    try:
+        exp_dir = init_experiment(args.template, args.name, args.override,
+                                  args.machine, args.output_dir)
+    except FileNotFoundError as e:
+        # A typo'd template name is a user error, not a crash: no traceback.
+        print(f"ERROR: {e}", file=sys.stderr)
+        print("Browse templates with: ls templates/*/  (graduated templates", file=sys.stderr)
+        print("resolve by their upstream name, e.g. ocean/baroclinic_gyre)", file=sys.stderr)
+        sys.exit(1)
+    except KeyError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        print("(a data-catalog ID referenced by the template is missing)", file=sys.stderr)
+        sys.exit(1)
     print(f"Experiment initialized: {exp_dir}")
     print()
     print("Files created:")

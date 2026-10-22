@@ -1208,7 +1208,7 @@ class TestRunScriptGeneration:
     def test_oar_directives(self, tmp_path):
         machine = self._machine_file(tmp_path, {
             "scheduler": "oar",
-            "oar_project": "pr-data-ocean",
+            "oar_project": "pr-ocean-test",
             "oar_resources": "/nodes=1/gpu=1",
             "oar_properties": "gpumodel = 'V100'",
             "scheduler_walltime": "02:00:00",
@@ -1216,7 +1216,7 @@ class TestRunScriptGeneration:
         lines = self._generate(machine).splitlines()
         assert lines[0] == "#!/usr/bin/env bash"
         assert "#OAR -n smoke" in lines
-        assert "#OAR --project pr-data-ocean" in lines
+        assert "#OAR --project pr-ocean-test" in lines
         assert "#OAR -l /nodes=1/gpu=1,walltime=02:00:00" in lines
         assert "#OAR -p gpumodel = 'V100'" in lines
         assert not any(l.startswith("#SBATCH") for l in lines)
@@ -1225,7 +1225,7 @@ class TestRunScriptGeneration:
     def test_oar_defaults_and_types(self, tmp_path):
         machine = self._machine_file(tmp_path, {
             "scheduler": "oar",
-            "oar_project": "pr-data-ocean",
+            "oar_project": "pr-ocean-test",
             "oar_types": ["devel"],
             "scheduler_walltime": "00:30:00",
         })
@@ -1237,7 +1237,7 @@ class TestRunScriptGeneration:
     def test_oar_walltime_in_resources_not_duplicated(self, tmp_path):
         machine = self._machine_file(tmp_path, {
             "scheduler": "oar",
-            "oar_project": "pr-data-ocean",
+            "oar_project": "pr-ocean-test",
             "oar_resources": "/nodes=1,walltime=04:00:00",
             "scheduler_walltime": "02:00:00",
         })

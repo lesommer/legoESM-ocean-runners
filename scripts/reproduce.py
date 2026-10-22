@@ -284,7 +284,11 @@ def main():
         sys.exit(1)
 
     # Parse the tag file
-    tag = parse_tag(args.tag_file)
+    try:
+        tag = parse_tag(args.tag_file)
+    except configparser.Error as e:
+        print(f"ERROR: {args.tag_file} is not a valid experiment.tag (INI format): {e}", file=sys.stderr)
+        sys.exit(1)
     print(f"Reproducing experiment from: {args.tag_file}")
 
     experiment = tag.get("experiment", {})
