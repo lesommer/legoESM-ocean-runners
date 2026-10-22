@@ -7,6 +7,9 @@ Checks that every template YAML:
 3. Maps to a valid legoESM configuration
 4. Declares a recipe identity consistent with the pinned legoESM
    (ocean.recipe; see validate_recipe below)
+5. Agrees structurally with its upstream counterpart template, where one
+   exists in the pinned legoESM template library
+   (config/templates/ocean/<name>.yaml; see validate_consistency below)
 
 Usage:
     python scripts/validate_templates.py
@@ -24,6 +27,12 @@ import yaml
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 VERSION_FILE = Path(__file__).resolve().parent.parent / "legoESM_version.txt"
+ROOT_DIR = Path(__file__).resolve().parent.parent
+# The consistency gate needs _MATRIX_CASES from the runners package; it
+# lives in the repo root, this script in scripts/ (same insert as
+# scripts/reproduce.py).
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 REQUIRED_KEYS = {
     "experiment": ["name", "mode", "description"],
@@ -55,6 +64,41 @@ VALID_GRID_TYPES = {
 # SSS restoring, TKE, ...) reach the lane as physics/recipe-field
 # overrides; the dycore identity is fixed.
 TRIPOLE_OMIP_LANE_RECIPE = "omip_nemo_match_tripole_v1"
+
+# Runners-owned templates that have a counterpart in the pinned legoESM
+# template library (config/templates/ocean/<stem>.yaml — upstream's own
+# `setup:`-pointer dialect for the same matrix cases). The consistency gate
+# (issue #8, Phase 3B-1) checks each pair for structural drift at
+# validation time, so an upstream rename/re-gridding surfaces at pin-bump
+# time instead of run time. Graduated templates (removed here, resolved
+# from the upstream library by runners/run_experiment.load_template) drop
+# out of this map — drift becomes impossible once the upstream file is the
+# single source of truth.
+UPSTREAM_COUNTERPARTS = {
+    "2d/barotropic_wave": "ocean/barotropic_wave",
+    "2d/inertia_gravity_wave": "ocean/inertia_gravity_wave",
+    "2d/stommel_gyre_tracer": "ocean/stommel_gyre_tracer",
+    "3d_idealized/acc_channel": "ocean/acc_channel",
+    "3d_idealized/baroclinic_gyre": "ocean/baroclinic_gyre",
+    "3d_idealized/eady_instability": "ocean/eady_instability",
+    "3d_idealized/geostrophic_adjustment": "ocean/geostrophic_adjustment",
+    "3d_idealized/lock_exchange": "ocean/lock_exchange",
+    "3d_idealized/overflow": "ocean/overflow",
+    "3d_idealized/phillips_two_layer": "ocean/phillips_two_layer",
+    "global_ocean/bench": "ocean/bench",
+    "global_ocean/global_overturning": "ocean/global_overturning",
+}
+
+# Grids the runners lane accepts for counterpart cases that are NOT in the
+# matrix dispatch table (_MATRIX_CASES in runners/run_experiment.py):
+#   bench — _run_bench dispatches the latlon and synthetic-tripole lanes
+#   inertia_gravity_wave / stommel_gyre_tracer — stub lanes; their
+#     templates declare grid.type latlon
+COUNTERPART_FALLBACK_GRIDS = {
+    "bench": {"latlon", "tripole"},
+    "inertia_gravity_wave": {"latlon"},
+    "stommel_gyre_tracer": {"latlon"},
+}
 
 
 def validate_recipe(config, experiment_recipes=None, dino_recipes=None,
@@ -155,9 +199,139 @@ def validate_recipe(config, experiment_recipes=None, dino_recipes=None,
     return errors
 
 
+def validate_consistency(config, counterpart_rel, legoesm_path,
+                         matrix_cases=None, fallback_grids=None,
+                         info=None):
+    """Check a runners template against its pinned-upstream counterpart.
+
+    Structural drift checks only (issue #8, Phase 3B-1 — maturity is
+    reported, never blocking):
+
+    a. the counterpart file exists in the pinned legoESM template library
+       (a rename/removal upstream must fail validation, not the run lane);
+    b. counterpart ``setup.name`` == the template's ``ocean.case`` — the
+       upstream case owns the identity;
+    c. counterpart ``setup.grid`` is in the grid family the runners lane
+       dispatches for that case (values of ``_MATRIX_CASES[case]``, or the
+       ``fallback_grids`` table for cases outside the matrix dispatch).
+
+    ``info``: optional dict, filled with counterpart metadata
+    (``maturity``) for the caller's informational reporting.
+    """
+    errors = []
+    counterpart_path = (Path(legoesm_path) / "config" / "templates"
+                        / f"{counterpart_rel}.yaml")
+    if not counterpart_path.exists():
+        errors.append(
+            f"upstream counterpart missing: {counterpart_rel}.yaml not "
+            "found in the pinned legoESM template library (renamed or "
+            "removed upstream — update the pin, or the "
+            "UPSTREAM_COUNTERPARTS map)")
+        return errors
+    with open(counterpart_path) as f:
+        counterpart = yaml.safe_load(f)
+    if not isinstance(counterpart, dict):
+        return [f"upstream counterpart {counterpart_rel} is not a YAML "
+                "mapping"]
+
+    if info is not None:
+        experiment = counterpart.get("experiment") or {}
+        info["maturity"] = experiment.get("maturity", "unknown")
+
+    setup = counterpart.get("setup") or {}
+    case = (config.get("ocean") or {}).get("case")
+    name = setup.get("name")
+    if name != case:
+        errors.append(
+            f"setup drift: upstream counterpart declares "
+            f"setup.name={name!r} but the template's ocean.case is "
+            f"{case!r} (the upstream case owns the identity — the "
+            "template must follow)")
+
+    allowed = set((matrix_cases or {}).get(case, {}).values())
+    allowed |= set((fallback_grids or {}).get(case, ()))
+    if not allowed:
+        errors.append(
+            f"counterpart case {case!r} has no dispatchable grid family "
+            "in this repo (extend _MATRIX_CASES or "
+            "COUNTERPART_FALLBACK_GRIDS in scripts/validate_templates.py)")
+    else:
+        grid = setup.get("grid")
+        if grid not in allowed:
+            errors.append(
+                f"grid drift: upstream counterpart declares "
+                f"setup.grid={grid!r}, outside the grid family the "
+                f"runners lane dispatches for {case!r} ({sorted(allowed)}) "
+                "— the case would not run through this repo's lane")
+    return errors
+
+
+def check_counterpart_coverage(template_files, legoesm_path):
+    """Repo-level counterpart curation checks (both directions must fail).
+
+    * stale entry: a UPSTREAM_COUNTERPARTS key without a template file
+      (e.g. left behind after graduation);
+    * undeclared overlap (auto-discovery): a runners template whose stem
+      has an upstream counterpart file in the pinned legoESM but is not
+      declared in UPSTREAM_COUNTERPARTS — a new upstream overlap must be
+      consciously curated (check it for drift, or graduate it), never
+      silently skipped.
+
+    Returns (errors, maturities): maturities maps each declared
+    counterpart to its upstream ``experiment.maturity`` (informational).
+    """
+    errors = []
+    rels = {}
+    for path in template_files:
+        rels[str(path.relative_to(TEMPLATES_DIR).with_suffix(""))] = path
+
+    stale = sorted(k for k in UPSTREAM_COUNTERPARTS if k not in rels)
+    for rel in stale:
+        errors.append(
+            f"UPSTREAM_COUNTERPARTS entry {rel!r} has no template file "
+            "(stale entry — remove it; graduated templates drop out of "
+            "the map)")
+
+    maturities = {}
+    upstream_dir = Path(legoesm_path) / "config" / "templates" / "ocean"
+    upstream_stems = (
+        {p.stem for p in upstream_dir.glob("*.yaml")} if upstream_dir.is_dir()
+        else set()
+    )
+    for rel, counterpart_rel in sorted(UPSTREAM_COUNTERPARTS.items()):
+        counterpart_path = (Path(legoesm_path) / "config" / "templates"
+                            / f"{counterpart_rel}.yaml")
+        if counterpart_path.exists():
+            with open(counterpart_path) as f:
+                counterpart = yaml.safe_load(f) or {}
+            maturity = (counterpart.get("experiment") or {}).get(
+                "maturity", "unknown")
+            maturities[counterpart_rel] = maturity
+
+    undeclared = sorted(
+        rel for rel, path in rels.items()
+        if path.stem in upstream_stems and rel not in UPSTREAM_COUNTERPARTS
+    )
+    for rel in undeclared:
+        errors.append(
+            f"template {rel!r} has an upstream counterpart "
+            f"(ocean/{Path(rel).stem}.yaml) but is not declared in "
+            "UPSTREAM_COUNTERPARTS — either declare the overlap (drift "
+            "gate) or graduate the template (runners/run_experiment.py "
+            "alias map)")
+    return errors, maturities
+
+
 def validate_template(path: Path, verbose: bool = False,
-                      recipe_sources: dict | None = None) -> list[str]:
-    """Validate a single template YAML. Returns list of error strings."""
+                      recipe_sources: dict | None = None,
+                      consistency_sources: dict | None = None) -> list[str]:
+    """Validate a single template YAML. Returns list of error strings.
+
+    ``consistency_sources`` (issue #8, Phase 3B-1): when given, templates
+    declared in UPSTREAM_COUNTERPARTS are also checked against their
+    pinned-upstream counterpart (see validate_consistency). None =
+    unavailable/degraded (e.g. --skip-imports, out-of-repo paths).
+    """
     errors = []
 
     try:
@@ -212,6 +386,26 @@ def validate_template(path: Path, verbose: bool = False,
 
     # Validate ocean.recipe against the pinned legoESM catalogs
     errors.extend(validate_recipe(config, **(recipe_sources or {})))
+
+    # Upstream-counterpart consistency gate (Phase 3B-1): structural
+    # agreement with the pinned legoESM template library, where declared.
+    if consistency_sources is not None:
+        try:
+            rel = str(path.relative_to(TEMPLATES_DIR).with_suffix(""))
+        except ValueError:
+            rel = None  # out-of-repo path (unit-test fixture): no gate
+        counterpart_rel = UPSTREAM_COUNTERPARTS.get(rel) if rel else None
+        if counterpart_rel:
+            info: dict = {}
+            errors.extend(validate_consistency(
+                config, counterpart_rel,
+                consistency_sources["legoesm_path"],
+                consistency_sources.get("matrix_cases"),
+                consistency_sources.get("fallback_grids"),
+                info=info))
+            if verbose:
+                print(f"    counterpart={counterpart_rel} "
+                      f"(maturity: {info.get('maturity', 'unknown')})")
 
     if verbose:
         name = config.get("experiment", {}).get("name", "?")
@@ -308,13 +502,30 @@ def main():
                 "scripts/experiment/install_federation.py --all); use "
                 "--skip-imports for structural-only checks")
 
+    # Consistency-gate sources (Phase 3B-1): the matrix dispatch table is
+    # the runners' grid-family source of truth; the pinned legoESM
+    # checkout supplies the counterpart templates. Like recipe_sources,
+    # None = degraded (--skip-imports).
+    consistency_sources = None
+    if not args.skip_imports:
+        from runners.run_experiment import _MATRIX_CASES
+        consistency_sources = {
+            "legoesm_path": legoesm_path,
+            "matrix_cases": _MATRIX_CASES,
+            "fallback_grids": COUNTERPART_FALLBACK_GRIDS,
+        }
+    else:
+        print("Consistency gate: skipped (--skip-imports; upstream "
+              "counterparts not checked)")
+
     # Validate templates
     template_files = sorted(TEMPLATES_DIR.rglob("*.yaml"))
     print(f"\nValidating {len(template_files)} templates:\n")
 
     passed, failed = 0, 0
     for path in template_files:
-        errors = validate_template(path, args.verbose, recipe_sources)
+        errors = validate_template(path, args.verbose, recipe_sources,
+                                   consistency_sources)
         rel = path.relative_to(TEMPLATES_DIR)
         if errors:
             failed += 1
@@ -323,6 +534,23 @@ def main():
                 print(f"    - {e}")
         else:
             passed += 1
+
+    # Counterpart coverage (repo-level gate directions): stale entries and
+    # undeclared upstream overlaps. Maturities are informational only.
+    if consistency_sources is not None:
+        coverage_errors, maturities = check_counterpart_coverage(
+            template_files, legoesm_path)
+        if coverage_errors:
+            print("\nCounterpart coverage:")
+            for e in coverage_errors:
+                print(f"  - {e}")
+            failed += 1
+        maturity_counts: dict[str, int] = {}
+        for m in maturities.values():
+            maturity_counts[m] = maturity_counts.get(m, 0) + 1
+        summary = ", ".join(f"{n} {m}" for m, n in sorted(maturity_counts.items()))
+        print(f"\nConsistency gate: {len(UPSTREAM_COUNTERPARTS)} declared "
+              f"counterparts checked (upstream maturities — {summary})")
 
     # Validate legoESM imports
     if not args.skip_imports:

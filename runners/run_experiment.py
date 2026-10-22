@@ -23,6 +23,27 @@ PATCHES_DIR = Path(__file__).resolve().parent.parent / "patches"
 VERSION_FILE = Path(__file__).resolve().parent.parent / "legoESM_version.txt"
 CATALOG_FILE = Path(__file__).resolve().parent.parent / "data_catalog.yaml"
 
+# Matrix-lane dispatch: ocean.case -> (grid.type -> upstream matrix --grid
+# value). Module-level because it is the single source of truth for two
+# consumers: _run_ocean (run dispatch) and scripts/validate_templates.py's
+# consistency gate (grid-family agreement with the upstream counterpart).
+_MATRIX_CASES = {
+    "baroclinic_gyre": {"latlon": "latlon_regional",
+                        "mpas": "mpas_regional"},
+    "lock_exchange": {"latlon": "latlon"},
+    "overflow": {"latlon": "latlon"},
+    "acc_channel": {"latlon": "latlon_channel",
+                    "mpas": "mpas_channel"},
+    "geostrophic_adjustment": {"latlon": "latlon"},
+    "phillips_two_layer": {"latlon": "latlon"},
+    "global_overturning": {"latlon": "latlon"},
+    "neverworld2_lite": {"latlon": "latlon"},
+    "eady_instability": {"latlon": "latlon_channel"},
+    "rest_state_stratified_no_land": {"latlon": "latlon"},
+    "barotropic_wave": {"latlon": "latlon"},
+    "barotropic_double_gyre": {"latlon": "latlon_regional"},
+}
+
 
 def load_catalog() -> dict:
     """Load the data catalog YAML."""
@@ -775,23 +796,6 @@ def _run_ocean(config: dict, legoesm_path: Path, config_path: Path | None = None
     if mode == "3d_ocean" and case == "bench" and grid_type in ("latlon", "tripole"):
         _run_bench(config, legoesm_path, config_path)
         return
-    _MATRIX_CASES = {
-        # case -> (grid.type -> upstream matrix --grid value)
-        "baroclinic_gyre": {"latlon": "latlon_regional",
-                            "mpas": "mpas_regional"},
-        "lock_exchange": {"latlon": "latlon"},
-        "overflow": {"latlon": "latlon"},
-        "acc_channel": {"latlon": "latlon_channel",
-                         "mpas": "mpas_channel"},
-        "geostrophic_adjustment": {"latlon": "latlon"},
-        "phillips_two_layer": {"latlon": "latlon"},
-        "global_overturning": {"latlon": "latlon"},
-        "neverworld2_lite": {"latlon": "latlon"},
-        "eady_instability": {"latlon": "latlon_channel"},
-        "rest_state_stratified_no_land": {"latlon": "latlon"},
-        "barotropic_wave": {"latlon": "latlon"},
-        "barotropic_double_gyre": {"latlon": "latlon_regional"},
-    }
     if (mode in ("3d_ocean", "barotropic_ocean")
             and case in _MATRIX_CASES
             and grid_type in _MATRIX_CASES[case]):

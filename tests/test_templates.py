@@ -404,6 +404,217 @@ class TestRecipeValidation:
         assert "recipe = " not in tag
 
 
+class TestConsistencyGate:
+    """Upstream-counterpart consistency gate (issue #8, Phase 3B-1).
+
+    Structural drift checks between runners-owned templates and their
+    pinned-upstream counterparts (config/templates/ocean/<stem>.yaml).
+    Every check ships a planted violation — the rel-name .yaml-suffix bug
+    found while wiring the gate (the lookup silently matched nothing) is
+    exactly the class these tests exist to catch.
+    """
+
+    # The runners-side grid families (source of truth:
+    # runners.run_experiment._MATRIX_CASES + COUNTERPART_FALLBACK_GRIDS).
+    GYRE_CFG = {
+        "experiment": {"mode": "3d_ocean"},
+        "grid": {"type": "latlon"},
+        "ocean": {"case": "baroclinic_gyre", "recipe": "default_wright_v1"},
+    }
+
+    @staticmethod
+    def _find_checkout():
+        """The pinned legoESM checkout, wherever the layout put it."""
+        for cand in (ROOT_DIR / "legoESM", ROOT_DIR.parent / "legoESM"):
+            if (cand / "config" / "templates" / "ocean").is_dir():
+                return cand
+        return None
+
+    @staticmethod
+    def _upstream_checkout(tmp_path, counterparts: dict[str, str]) -> Path:
+        """A minimal pinned-legoESM fixture: counterparts maps
+        ocean/<stem> -> full counterpart YAML text."""
+        ocean_dir = tmp_path / "config" / "templates" / "ocean"
+        ocean_dir.mkdir(parents=True)
+        for stem, text in counterparts.items():
+            (ocean_dir / f"{stem}.yaml").write_text(text)
+        return tmp_path
+
+    @staticmethod
+    def _counterpart_text(name="baroclinic_gyre", grid="latlon_regional",
+                          maturity="structurally_validated"):
+        return (
+            "experiment:\n"
+            "  tier: tier2\n"
+            "  extent: regional\n"
+            f"  maturity: {maturity}\n"
+            "  data: []\n"
+            "model:\n"
+            "  name: ocean-baroclinic-gyre\n"
+            "  type: ocean_only\n"
+            "setup:\n"
+            f"  name: {name}\n"
+            f"  grid: {grid}\n"
+            "output:\n"
+            "  path: output/ocean/baroclinic_gyre/\n"
+        )
+
+    def _sources(self, checkout):
+        import validate_templates as vt
+        from runners.run_experiment import _MATRIX_CASES
+        return {
+            "legoesm_path": checkout,
+            "matrix_cases": _MATRIX_CASES,
+            "fallback_grids": vt.COUNTERPART_FALLBACK_GRIDS,
+        }
+
+    def test_validate_template_wires_the_gate(self, tmp_path):
+        # The REAL per-template path must reach the gate: planted grid
+        # drift surfaces via validate_template on the real template file
+        # (guards the rel-name lookup itself — a silent no-op here means
+        # the gate matches nothing).
+        import validate_templates as vt
+        drifted = self._upstream_checkout(
+            tmp_path / "drifted",
+            {"baroclinic_gyre": self._counterpart_text(grid="latlon_cgrid")})
+        path = TEMPLATES_DIR / "3d_idealized" / "baroclinic_gyre.yaml"
+        errors = vt.validate_template(
+            path, consistency_sources=self._sources(drifted))
+        assert any("grid drift" in e for e in errors), errors
+
+        healthy = self._upstream_checkout(
+            tmp_path / "healthy",
+            {"baroclinic_gyre": self._counterpart_text()})
+        errors = vt.validate_template(
+            path, consistency_sources=self._sources(healthy))
+        assert errors == [], errors
+
+    def test_all_counterparts_pass_at_pinned_checkout(self):
+        # Happy path: all declared counterparts agree with our templates at
+        # the real pinned checkout (CI Tier-2 has it at ./legoESM, the
+        # workspace at ../legoESM).
+        checkout = self._find_checkout()
+        if checkout is None:
+            pytest.skip("pinned legoESM checkout not available")
+        import validate_templates as vt
+        from runners.run_experiment import _MATRIX_CASES, load_template
+        for runners_rel, counterpart_rel in sorted(vt.UPSTREAM_COUNTERPARTS.items()):
+            cfg = load_template(runners_rel)
+            errors = vt.validate_consistency(
+                cfg, counterpart_rel, checkout, _MATRIX_CASES,
+                vt.COUNTERPART_FALLBACK_GRIDS)
+            assert errors == [], f"{runners_rel}: {errors}"
+
+    def test_counterpart_missing(self, tmp_path):
+        # Planted: the upstream file vanished (rename/removal upstream).
+        import validate_templates as vt
+        checkout = self._upstream_checkout(tmp_path, {})  # no files at all
+        errors = vt.validate_consistency(
+            self.GYRE_CFG, "ocean/baroclinic_gyre", checkout,
+            matrix_cases={}, fallback_grids={})
+        assert any("counterpart missing" in e for e in errors), errors
+
+    def test_setup_name_drift(self, tmp_path):
+        # Planted: upstream renamed the setup (setup.name != ocean.case).
+        import validate_templates as vt
+        checkout = self._upstream_checkout(
+            tmp_path, {"baroclinic_gyre": self._counterpart_text(name="baroclinic")})
+        errors = vt.validate_consistency(
+            self.GYRE_CFG, "ocean/baroclinic_gyre", checkout,
+            matrix_cases={}, fallback_grids={})
+        assert any("setup drift" in e and "baroclinic" in e for e in errors), errors
+
+    def test_setup_grid_drift(self, tmp_path):
+        # Planted: upstream re-gridded outside the family the runners lane
+        # dispatches (the handoff case: latlon_regional -> latlon_cgrid).
+        import validate_templates as vt
+        checkout = self._upstream_checkout(
+            tmp_path, {"baroclinic_gyre": self._counterpart_text(grid="latlon_cgrid")})
+        errors = vt.validate_consistency(
+            self.GYRE_CFG, "ocean/baroclinic_gyre", checkout,
+            matrix_cases={"baroclinic_gyre": {"latlon": "latlon_regional"}},
+            fallback_grids={})
+        assert any("grid drift" in e and "latlon_cgrid" in e for e in errors), errors
+
+    def test_undispatchable_case_family_fails(self, tmp_path):
+        # Planted: a counterpart case in NO grid table would make the grid
+        # check silently unenforceable — that must itself be an error.
+        import validate_templates as vt
+        cfg = {"experiment": {"mode": "3d_ocean"},
+               "grid": {"type": "latlon"},
+               "ocean": {"case": "mystery_case"}}
+        checkout = self._upstream_checkout(
+            tmp_path, {"mystery_case": self._counterpart_text(name="mystery_case")})
+        errors = vt.validate_consistency(
+            cfg, "ocean/mystery_case", checkout,
+            matrix_cases={}, fallback_grids={})
+        assert any("no dispatchable grid family" in e for e in errors), errors
+
+    def test_maturity_reported_not_blocking(self, tmp_path):
+        # Counterpart maturity is informational: a lower upstream
+        # maturity is REPORTED (info dict), never an error.
+        import validate_templates as vt
+        checkout = self._upstream_checkout(
+            tmp_path, {"baroclinic_gyre": self._counterpart_text(maturity="experimental")})
+        info = {}
+        errors = vt.validate_consistency(
+            self.GYRE_CFG, "ocean/baroclinic_gyre", checkout,
+            matrix_cases={"baroclinic_gyre": {"latlon": "latlon_regional"}},
+            fallback_grids={}, info=info)
+        assert errors == [], errors
+        assert info["maturity"] == "experimental"
+
+    def test_stale_counterpart_entry_fails(self, tmp_path, monkeypatch):
+        # Planted: a UPSTREAM_COUNTERPARTS key without a template file
+        # (e.g. left behind after graduation) — the map must not rot.
+        import validate_templates as vt
+        monkeypatch.setattr(vt, "UPSTREAM_COUNTERPARTS",
+                            {"2d/ghost": "ocean/ghost"})
+        files = sorted(TEMPLATES_DIR.rglob("*.yaml"))
+        errors, _ = vt.check_counterpart_coverage(files, tmp_path)
+        assert any("stale entry" in e and "2d/ghost" in e for e in errors), errors
+
+    def test_undeclared_overlap_fails(self, tmp_path, monkeypatch):
+        # Planted (auto-discovery): upstream ships a counterpart for a
+        # runners template that is NOT declared — a new upstream overlap
+        # must fail until consciously curated (declare or graduate).
+        import validate_templates as vt
+        monkeypatch.setattr(vt, "UPSTREAM_COUNTERPARTS", {})
+        checkout = self._upstream_checkout(
+            tmp_path, {"neverworld2_lite": self._counterpart_text(name="neverworld2_lite")})
+        files = sorted(TEMPLATES_DIR.rglob("*.yaml"))  # incl. global_ocean/neverworld2_lite.yaml
+        errors, _ = vt.check_counterpart_coverage(files, checkout)
+        assert any("neverworld2_lite" in e and "not declared" in e
+                   for e in errors), errors
+
+    def test_counterpart_coverage_happy_path(self):
+        checkout = self._find_checkout()
+        if checkout is None:
+            pytest.skip("pinned legoESM checkout not available")
+        import validate_templates as vt
+        files = sorted(TEMPLATES_DIR.rglob("*.yaml"))
+        errors, maturities = vt.check_counterpart_coverage(files, checkout)
+        assert errors == [], errors
+        assert sorted(maturities) == sorted(vt.UPSTREAM_COUNTERPARTS.values())
+
+    def test_sources_absent_degrades_gracefully(self):
+        # consistency_sources=None (e.g. --skip-imports): the gate is
+        # skipped without inventing errors.
+        import validate_templates as vt
+        path = TEMPLATES_DIR / "3d_idealized" / "baroclinic_gyre.yaml"
+        assert vt.validate_template(path, consistency_sources=None) == []
+
+    def test_skip_imports_skips_gate_with_notice(self):
+        # The CLI's degraded tier must SAY it skipped the gate.
+        import subprocess
+        r = subprocess.run(
+            [_sys_exe(), str(ROOT_DIR / "scripts" / "validate_templates.py"),
+             "--skip-imports"],
+            capture_output=True, text=True)
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert "Consistency gate: skipped" in r.stdout, r.stdout
+
+
 class TestOrchestratorProvenance:
     """Runners-layer provenance stamping (issue #8, Phase 2A): run.sh env
     vars reach legoESM's run_manifest.json, and experiment.tag carries the
