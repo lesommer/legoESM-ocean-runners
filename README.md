@@ -99,7 +99,7 @@ receipts and history live in
 
 - `1d/` — 5 templates: 5 run-tested
 - `2d/` — 3 templates: 1 run-tested, 2 structural
-- `3d_idealized/` — 3 templates: 2 run-tested, 1 structural
+- `3d_idealized/` — 3 templates: 3 run-tested
 - `coupled/` — 3 templates: 3 structural
 - `global_ocean/` — 8 templates: 1 run-tested, 3 smoke-tested, 4 structural
 

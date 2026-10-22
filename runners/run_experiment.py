@@ -43,6 +43,7 @@ _MATRIX_CASES = {
     "barotropic_wave": {"latlon": "latlon"},
     "barotropic_double_gyre": {"latlon": "latlon_regional"},
     "stommel_gyre_tracer": {"latlon": "latlon"},
+    "isomip_plus": {"latlon": "latlon_regional"},
 }
 
 # --- Graduated templates (issue #8, Phase 3B-2) --------------------------------

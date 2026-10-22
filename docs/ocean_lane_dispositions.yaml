@@ -115,9 +115,9 @@ lanes:
     grids: [latlon_channel]
     note: "Tier 1 (issue #10): the verified IGW lane (f-plane channel, exact eigenmode); new runners template, no upstream counterpart"
   matrix:isomip_plus:
-    status: backlog
+    status: onboarded
     grids: [latlon_regional]
-    note: "Tier 1 (issue #10), first wiring: template dt 120 -> lane DEFAULT_DT 300, quick 5 d receipt"
+    note: "wired 2026-10-23 (issue #10 Tier 1): _MATRIX_CASES latlon->latlon_regional; lane verified at the pin (1/1 PASS, mdot=1.489 m/yr); template dt 120 -> lane DEFAULT_DT 300; Mac receipt in ledger macbook_2026-10-23_isomip-plus-wiring"
   matrix:lock_exchange:
     status: onboarded
     grids: [fesom, latlon, latlon_regional, mpas, tripole]
@@ -234,8 +234,8 @@ lanes:
     status: declined
     reason: "recipe_map tag of matrix case 'inertia_gravity_wave': upstream global-case gate defect (climate-federation/legoESM#2114); the channel variant is the verified lane"
   experiment_recipe:isomip_plus:
-    status: backlog
-    note: "recipe_map tag of matrix case 'isomip_plus': Tier 1 (issue #10), first wiring: template dt 120 -> lane DEFAULT_DT 300, quick 5 d receipt"
+    status: onboarded
+    note: "recipe_map tag of matrix case 'isomip_plus': wired 2026-10-23 (issue #10 Tier 1), see matrix:isomip_plus"
   experiment_recipe:lock_exchange:
     status: onboarded
     note: "recipe_map tag of matrix case 'lock_exchange': graduated 3B-3; matrix lane via _MATRIX_CASES"

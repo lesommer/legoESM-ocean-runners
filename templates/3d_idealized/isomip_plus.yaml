@@ -2,7 +2,7 @@
 # Tests ice-ocean interaction under an ice shelf.
 #
 # Maps to: legoesm.ocean.experiments.isomip_plus
-# Grid:    latlon
+# Grid:    latlon (regional)
 # Mode:    3d_ocean
 
 experiment:
@@ -14,8 +14,9 @@ requires: []
 
 grid:
   type: latlon
-  resolution: 64x128
-  nlev: 70
+  # Upstream matrix-lane design resolution (isomip_plus latlon_regional arm).
+  resolution: 32x16
+  nlev: 10
 
 ocean:
   case: isomip_plus
@@ -23,27 +24,28 @@ ocean:
   # (recipe_map.EXPERIMENT_RECIPES); NOT forwarded — the upstream baseline
   # assembles it. Other ocean.* scheme fields are documented intent.
   recipe: default_wright_v1
-  A_h: 1.0e-2
-  eos: wright
+  A_h: 1.0e4
 
 domain:
-  H_max: 800.0
+  # ISOMIPPlusConfig.H_max (the cavity floor depth; Asay-Davis 2016 Fig. 1).
+  H_max: 720.0
 
 physics:
   vertical_mixing:
     scheme: constant
     constant:
-      A_v: 1.0e-2
+      A_v: 1.0e-3
       K_v: 1.0e-4
   surface_forcing:
     scheme: none
-  bottom_drag:
-    scheme: quadratic
-    C_d: 2.5e-3
 
 time:
-  duration_days: 30
-  dt_seconds: 120
+  # Lane-design pair: 365 d at dt 300 (upstream quick gate = 5 d).
+  # dt = upstream matrix-lane DEFAULT_DT (stability-verified). Larger dt
+  # values forwarded via --dt override the lane design and risk blowup
+  # (same latent-bug class as baroclinic_gyre, 2026-10-10).
+  duration_days: 365
+  dt_seconds: 300
 
 output:
   diag_interval_hours: 6

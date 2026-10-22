@@ -1617,6 +1617,7 @@ class TestOceanCaseDispatch:
             ("2d", "barotropic_wave"): "latlon",
             ("2d", "barotropic_double_gyre"): "latlon_regional",
             ("2d", "stommel_gyre_tracer"): "latlon",
+            ("3d_idealized", "isomip_plus"): "latlon_regional",
         }
         from runners.run_experiment import load_template
         for (category, tmpl), matrix_grid in dispatch.items():
@@ -1637,7 +1638,8 @@ class TestOceanCaseDispatch:
         from runners.run_experiment import load_template
         lanes = [("global_ocean", "neverworld2_lite"),
                  ("3d_idealized", "rest_state_stratified_no_land"),
-                 ("2d", "barotropic_double_gyre")]
+                 ("2d", "barotropic_double_gyre"),
+                 ("3d_idealized", "isomip_plus")]
         for category, tmpl in lanes:
             cfg = load_template(f"{category}/{tmpl}")
             assert cfg["time"]["dt_seconds"] == 300, (
@@ -1676,18 +1678,19 @@ class TestOceanCaseDispatch:
 
     def test_stub_case_falls_through(self):
         # A 3d_ocean case WITHOUT a delegation lane hits the structural
-        # stub, not an error (e.g. isomip_plus).
-        import sys
-        from pathlib import Path
-        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-        from runners.run_experiment import load_template
+        # stub, not an error (checked with a synthetic case: every
+        # runners-owned 3d template is dispatched since isomip_plus
+        # joined _MATRIX_CASES, issue #10 Tier 1).
+        from runners.run_experiment import load_template, _MATRIX_CASES
         cfg = load_template("3d_idealized/isomip_plus")
         assert cfg["experiment"]["mode"] == "3d_ocean"
-        # isomip_plus is NOT in the dispatch table (falls to stub)
-        assert cfg["ocean"]["case"] not in (
-            "dino", "bench", "baroclinic_gyre", "lock_exchange", "overflow",
-            "acc_channel", "geostrophic_adjustment", "phillips_two_layer",
-            "global_overturning", "neverworld2_lite", "eady_instability")
+        # isomip_plus IS dispatched (wired 2026-10-23, latlon_regional arm).
+        assert "isomip_plus" in _MATRIX_CASES
+        assert _MATRIX_CASES["isomip_plus"] == {"latlon": "latlon_regional"}
+        # A case outside every delegation lane still falls through.
+        synthetic = dict(cfg)
+        synthetic["ocean"] = {**cfg["ocean"], "case": "no_such_lane"}
+        assert synthetic["ocean"]["case"] not in _MATRIX_CASES
 
 
 class TestBenchLane:
