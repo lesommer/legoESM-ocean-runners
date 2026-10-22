@@ -346,7 +346,11 @@ def generate_tag(
     ``overrides`` is the raw CLI override list (``key=value`` strings) as
     passed to init; recorded under ``[reproducibility]`` so reproduce.py can
     re-apply them (without it, a reproduced run silently falls back to
-    template defaults).
+    template defaults). NOTE: ``config`` must ALREADY have the overrides
+    applied (as ``init_experiment`` does) — this parameter only RECORDS
+    them; passing an un-overridden config with ``overrides`` produces a tag
+    whose config_hash contradicts its own recorded overrides, and
+    ``reproduce.py --verify`` will (correctly) reject it.
     """
     version_info = load_version_info()
     config_hash = hashlib.sha256(

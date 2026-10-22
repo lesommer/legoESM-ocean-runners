@@ -285,10 +285,12 @@ jax_version = 0.10.0
 To reproduce:
 
 ```bash
-python scripts/reproduce.py path/to/experiment.tag
+python scripts/reproduce.py path/to/experiment.tag          # reconstruct the environment
+python scripts/reproduce.py path/to/experiment.tag --verify # audit the tag against the current checkout
+python scripts/reproduce.py path/to/experiment.tag --run    # ... and re-init (re-applying the recorded overrides)
 ```
 
-This checks out the runner tag → checks out the legoESM commit → applies patches → verifies data.
+This checks out the runner tag → checks out the legoESM commit → applies patches → verifies data. `--verify` recomputes the config hash from template + recorded overrides and checks every recorded patch content digest (exit 1 on drift); `--run` re-applies the recorded overrides so the rerun is the same experiment, not a template-default lookalike.
 
 ## Available templates
 

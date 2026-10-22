@@ -24,7 +24,11 @@ else
     LEGOESM_DIR="$(dirname "$ROOT_DIR")/legoESM"
 fi
 
-if [ ! -d "$LEGOESM_DIR/.git" ]; then
+# `--show-toplevel` equality instead of `[ -d .git ]`: a linked worktree
+# has a `.git` FILE, not a directory, and a bare `--git-dir` probe would
+# also match any SUBDIRECTORY of some other repo (patch paths are
+# repo-rooted, so the dir must be a top level).
+if [ "$(git -C "$LEGOESM_DIR" rev-parse --show-toplevel 2>/dev/null)" != "$(cd "$LEGOESM_DIR" 2>/dev/null && pwd -P)" ]; then
     echo "ERROR: legoESM not found at $LEGOESM_DIR"
     echo "       Set LEGOESM_DIR to point to your legoESM checkout."
     exit 1

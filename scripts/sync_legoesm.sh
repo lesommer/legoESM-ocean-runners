@@ -30,6 +30,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 VERSION_FILE="$ROOT_DIR/legoESM_version.txt"
 TEMP_VERSION_FILE="$ROOT_DIR/legoESM_version.txt.tmp"
+PATCHES_DIR="$ROOT_DIR/patches"
 
 # Parse arguments early (needed before legoESM directory check)
 REF="main"
@@ -278,6 +279,41 @@ if [ "$VALIDATION_OK" = "0" ]; then
     echo "         Please review and update the failing templates before committing."
     echo "         Do NOT tag until all templates pass validation."
     exit 1
+fi
+
+# Re-verify the patch chain against the NEW pin before committing to it:
+# a patch that stopped applying must fail the bump, not drift silently
+# into an unreproducible state. The local checkout carries the applied
+# chain (dirty), so probe a clean detached worktree at the new commit.
+echo ""
+echo "Re-verifying patch chain against $SHORT_COMMIT..."
+PATCH_WT=$(mktemp -d "${TMPDIR:-/tmp}/legoesm-patchcheck.XXXXXX")
+# NB: no --quiet (not supported by older git worktree add); redirect instead.
+if git -C "$LEGOESM_DIR" worktree add --detach "$PATCH_WT" "$NEW_COMMIT" >/dev/null 2>&1; then
+    PATCH_FAILURES=0
+    for patch_file in "$PATCHES_DIR"/*.patch; do
+        [ -e "$patch_file" ] || continue
+        if ! git -C "$PATCH_WT" apply --check "$patch_file" 2>/dev/null; then
+            echo "  PATCH CONFLICT: $(basename "$patch_file") does not apply to $SHORT_COMMIT"
+            PATCH_FAILURES=$((PATCH_FAILURES + 1))
+        fi
+    done
+    git -C "$LEGOESM_DIR" worktree remove --force "$PATCH_WT" >/dev/null 2>&1
+    if [ "$PATCH_FAILURES" -gt 0 ]; then
+        rm -f "$TEMP_VERSION_FILE"
+        echo ""
+        echo "ERROR: $PATCH_FAILURES patch(es) no longer apply to the new pin."
+        echo "       Regenerate the failing patches (see patches/README.md), then re-run."
+        echo "       Version file NOT updated."
+        exit 1
+    fi
+    N_PATCHES=$(ls "$PATCHES_DIR"/*.patch 2>/dev/null | wc -l | tr -d ' ')
+    echo "All $N_PATCHES patches apply cleanly to $SHORT_COMMIT."
+else
+    # Not fatal: the bump still passes template validation, but say it loudly.
+    rm -rf "$PATCH_WT"
+    echo "WARNING: could not create probe worktree in legoESM — skipped patch verification."
+    echo "         Verify manually: LEGOESM_DIR=<clean checkout> bash scripts/apply_patches.sh --check"
 fi
 
 # Validation passed: atomically replace the version file

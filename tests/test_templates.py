@@ -583,6 +583,136 @@ class TestOrchestratorProvenance:
         ]
 
 
+class TestReproduceVerify:
+    """reproduce.py --verify (issue #8, Phase 2B): audit a tag against the
+    CURRENT repo state — config_hash recompute from template+overrides, and
+    patch content digests. Every planted case must fire."""
+
+    OVERRIDES = ["grid.resolution=128x256", "time.duration_days=730"]
+
+    @staticmethod
+    def _expected_hash(cfg):
+        import hashlib
+        import json
+        return hashlib.sha256(json.dumps(cfg, sort_keys=True).encode()).hexdigest()[:16]
+
+    @classmethod
+    def _good_tag(cls):
+        import json
+
+        from runners.run_experiment import apply_overrides, load_template
+        cfg = apply_overrides(load_template("3d_idealized/baroclinic_gyre"), cls.OVERRIDES)
+        return {
+            "experiment": {"template": "3d_idealized/baroclinic_gyre"},
+            "reproducibility": {
+                "config_hash": f"sha256:{cls._expected_hash(cfg)}",
+                "overrides": json.dumps(cls.OVERRIDES),
+            },
+        }
+
+    def test_verify_passes_on_consistent_state(self):
+        import reproduce
+        assert reproduce.verify_tag(self._good_tag()) == []
+
+    def test_verify_detects_config_hash_drift(self):
+        # Planted: hash recorded for the no-override template while the tag
+        # claims overrides — the rerun would NOT be the recorded experiment.
+        import reproduce
+        tag = self._good_tag()
+        tag["reproducibility"]["config_hash"] = "sha256:deadbeefdeadbeef"
+        problems = reproduce.verify_tag(tag)
+        assert any("config_hash mismatch" in p for p in problems), problems
+
+    def test_verify_detects_overrides_not_applied_to_hash(self):
+        # Planted: hash computed WITHOUT the claimed overrides.
+        import reproduce
+        from runners.run_experiment import load_template
+        tag = self._good_tag()
+        tag["reproducibility"]["config_hash"] = f"sha256:{self._expected_hash(load_template('3d_idealized/baroclinic_gyre'))}"
+        problems = reproduce.verify_tag(tag)
+        assert any("config_hash mismatch" in p for p in problems), problems
+
+    def test_verify_detects_patch_content_drift(self):
+        # Planted: a recorded digest that no longer matches the patch file.
+        import reproduce
+        from runners.run_experiment import PATCHES_DIR
+        tag = self._good_tag()
+        stem = sorted(PATCHES_DIR.glob("*.patch"))[0].stem  # a real patch
+        tag["legoESM"] = {f"patch_sha256_{stem}": "sha256:0123456789abcdef"}
+        problems = reproduce.verify_tag(tag)
+        assert any(f"{stem}.patch" in p and "drift" in p for p in problems), problems
+
+    def test_verify_detects_missing_patch(self):
+        import reproduce
+        tag = self._good_tag()
+        tag["legoESM"] = {"patch_sha256_999-vanished-patch": "sha256:0123456789abcdef"}
+        problems = reproduce.verify_tag(tag)
+        assert any("999-vanished-patch" in p and "missing" in p for p in problems), problems
+
+    def test_verify_reports_missing_template(self):
+        import reproduce
+        tag = {"experiment": {"template": "3d_idealized/no-such-case"},
+               "reproducibility": {"config_hash": "sha256:x"}}
+        problems = reproduce.verify_tag(tag)
+        assert problems and "not found" in problems[0], problems
+
+    def test_verify_cli_end_to_end(self, tmp_path):
+        """The real CLI: a genuine generated tag verifies (exit 0); a
+        tampered config_hash fails (exit 1). Mirrors init_experiment:
+        overrides are APPLIED to the config before generate_tag (the
+        parameter only records them)."""
+        import subprocess
+        import sys
+        from runners.run_experiment import apply_overrides, generate_tag, load_template
+        cfg = apply_overrides(load_template("3d_idealized/baroclinic_gyre"),
+                             self.OVERRIDES)
+        tag_text = generate_tag(
+            cfg, "3d_idealized/baroclinic_gyre", overrides=self.OVERRIDES,
+        )
+        good = tmp_path / "good.tag"
+        good.write_text(tag_text)
+        bad = tmp_path / "bad.tag"
+        bad.write_text(tag_text.replace("config_hash = sha256:", "config_hash = sha256:0"))
+        for path, expected in ((good, 0), (bad, 1)):
+            r = subprocess.run(
+                [sys.executable, str(ROOT_DIR / "scripts" / "reproduce.py"),
+                 str(path), "--verify"],
+                capture_output=True, text=True,
+            )
+            assert r.returncode == expected, (path.name, r.stdout, r.stderr)
+        # --verify reports what it checked on success
+        r = subprocess.run(
+            [sys.executable, str(ROOT_DIR / "scripts" / "reproduce.py"),
+             str(good), "--verify"],
+            capture_output=True, text=True,
+        )
+        assert "Verified" in r.stdout
+
+    def test_run_dry_run_reapplies_recorded_overrides(self, tmp_path):
+        """--run --dry-run must show the recorded overrides in the init
+        command (the 2026-10-21 audit finding: they were silently dropped
+        and a reproduced run fell back to template defaults)."""
+        import subprocess
+        import sys
+        from runners.run_experiment import apply_overrides, generate_tag, load_template
+        cfg = apply_overrides(load_template("3d_idealized/baroclinic_gyre"),
+                             self.OVERRIDES)
+        tag_text = generate_tag(
+            cfg, "3d_idealized/baroclinic_gyre", overrides=self.OVERRIDES,
+        )
+        tag_file = tmp_path / "exp.tag"
+        tag_file.write_text(tag_text)
+        r = subprocess.run(
+            [sys.executable, str(ROOT_DIR / "scripts" / "reproduce.py"),
+             str(tag_file), "--run", "--dry-run"],
+            capture_output=True, text=True,
+        )
+        assert r.returncode == 0, r.stderr
+        assert "Would init:" in r.stdout
+        for ov in self.OVERRIDES:
+            assert f"-o {ov}" in r.stdout, r.stdout
+
+
 class TestRunScriptGeneration:
     """Test scheduler-directive generation in run.sh (#SBATCH / #OAR)."""
 

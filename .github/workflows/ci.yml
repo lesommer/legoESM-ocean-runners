@@ -146,7 +146,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install pyyaml
+          pip install pyyaml pytest
 
       - name: Read pinned legoESM version
         id: legoesm
@@ -164,8 +164,16 @@ jobs:
           path: legoESM
           fetch-depth: 0
 
-      - name: Apply patches (if any)
-        run: bash scripts/apply_patches.sh --check || true
+      - name: Apply patches (real gate)
+        # The deployment state is pin + patches — Tier-2 must validate THAT,
+        # so the chain is APPLIED here, not just dry-run. LEGOESM_DIR is
+        # required: the script defaults to the sibling ../legoESM, but CI
+        # checks out at ./legoESM (the old gate errored on the missing dir
+        # and `|| true` swallowed it — advisory AND broken). No
+        # continue-on-error: the gate must be able to fail.
+        env:
+          LEGOESM_DIR: ${{ github.workspace }}/legoESM
+        run: bash scripts/apply_patches.sh
 
       - name: Install legoESM + JAX
         # Bare `pip install -e legoESM/` cannot resolve the uv workspace
@@ -179,6 +187,9 @@ jobs:
 
       - name: Validate templates against legoESM (full)
         run: python scripts/validate_templates.py --legoesm-dir legoESM --verbose
+
+      - name: Run template tests (full suite, incl. e2e provenance vs the patched pin)
+        run: python -m pytest tests/test_templates.py -q
 
       - name: Run smoke test (one template)
         run: |

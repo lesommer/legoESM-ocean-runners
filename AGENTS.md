@@ -434,10 +434,22 @@ rm legoESM_version.txt.override patches/001-my-feature.patch
 python scripts/reproduce.py path/to/experiment.tag
 # This checks out the right repo tag, legoESM commit, and applies patches.
 
+# Pre-flight: audit the tag against the CURRENT checkout (no side effects):
+python scripts/reproduce.py path/to/experiment.tag --verify
+#   - recomputes config_hash from template + the recorded overrides
+#   - checks every recorded patch content digest (sha256) against patches/
+# Exits 1 on drift — run it after checking out the tag, before rerunning.
+
+# Full reproduction with rerun:
+python scripts/reproduce.py path/to/experiment.tag --run
+#   --run re-applies the recorded [reproducibility] overrides, so the
+#   rerun is the SAME experiment, not a template-default lookalike.
+
 # Option B: Manual reproduction
 # 1. Read the experiment.tag to find the runner_tag
 grep runner_tag path/to/experiment.tag
-# runner_tag = legoesm-c78680b-20260529
+# runner_tag = legoesm-c78680b-20260529  (or untagged@<sha> — reproduce.py
+# checks out the sha directly in that case)
 
 # 2. Checkout that tag in this repo
 git checkout legoesm-c78680b-20260529

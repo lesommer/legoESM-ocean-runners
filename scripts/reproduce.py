@@ -2,7 +2,7 @@
 """Reproduce a past experiment from its experiment.tag file.
 
 Usage:
-    python scripts/reproduce.py path/to/experiment.tag [--run]
+    python scripts/reproduce.py path/to/experiment.tag [--run] [--verify]
 
 What it does:
     1. Reads the experiment.tag to find runner_tag, legoESM commit, and patches
@@ -11,8 +11,13 @@ What it does:
     4. Applies any patches listed in the tag
     5. Verifies data availability
     6. Optionally re-initializes and runs the experiment
+       (re-applying the recorded overrides, so the rerun is the SAME
+       experiment, not a template-default lookalike)
 
 Options:
+    --verify     Audit the tag against the CURRENT repo state and exit:
+                 recompute config_hash from template+recorded overrides,
+                 check every recorded patch content digest. No checkouts.
     --run        Re-initialize and run the experiment after checkout
     --data-dir   Data root directory (default: $LEGOESM_DATA_DIR or ./data)
     --legoesm-dir  Path to legoESM checkout (default: ../legoESM)
@@ -23,12 +28,18 @@ from __future__ import annotations
 
 import argparse
 import configparser
+import hashlib
+import json
 import os
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
+# reproduce.py needs the runners package for verify (load_template /
+# apply_overrides); it lives in scripts/, the package in the repo root.
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 
 def parse_tag(tag_path: Path) -> dict:
@@ -54,6 +65,79 @@ def get_current_tag() -> str | None:
     except Exception:
         pass
     return None
+
+
+def verify_tag(tag: dict) -> list[str]:
+    """Audit a tag against the CURRENT repo state (no checkouts).
+
+    Checks:
+    1. config_hash — re-resolve the template + the tag's recorded overrides
+       and recompute the hash (same algorithm as generate_tag). A mismatch
+       means the template, the overrides, or the hash itself drifted.
+    2. patch content digests — every ``patch_sha256_<stem>`` line in
+       [legoESM] must match the current ``patches/<stem>.patch`` content;
+       a missing file is a (distinct) problem too.
+
+    Returns a list of problems; empty list = verified.
+    """
+    problems: list[str] = []
+    experiment = tag.get("experiment", {})
+    repro = tag.get("reproducibility", {})
+    legoesm = tag.get("legoESM", {})
+    template_name = experiment.get("template", "")
+
+    if not template_name:
+        return ["[experiment] template missing — cannot verify"]
+
+    try:
+        from runners.run_experiment import apply_overrides, load_template
+    except ImportError as e:
+        return [f"cannot import the runners package from {ROOT_DIR}: {e}"]
+
+    try:
+        cfg = load_template(template_name)
+    except FileNotFoundError as e:
+        return [f"template not found in this checkout (wrong tag checked out, "
+                f"or template graduated/removed): {e}"]
+
+    overrides = []
+    if repro.get("overrides"):
+        try:
+            overrides = json.loads(repro["overrides"])
+        except json.JSONDecodeError as e:
+            problems.append(f"[reproducibility] overrides is not valid JSON: {e}")
+    if overrides:
+        cfg = apply_overrides(cfg, overrides)
+
+    recomputed = hashlib.sha256(
+        json.dumps(cfg, sort_keys=True).encode()
+    ).hexdigest()[:16]
+    recorded = repro.get("config_hash", "").removeprefix("sha256:")
+    if recomputed != recorded:
+        problems.append(
+            f"config_hash mismatch: tag records {recorded or '(missing)'}, "
+            f"current template+overrides resolve to {recomputed}"
+        )
+
+    for key, recorded_digest in legoesm.items():
+        if not key.startswith("patch_sha256_"):
+            continue
+        stem = key[len("patch_sha256_"):]
+        patch_file = ROOT_DIR / "patches" / f"{stem}.patch"
+        if not patch_file.exists():
+            problems.append(
+                f"patch {stem}.patch is recorded in the tag but missing from "
+                f"patches/ (merged upstream + removed here, or renamed)"
+            )
+            continue
+        actual = hashlib.sha256(patch_file.read_bytes()).hexdigest()[:16]
+        if actual != recorded_digest.removeprefix("sha256:"):
+            problems.append(
+                f"patch content drift: tag records {recorded_digest} for "
+                f"{stem}.patch, current content hashes to sha256:{actual}"
+            )
+
+    return problems
 
 
 def checkout_tag(runner_tag: str, dry_run: bool = False) -> bool:
@@ -178,6 +262,9 @@ def main():
         description="Reproduce a past experiment from its experiment.tag file"
     )
     parser.add_argument("tag_file", type=Path, help="Path to experiment.tag file")
+    parser.add_argument("--verify", action="store_true",
+                        help="Audit the tag against the current repo state "
+                             "(config_hash recompute + patch digests) and exit")
     parser.add_argument("--run", action="store_true",
                         help="Re-initialize and run the experiment after checkout")
     parser.add_argument("--output-dir", type=Path, default=None,
@@ -209,6 +296,22 @@ def main():
     print(f"  Template: {experiment.get('template', 'unknown')}")
     print(f"  Mode:    {experiment.get('mode', 'unknown')}")
     print()
+
+    # Verify mode: audit against the CURRENT state, then exit (no checkouts).
+    if args.verify:
+        print("[verify] Auditing tag against the current repo state...")
+        problems = verify_tag(tag)
+        if problems:
+            print(f"\n{len(problems)} problem(s):")
+            for p in problems:
+                print(f"  - {p}")
+            print("\nNOT verified: the tag does not match this checkout "
+                  "(template/overrides or patch chain drifted,")
+            print("or the tag belongs to a different runner tag — check it out first).")
+            sys.exit(1)
+        print("Verified: config_hash reproduces from template + recorded overrides;")
+        print("all recorded patch digests match the current patches/ chain.")
+        sys.exit(0)
 
     # Step 1: Checkout the runner tag
     runner_tag = repro.get("runner_tag") or repro.get("legoesm_ref", "unknown")
@@ -271,7 +374,20 @@ def main():
             "--name", f"{exp_name}_reproduced",
             "--output-dir", str(out_dir),
         ]
-        if not args.dry_run:
+        # Re-apply the recorded overrides: without this, a reproduced run
+        # silently uses template defaults (the 2026-10-21 audit finding).
+        overrides_json = repro.get("overrides")
+        if overrides_json:
+            try:
+                for ov in json.loads(overrides_json):
+                    cmd += ["-o", str(ov)]
+            except json.JSONDecodeError:
+                print("  WARNING: tag [reproducibility] overrides is not valid JSON;")
+                print("           re-initializing with TEMPLATE DEFAULTS (not the recorded experiment).")
+                print(f"           (raw: {overrides_json!r})")
+        if args.dry_run:
+            print(f"  Would init: {' '.join(cmd)}")
+        else:
             subprocess.run(cmd, cwd=ROOT_DIR)
     else:
         print("\nTo initialize and run the experiment:")
