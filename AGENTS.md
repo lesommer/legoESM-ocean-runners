@@ -150,8 +150,19 @@ with canonical names `ocean/<stem>`. A legacy alias map
   generated `run.sh` depends on it).
 - Remaining runners-owned templates with upstream counterparts are gated
   for structural drift by `scripts/validate_templates.py`
-  (`UPSTREAM_COUNTERPARTS`, Phase 3B-1); graduation removes the entry
-  and the status row (upstream's own status docs own it from then on).
+  (`UPSTREAM_COUNTERPARTS`, Phase 3B-1). **Graduated so far
+  (2026-10-22, Phases 3B-2/3B-3):** `baroclinic_gyre` (pilot),
+  `acc_channel`, `eady_instability`, `geostrophic_adjustment`,
+  `lock_exchange`, `overflow`, `phillips_two_layer`,
+  `global_overturning`, `barotropic_wave` — canonical `ocean/<stem>`,
+  aliases keep the pre-graduation names resolving. Still curated
+  (counterpart-gated): `bench` (the `run.preset/steps/warmup_steps`
+  lanes have no upstream `setup:` equivalent),
+  `stommel_gyre_tracer`, `inertia_gravity_wave` (no run receipt /
+  upstream gate defect). Upstream-only cases (`ocean/eady_uniform`,
+  `ocean/held_larichev`, `ocean/munk_gyre`,
+  `ocean/global_barotropic_wind`) resolve the same way without ever
+  having had a runners YAML — receipts are upstream's business.
 
 ### Recipes (scheme identity)
 

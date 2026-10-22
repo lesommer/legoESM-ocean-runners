@@ -218,6 +218,13 @@ class TestRecipeValidation:
     SOURCES = {
         "experiment_recipes": {
             "baroclinic_gyre": "default_wright_v1",
+            "barotropic_wave": "default_wright_v1",
+            "neverworld2_lite": "default_wright_v1",
+            "acc_channel": "default_wright_v1",
+            "geostrophic_adjustment": "default_wright_v1",
+            "lock_exchange": "default_wright_v1",
+            "overflow": "default_wright_v1",
+            "phillips_two_layer": "default_wright_v1",
             "global_overturning": "legoesm_linear_v1",
             "eady_instability": "legoesm_linear_v1",
             "bench": "legoesm_nemo_like_v1",
@@ -360,10 +367,10 @@ class TestRecipeValidation:
 
     def test_real_templates_pass_with_fixture_sources(self):
         from runners.run_experiment import load_template
-        for name in ("3d_idealized/baroclinic_gyre",
-                     "ocean/baroclinic_gyre",   # canonical (graduated)
-                     "3d_idealized/eady_instability",
-                     "global_ocean/global_overturning",
+        for name in ("3d_idealized/baroclinic_gyre",  # legacy alias (graduated)
+                     "ocean/baroclinic_gyre",         # canonical (3d_ocean)
+                     "ocean/barotropic_wave",         # canonical (barotropic_ocean)
+                     "global_ocean/neverworld2_lite",  # runners-owned matrix lane
                      "global_ocean/omip_tripole",
                      "global_ocean/omip_core2_thin",
                      "1d/ocean_scm"):
@@ -488,21 +495,22 @@ class TestConsistencyGate:
         # The REAL per-template path must reach the gate: planted grid
         # drift surfaces via validate_template on the real template file
         # (guards the rel-name lookup itself — a silent no-op here means
-        # the gate matches nothing).
+        # the gate matches nothing). stommel_gyre_tracer: a remaining
+        # runners-owned template with an upstream counterpart.
         import validate_templates as vt
         drifted = self._upstream_checkout(
             tmp_path / "drifted",
-            {"acc_channel": self._counterpart_text(
-                name="acc_channel", grid="latlon_cgrid")})
-        path = TEMPLATES_DIR / "3d_idealized" / "acc_channel.yaml"
+            {"stommel_gyre_tracer": self._counterpart_text(
+                name="stommel_gyre_tracer", grid="latlon_cgrid")})
+        path = TEMPLATES_DIR / "2d" / "stommel_gyre_tracer.yaml"
         errors = vt.validate_template(
             path, consistency_sources=self._sources(drifted))
         assert any("grid drift" in e for e in errors), errors
 
         healthy = self._upstream_checkout(
             tmp_path / "healthy",
-            {"acc_channel": self._counterpart_text(
-                name="acc_channel", grid="latlon_channel")})
+            {"stommel_gyre_tracer": self._counterpart_text(
+                name="stommel_gyre_tracer", grid="latlon")})
         errors = vt.validate_template(
             path, consistency_sources=self._sources(healthy))
         assert errors == [], errors
@@ -619,7 +627,7 @@ class TestConsistencyGate:
         # consistency_sources=None (e.g. --skip-imports): the gate is
         # skipped without inventing errors.
         import validate_templates as vt
-        path = TEMPLATES_DIR / "3d_idealized" / "acc_channel.yaml"
+        path = TEMPLATES_DIR / "2d" / "stommel_gyre_tracer.yaml"
         assert vt.validate_template(path, consistency_sources=None) == []
 
     def test_skip_imports_skips_gate_with_notice(self):
@@ -767,53 +775,84 @@ class TestGraduatedTemplates:
 
     def test_recipe_validation_holds_for_translated_config(self):
         # Phase-1 recipe validation holds for translated templates: the
-        # emitted recipe matches the pinned recipe_map tag for the case.
+        # emitted recipe matches the recipe_map tag for the case (fixture
+        # sources; the pinned catalogs get their own test below).
         from validate_templates import validate_recipe
         from runners.run_experiment import load_template
-        cfg = load_template("ocean/baroclinic_gyre")
-        assert validate_recipe(cfg, **TestRecipeValidation.SOURCES) == []
+        graduated = ("ocean/baroclinic_gyre", "ocean/acc_channel",
+                     "ocean/eady_instability", "ocean/geostrophic_adjustment",
+                     "ocean/lock_exchange", "ocean/overflow",
+                     "ocean/phillips_two_layer", "ocean/global_overturning",
+                     "ocean/barotropic_wave")
+        for name in graduated:
+            cfg = load_template(name)
+            assert validate_recipe(cfg, **TestRecipeValidation.SOURCES) == [], name
 
-    def test_graduated_config_dispatches_through_matrix_lane(self):
-        # The run lane reads the translated config: case + grid.type must
-        # hit the _MATRIX_CASES dispatch (latlon -> latlon_regional).
+    def test_translated_configs_against_pinned_recipe_map(self):
+        # The 9 graduated configs against the REAL pinned catalogs
+        # (CI Tier-2): the adapter's file-loaded EXPERIMENT_RECIPES must
+        # agree with the installed package's catalog.
+        pytest.importorskip("legoesm")
+        from legoesm.ocean.experiments.recipe_map import EXPERIMENT_RECIPES
+        from validate_templates import validate_recipe
+        from runners.run_experiment import load_template
+        sources = {"experiment_recipes": dict(EXPERIMENT_RECIPES)}
+        for name in ("ocean/baroclinic_gyre", "ocean/acc_channel",
+                     "ocean/eady_instability", "ocean/geostrophic_adjustment",
+                     "ocean/lock_exchange", "ocean/overflow",
+                     "ocean/phillips_two_layer", "ocean/global_overturning",
+                     "ocean/barotropic_wave"):
+            cfg = load_template(name)
+            assert validate_recipe(cfg, **sources) == [], name
+
+    def test_graduated_configs_dispatch_through_matrix_lane(self):
+        # The run lane reads the translated configs: case + grid.type must
+        # hit the _MATRIX_CASES dispatch for every graduated case.
         from runners.run_experiment import _MATRIX_CASES, load_template
-        cfg = load_template("ocean/baroclinic_gyre")
-        case = cfg["ocean"]["case"]
-        grid = cfg["grid"]["type"]
-        assert grid in _MATRIX_CASES[case]
-        assert _MATRIX_CASES[case][grid] == "latlon_regional"
+        for name in ("ocean/baroclinic_gyre", "ocean/acc_channel",
+                     "ocean/eady_instability", "ocean/geostrophic_adjustment",
+                     "ocean/lock_exchange", "ocean/overflow",
+                     "ocean/phillips_two_layer", "ocean/global_overturning",
+                     "ocean/barotropic_wave"):
+            cfg = load_template(name)
+            case = cfg["ocean"]["case"]
+            grid = cfg["grid"]["type"]
+            assert grid in _MATRIX_CASES[case], name
+        assert _MATRIX_CASES["baroclinic_gyre"]["latlon"] == "latlon_regional"
 
     def test_init_end_to_end_canonical_and_alias(self, tmp_path):
         # init produces the identical resolved experiment from the
         # canonical name and the legacy alias; the tag records the
         # canonical template + template_source + the pinned recipe tag.
+        # One pilot case + one batch case.
         import configparser
         from runners.run_experiment import init_experiment
-        dir_canon = tmp_path / "canon"
-        dir_alias = tmp_path / "alias"
-        init_experiment("ocean/baroclinic_gyre", "smoke",
-                        ["time.duration_days=1"], None, dir_canon)
-        init_experiment("3d_idealized/baroclinic_gyre", "smoke",
-                        ["time.duration_days=1"], None, dir_alias)
-        assert (dir_canon / "config.yaml").read_text() == \
-               (dir_alias / "config.yaml").read_text()
+        for stem in ("baroclinic_gyre", "lock_exchange"):
+            dir_canon = tmp_path / f"canon-{stem}"
+            dir_alias = tmp_path / f"alias-{stem}"
+            init_experiment(f"ocean/{stem}", "smoke",
+                            ["time.duration_days=1"], None, dir_canon)
+            init_experiment(f"3d_idealized/{stem}", "smoke",
+                            ["time.duration_days=1"], None, dir_alias)
+            assert (dir_canon / "config.yaml").read_text() == \
+                   (dir_alias / "config.yaml").read_text()
 
-        tag = configparser.ConfigParser()
-        tag.read(dir_canon / "experiment.tag")
-        assert tag["experiment"]["template"] == "ocean/baroclinic_gyre"
-        assert tag["experiment"]["template_source"] == "upstream"
-        assert tag["model"]["recipe"] == "default_wright_v1"
-        # Not declared by the translated template — the upstream lane
-        # default applies (recorded as unknown by design).
-        assert tag["model"]["resolution"] == "unknown"
-        assert tag["run"]["duration_days"] == "1"   # the applied override
+            tag = configparser.ConfigParser()
+            tag.read(dir_canon / "experiment.tag")
+            assert tag["experiment"]["template"] == f"ocean/{stem}"
+            assert tag["experiment"]["template_source"] == "upstream"
+            assert tag["model"]["recipe"] == "default_wright_v1"
+            # Not declared by the translated template — the upstream lane
+            # default applies (recorded as unknown by design).
+            assert tag["model"]["resolution"] == "unknown"
+            assert tag["run"]["duration_days"] == "1"   # the applied override
 
-        run_sh = (dir_canon / "run.sh").read_text()
-        assert "CONFIG_TEMPLATE='ocean/baroclinic_gyre'" in run_sh
-        # fetch_data check inside run.sh resolves the canonical name
-        # (load_template_requires delegates to the runners resolver):
-        import fetch_data
-        assert fetch_data.load_template_requires("ocean/baroclinic_gyre") == []
+            run_sh = (dir_canon / "run.sh").read_text()
+            assert f"CONFIG_TEMPLATE='ocean/{stem}'" in run_sh
+            # fetch_data check inside run.sh resolves the canonical name
+            # (load_template_requires delegates to the runners resolver):
+            import fetch_data
+            assert fetch_data.load_template_requires(f"ocean/{stem}") == []
 
 
 class TestOrchestratorProvenance:
@@ -1260,7 +1299,10 @@ class TestOceanCaseDispatch:
 
     def test_matrix_lane_cases(self):
         # The Tier-A idealized cases route through the matrix delegation
-        # (grid-type mapping asserted against the dispatch table).
+        # (grid-type mapping asserted against the dispatch table). The 8
+        # graduated rows here are ALIAS coverage: load_template resolves
+        # the pre-graduation name to the translated upstream config, and
+        # the dispatch contract must hold on it exactly as before.
         dispatch = {
             ("3d_idealized", "baroclinic_gyre"): "latlon_regional",
             ("3d_idealized", "lock_exchange"): "latlon",
@@ -1287,18 +1329,13 @@ class TestOceanCaseDispatch:
         # Template dt is forwarded as --dt which overrides the upstream
         # lane's stability-verified DEFAULT_DT = 300; anything larger is
         # the latent-blowup class found 2026-10-10 (baroclinic_gyre).
-        # baroclinic_gyre itself is GRADUATED (3B-2): its translated
-        # config carries no time section at all, so the upstream lane
-        # default applies by construction — asserted separately below.
+        # The 9 graduated lanes (3B-2/3B-3) carry no time section at all —
+        # the upstream lane default applies by construction (asserted in
+        # test_graduated_matrix_lane_inherits_lane_dt). This list covers
+        # the remaining RUNNERS-OWNED matrix lanes that declare dt.
         from runners.run_experiment import load_template
-        lanes = [("3d_idealized", "acc_channel"),
-                 ("3d_idealized", "geostrophic_adjustment"),
-                 ("3d_idealized", "phillips_two_layer"),
-                 ("global_ocean", "global_overturning"),
-                 ("global_ocean", "neverworld2_lite"),
-                 ("3d_idealized", "eady_instability"),
+        lanes = [("global_ocean", "neverworld2_lite"),
                  ("3d_idealized", "rest_state_stratified_no_land"),
-                 ("2d", "barotropic_wave"),
                  ("2d", "barotropic_double_gyre")]
         for category, tmpl in lanes:
             cfg = load_template(f"{category}/{tmpl}")
@@ -1307,19 +1344,26 @@ class TestOceanCaseDispatch:
                 "lane DEFAULT_DT 300")
 
     def test_graduated_matrix_lane_inherits_lane_dt(self):
-        # Graduated (3B-2): the translated config declares NO time section
-        # — the upstream lane's stability-verified DEFAULT_DT and duration
-        # apply by construction (the 2026-10-10 blowup class cannot recur
-        # via a stale template dt). duration/dt stay overridable.
+        # Graduated (3B-2/3B-3): translated configs declare NO time
+        # section — the upstream lane's stability-verified DEFAULT_DT and
+        # duration apply by construction (the 2026-10-10 blowup class
+        # cannot recur via a stale template dt). duration/dt stay
+        # overridable.
         from runners.run_experiment import load_template
-        for name in ("ocean/baroclinic_gyre", "3d_idealized/baroclinic_gyre"):
+        graduated = ("ocean/baroclinic_gyre", "ocean/acc_channel",
+                     "ocean/eady_instability", "ocean/geostrophic_adjustment",
+                     "ocean/lock_exchange", "ocean/overflow",
+                     "ocean/phillips_two_layer", "ocean/global_overturning",
+                     "ocean/barotropic_wave")
+        for name in graduated + ("3d_idealized/baroclinic_gyre",):
             cfg = load_template(name)
             assert "time" not in cfg, f"{name}: translated config must not declare time"
 
     def test_barotropic_matrix_lanes(self):
         # 2d barotropic templates ride the same matrix delegation as the
         # 3d_ocean lanes (mode barotropic_ocean is accepted by the
-        # dispatch since 2026-10-10 wave-1).
+        # dispatch since 2026-10-10 wave-1). barotropic_wave is graduated
+        # (3B-3): this is alias coverage on the translated config.
         from runners.run_experiment import load_template
         for tmpl in ("barotropic_wave", "barotropic_double_gyre"):
             cfg = load_template(f"2d/{tmpl}")
@@ -1456,9 +1500,9 @@ class TestOceanTestMatrix:
     def test_build_test_matrix_all_categories(self):
         from runners.run_ocean_test_matrix import build_test_matrix
         cases = build_test_matrix()
-        # 14 runners-owned ocean templates (baroclinic_gyre graduated to
-        # the upstream library, Phase 3B-2 — no longer in the fixed list).
-        assert len(cases) >= 14
+        # 7 runners-owned ocean templates remain in the fixed lists after
+        # the 3B-3 batch (9 graduated to the upstream library total).
+        assert len(cases) >= 7
 
     def test_build_test_matrix_grid_filter(self):
         from runners.run_ocean_test_matrix import build_test_matrix
@@ -1529,15 +1573,21 @@ class TestDataCatalog:
             "2d/barotropic_gyre",
             "2d/stommel_gyre_tracer",
             "2d/inertia_gravity_wave",
-            "ocean/baroclinic_gyre",   # graduated (3B-2) — requires via adapter
-            "3d_idealized/lock_exchange",
-            "3d_idealized/overflow",
-            "3d_idealized/eady_instability",
-            "3d_idealized/phillips_two_layer",
-            "3d_idealized/acc_channel",
+            # graduated (3B-2/3B-3) — requires via the adapter:
+            "ocean/baroclinic_gyre",
+            "ocean/acc_channel",
+            "ocean/eady_instability",
+            "ocean/geostrophic_adjustment",
+            "ocean/lock_exchange",
+            "ocean/overflow",
+            "ocean/phillips_two_layer",
+            "ocean/global_overturning",
+            "ocean/barotropic_wave",
+            # runners-owned:
             "3d_idealized/dino",
-            "3d_idealized/geostrophic_adjustment",
             "3d_idealized/isomip_plus",
+            "3d_idealized/rest_state_stratified_no_land",
+            "global_ocean/neverworld2_lite",
             "global_ocean/bench",
         ]
         from runners.run_experiment import load_template

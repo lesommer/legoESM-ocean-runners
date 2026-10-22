@@ -24,18 +24,11 @@ OCEAN_2D_TEMPLATES = [
 ]
 
 OCEAN_3D_IDEALIZED_TEMPLATES = [
-    "3d_idealized/lock_exchange",
-    "3d_idealized/overflow",
-    "3d_idealized/eady_instability",
-    "3d_idealized/phillips_two_layer",
-    "3d_idealized/acc_channel",
     "3d_idealized/dino",
-    "3d_idealized/geostrophic_adjustment",
     "3d_idealized/isomip_plus",
 ]
 
 OCEAN_GLOBAL_TEMPLATES = [
-    "global_ocean/global_overturning",
     "global_ocean/neverworld2_lite",
     "global_ocean/omip_global",
 ]

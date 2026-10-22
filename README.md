@@ -190,10 +190,10 @@ receipts and history live in
 [project_status.md](project_status.md)):
 
 - `1d/` — 5 templates: 5 run-tested
-- `2d/` — 5 templates: 2 run-tested, 3 structural
-- `3d_idealized/` — 9 templates: 8 run-tested, 1 structural
+- `2d/` — 4 templates: 1 run-tested, 3 structural
+- `3d_idealized/` — 3 templates: 2 run-tested, 1 structural
 - `coupled/` — 3 templates: 3 structural
-- `global_ocean/` — 9 templates: 2 run-tested, 3 smoke-tested, 4 structural
+- `global_ocean/` — 8 templates: 1 run-tested, 3 smoke-tested, 4 structural
 
 <!-- END status-summary -->
 
@@ -216,7 +216,7 @@ cd my_dino && bash run.sh
 
 ### Idealized (no data needed)
 
-`baroclinic_gyre` is a **graduated** template: it lives in the pinned legoESM template library (`config/templates/ocean/baroclinic_gyre.yaml`) and is resolved by its canonical name `ocean/baroclinic_gyre` (the pre-graduation name `3d_idealized/baroclinic_gyre` still resolves as a legacy alias).
+**Graduated templates** live in the pinned legoESM template library (`config/templates/ocean/<stem>.yaml`) and resolve by canonical name `ocean/<stem>` — pre-graduation names still resolve as legacy aliases. Graduated 2026-10-22: `baroclinic_gyre`, `acc_channel`, `eady_instability`, `geostrophic_adjustment`, `lock_exchange`, `overflow`, `phillips_two_layer`, `global_overturning`, `barotropic_wave`; also usable directly: `eady_uniform`, `held_larichev`, `munk_gyre`, `global_barotropic_wind`. The upstream lane's validated defaults apply (dt/duration/resolution); overrides are the curated layer.
 
 ```bash
 # 1. Check data availability (idealized experiments need no data)

@@ -55,7 +55,17 @@ _MATRIX_CASES = {
 
 # Pre-graduation runners name -> canonical upstream name.
 LEGACY_TEMPLATE_ALIASES = {
+    # 3B-2 pilot
     "3d_idealized/baroclinic_gyre": "ocean/baroclinic_gyre",
+    # 3B-3 batch (run-tested matrix lanes)
+    "3d_idealized/acc_channel": "ocean/acc_channel",
+    "3d_idealized/eady_instability": "ocean/eady_instability",
+    "3d_idealized/geostrophic_adjustment": "ocean/geostrophic_adjustment",
+    "3d_idealized/lock_exchange": "ocean/lock_exchange",
+    "3d_idealized/overflow": "ocean/overflow",
+    "3d_idealized/phillips_two_layer": "ocean/phillips_two_layer",
+    "global_ocean/global_overturning": "ocean/global_overturning",
+    "2d/barotropic_wave": "ocean/barotropic_wave",
 }
 
 # Canonical upstream template -> the runners run mode its lane dispatches.

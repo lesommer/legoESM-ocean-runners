@@ -75,17 +75,9 @@ TRIPOLE_OMIP_LANE_RECIPE = "omip_nemo_match_tripole_v1"
 # out of this map — drift becomes impossible once the upstream file is the
 # single source of truth.
 UPSTREAM_COUNTERPARTS = {
-    "2d/barotropic_wave": "ocean/barotropic_wave",
     "2d/inertia_gravity_wave": "ocean/inertia_gravity_wave",
     "2d/stommel_gyre_tracer": "ocean/stommel_gyre_tracer",
-    "3d_idealized/acc_channel": "ocean/acc_channel",
-    "3d_idealized/eady_instability": "ocean/eady_instability",
-    "3d_idealized/geostrophic_adjustment": "ocean/geostrophic_adjustment",
-    "3d_idealized/lock_exchange": "ocean/lock_exchange",
-    "3d_idealized/overflow": "ocean/overflow",
-    "3d_idealized/phillips_two_layer": "ocean/phillips_two_layer",
     "global_ocean/bench": "ocean/bench",
-    "global_ocean/global_overturning": "ocean/global_overturning",
 }
 
 # Grids the runners lane accepts for counterpart cases that are NOT in the
