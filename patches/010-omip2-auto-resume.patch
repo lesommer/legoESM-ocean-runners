@@ -1,0 +1,181 @@
+diff --git a/scripts/run/ocean_long_runs/run_omip2.py b/scripts/run/ocean_long_runs/run_omip2.py
+index 023441978f..535a3ff684 100644
+--- a/scripts/run/ocean_long_runs/run_omip2.py
++++ b/scripts/run/ocean_long_runs/run_omip2.py
+@@ -31,7 +31,10 @@ Usage::
+         --output results/ocean_long_runs/omip2_lat1deg
+ 
+ The driver assumes either a fresh start or a ``--restart-from``
+-.npz produced by an earlier invocation of the same driver.
++.npz produced by an earlier invocation of the same driver.  Without
++``--restart-from`` it auto-resumes from the latest ``restart_year_*.npz``
++already in ``--output`` (walltime-chunked production: each segment
++continues the forcing sequence at the resumed year).
+ 
+ The Tsujino 2020 water cycle (P - E) is applied by default; pass
+ ``--freshwater off`` to restore the legacy momentum+heat-only behavior.
+@@ -42,6 +45,7 @@ from __future__ import annotations
+ import argparse
+ import json
+ import os
++import re
+ import sys
+ import time
+ from dataclasses import asdict
+@@ -154,6 +158,23 @@ def step_with_omip2_forcing(model, state, *, forcing, idx_t, grid,
+     return model.step(state, dt, surface_forcing=sf)
+ 
+ 
++def find_latest_restart(output_dir):
++    """Latest ``restart_year_*.npz`` in ``output_dir`` as (path, year).
++
++    The year comes from the filename (the driver writes one restart per
++    model year, ``restart_year_%04d.npz``), so a walltime-chunked run can
++    pick up where the previous segment stopped.
++    """
++    best = None
++    for p in Path(output_dir).glob("restart_year_*.npz"):
++        m = re.search(r"restart_year_(\d+)\.npz$", p.name)
++        if m is not None:
++            year = int(m.group(1))
++            if best is None or year > best[1]:
++                best = (p, year)
++    return best
++
++
+ def main() -> int:
+     p = argparse.ArgumentParser(description=__doc__)
+     p.add_argument("--grid", choices=["latlon", "mpas"], default="latlon")
+@@ -163,7 +184,11 @@ def main() -> int:
+     p.add_argument("--smoke", action="store_true",
+                    help="Run a single model day to exercise code paths.")
+     p.add_argument("--output", type=Path, required=True)
+-    p.add_argument("--restart-from", type=Path, default=None)
++    p.add_argument("--restart-from", type=Path, default=None,
++                   help="Explicit warm-start state .npz (legacy semantics: "
++                        "the loop restarts at year 1). Without it the run "
++                        "auto-resumes from the latest restart_year_*.npz "
++                        "already in --output (skipped under --smoke).")
+     p.add_argument("--jra55-cache", type=Path, default=None,
+                    help="JRA55-do cache: the prepare_omip_forcing.py store or "
+                         "its directory. Missing -> error unless "
+@@ -193,9 +218,21 @@ def main() -> int:
+     )
+     from legoesm.ocean.forcing import load_jra55_do
+ 
+-    if args.restart_from is not None:
+-        print(f"==> Loading restart from {args.restart_from}")
+-        state = _restart.load_restart(args.restart_from, state)
++    # Auto-resume: an explicit --restart-from wins (legacy warm-start
++    # semantics: the loop restarts at year 1); otherwise continue from the
++    # latest restart_year_*.npz already in --output so a walltime-chunked
++    # production run picks up where the previous segment stopped.
++    resume_path = args.restart_from
++    start_year = 0
++    if resume_path is None and not args.smoke:
++        found = find_latest_restart(args.output)
++        if found is not None:
++            resume_path, start_year = found
++    if resume_path is not None:
++        print(f"==> Loading restart from {resume_path}")
++        state = _restart.load_restart(resume_path, state)
++        if start_year:
++            print(f"   Auto-resume: continuing at year {start_year + 1}")
+ 
+     # Initial diagnostics baseline.
+     rpe0 = compute_rpe(state, z_coord, grid_type=args.grid, grid=grid)
+@@ -212,7 +249,15 @@ def main() -> int:
+ 
+     wall_t0 = time.time()
+     apply_freshwater = args.freshwater == "on"
+-    for y in range(n_years):
++    # On a resumed run, the prior segment's yearly rows keep the drift
++    # chain continuous across the boundary (rpe0 recomputed here is
++    # segment-relative; the summary keeps the original rpe_initial).
++    prior_summary = {}
++    if start_year > 0 and (args.output / "summary.json").exists():
++        with open(args.output / "summary.json") as f:
++            prior_summary = json.load(f)
++        yearly_diag = list(prior_summary.get("yearly", []))
++    for y in range(start_year, n_years):
+         print(f"==> Year {y + 1}/{n_years} ({steps_per_year} steps)")
+         forcing = load_jra55_do(
+             year=(2000 + y) if not args.smoke else 0,
+@@ -237,9 +282,9 @@ def main() -> int:
+         tb_y = compute_tracer_budget(state, z_coord,
+                                       grid_type=args.grid, grid=grid)
+         delta_t_s = float(steps_per_year * dt)
++        prev_rpe = yearly_diag[-1]["rpe"] if yearly_diag else rpe0
+         rpe_flux = rpe_drift_rate_per_m2(
+-            rpe0 if y == 0 else yearly_diag[-1]["rpe"], rpe_y,
+-            delta_t_s, eb0.area_total,
++            prev_rpe, rpe_y, delta_t_s, eb0.area_total,
+         )
+         row = {
+             "year": y + 1,
+@@ -267,8 +312,13 @@ def main() -> int:
+         "smoke": args.smoke,
+         "freshwater": apply_freshwater,
+         "wall_seconds": wall_s,
+-        "rpe_initial": rpe0,
++        "wall_seconds_cumulative": (
++            float(prior_summary.get(
++                "wall_seconds_cumulative",
++                prior_summary.get("wall_seconds", 0.0))) + wall_s),
++        "rpe_initial": prior_summary.get("rpe_initial", rpe0),
+         "area_total_m2": eb0.area_total,
++        "resumed_from_year": start_year,
+         "yearly": yearly_diag,
+     }
+     (args.output / "summary.json").write_text(json.dumps(summary, indent=2))
+diff --git a/tests/unit/test_ocean_long_run_drivers_forcing.py b/tests/unit/test_ocean_long_run_drivers_forcing.py
+index af4aad8c54..31958e7769 100644
+--- a/tests/unit/test_ocean_long_run_drivers_forcing.py
++++ b/tests/unit/test_ocean_long_run_drivers_forcing.py
+@@ -11,6 +11,7 @@ nothing else is switched on.
+ from __future__ import annotations
+ 
+ import importlib.util
++import json
+ import os
+ import sys
+ from pathlib import Path
+@@ -347,3 +348,38 @@ def test_centennial_driver_orders_flux_edits_then_step(tmp_path, monkeypatch):
+     steps = [x for x in log if x in per_step]
+     assert len(steps) >= len(per_step) and len(steps) % len(per_step) == 0, steps
+     assert steps == per_step * (len(steps) // len(per_step)), steps
++
++
++def test_find_latest_restart_parses_year_numbering(tmp_path):
++    """``find_latest_restart`` returns the highest-numbered yearly restart."""
++    m = _omip2()
++    assert m.find_latest_restart(tmp_path) is None
++    for name in ("restart_year_0001.npz", "restart_year_0012.npz",
++                 "restart_year_0007.npz"):
++        (tmp_path / name).touch()
++    path, year = m.find_latest_restart(tmp_path)
++    assert year == 12 and path.name == "restart_year_0012.npz"
++
++
++def test_omip2_auto_resume_continues_year_numbering(tmp_path, monkeypatch):
++    """A second segment into the same --output auto-resumes from the latest
++    yearly restart: the year counter, the forcing year and the summary's
++    yearly chain continue (walltime-chunked 30-yr production; dt = 1 yr per
++    step keeps each segment at one step on the tiny grid)."""
++    m = _omip2()
++    argv = ["run_omip2.py", "--dt", "31536000", "--grid", "latlon",
++            "--resolution", "9x18", "--allow-synthetic"]
++    monkeypatch.setattr(sys, "argv", argv + ["--years", "1",
++                                             "--output", str(tmp_path)])
++    assert m.main() == 0
++    first = json.loads((tmp_path / "summary.json").read_text())
++    assert first["resumed_from_year"] == 0 and len(first["yearly"]) == 1
++
++    monkeypatch.setattr(sys, "argv", argv + ["--years", "3",
++                                             "--output", str(tmp_path)])
++    assert m.main() == 0
++    second = json.loads((tmp_path / "summary.json").read_text())
++    assert second["resumed_from_year"] == 1
++    assert [row["year"] for row in second["yearly"]] == [1, 2, 3]
++    assert (tmp_path / "restart_year_0003.npz").exists()
++    assert second["wall_seconds_cumulative"] >= second["wall_seconds"]

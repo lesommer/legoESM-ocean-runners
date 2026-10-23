@@ -1,0 +1,39 @@
+diff --git a/scripts/matrix/ocean_test_matrix/setup.py b/scripts/matrix/ocean_test_matrix/setup.py
+index 9dccdf10c8..e1bba8bc7f 100644
+--- a/scripts/matrix/ocean_test_matrix/setup.py
++++ b/scripts/matrix/ocean_test_matrix/setup.py
+@@ -220,6 +220,12 @@ def _create_ocean_setup(tc, nlev: int | None = None,
+                 kw["A_h"] = A_h
+             if A_v is not None:
+                 kw["A_v"] = A_v
++            if bottom_drag_r is not None:
++                # Forward like the cube/mpas branches do: run_omip2 and
++                # run_bryan_thc pass bottom_drag_r=1e-3 to balance the wind
++                # input, and the monolithic matrix runner always forwarded it
++                # on lat-lon -- the modular path was the silent-drop outlier.
++                kw["bottom_drag_r"] = bottom_drag_r
+             cfg = LatLonCGridOceanConfig.from_flat(**kw)
+         model = LatLonCGridOceanModel(grid, z_coord, cfg)
+         coord_kind = "latlon"
+diff --git a/tests/unit/test_ocean_long_run_drivers_forcing.py b/tests/unit/test_ocean_long_run_drivers_forcing.py
+index 3850729669..5e1b6eb690 100644
+--- a/tests/unit/test_ocean_long_run_drivers_forcing.py
++++ b/tests/unit/test_ocean_long_run_drivers_forcing.py
+@@ -131,6 +131,17 @@ def test_driver_step_heat_matches_surface_flux(grid_type, res):
+     assert gained == pytest.approx(expected, rel=5e-3)
+ 
+ 
++def test_latlon_bottom_drag_is_forwarded():
++    """run_omip2 / run_bryan_thc pass ``bottom_drag_r=1e-3`` (wind-input
++    balance); the modular latlon setup must forward it like the mpas branch
++    and the monolithic runner always did — a silent drop leaves the 30-yr
++    production lane drag-free."""
++    m = _omip2()
++    state, grid, z, model = m._build_state("latlon", "18x36", nlev=6,
++                                           scripts_dir=_MATRIX)
++    assert float(model.config.bottom_drag.bottom_drag_r) == 1.0e-3
++
++
+ def test_mpas_without_physics_ignores_surface_forcing():
+     """Why the driver needs ``external_surface_forcing_physics``: the plain
+     matrix MPAS model accepts ``surface_forcing`` and drops it."""
