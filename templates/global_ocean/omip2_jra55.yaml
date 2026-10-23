@@ -1,0 +1,59 @@
+experiment:
+  name: omip2_jra55
+  mode: 3d_ocean_realistic
+  description: "OMIP-2 30-year production run (Tsujino et al. 2020 protocol): JRA55-do interannual forcing through Large & Yeager 2009 bulk fluxes applied in-step, on the global 1-deg lat-lon C-grid (or MPAS icoN via grid.type: mpas). Diagnostics: yearly RPE/energy/tracer budgets + per-year restarts; AMOC/ACC gates offline via postprocess_climate.py."
+
+requires:
+  - jra55_do_ryf
+
+requires_patches:
+  - 008-omip2-latlon-bottom-drag.patch
+  - 009-omip2-freshwater.patch
+  - 010-omip2-auto-resume.patch
+
+grid:
+  type: latlon
+  resolution: 180x360
+  # nlev 15 / H_max 5500 m are hardcoded upstream (run_omip2._build_state)
+  # and are NOT forwarded; postprocess_climate.py defaults match them.
+
+ocean:
+  # NO ocean.recipe: the lane assembles through the matrix factory
+  # (TestCase("omip2") -> _create_ocean_setup) with the L&Y09 bulk-flux
+  # identity; no recipe_map/DINO card names it, and recipe names are
+  # fidelity claims — declaring one is a validation error.
+  case: omip2
+
+forcing:
+  # synthetic: true -> --allow-synthetic (smoke/CI only; the driver fails
+  # loudly on a missing cache otherwise).
+  synthetic: false
+  # freshwater: on = the Tsujino 2020 water cycle (P - E; patch 009 makes
+  # it the driver default). off = legacy momentum+heat-only behavior.
+  freshwater: on
+  # jra55_cache: override the staged cache (default = the catalog's
+  # jra55_do_ryf builder store under $LEGOESM_DATA_DIR: the
+  # prepare_omip_forcing.py 1958-2018 1-deg noleap zarr; the driver cycles
+  # forcing years 2000-2029 back into the cache window).
+
+run:
+  # smoke: true -> --smoke (1-day code-path exercise; --allow-synthetic is
+  # forwarded automatically since forcing year 0 exists in no cache).
+  smoke: false
+  # restart_from: explicit warm-start .npz (legacy semantics: the loop
+  # restarts at year 1). Unset = auto-resume from the latest
+  # restart_year_*.npz in the output dir (patch 010) — walltime-chunked
+  # production re-runs the same experiment dir per segment.
+  # jax_platforms: forwarded to the subprocess env verbatim; unset = ""
+  # (jax default backend pick — neutralizes the driver's
+  # JAX_PLATFORMS=cpu setdefault so GPU machines are not pinned to CPU;
+  # set "cpu" to force CPU).
+  # extra_args: verbatim passthrough appended after all mapped flags
+  # ({data_root} token substituted).
+
+time:
+  duration_days: 10950   # 30 model years — the driver runs whole years
+  dt_seconds: 1800
+
+output:
+  path: results/omip2

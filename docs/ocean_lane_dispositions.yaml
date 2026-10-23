@@ -341,6 +341,9 @@ lanes:
   script:scripts/run/run_omip.py:
     status: backlog
     note: "Tier 2 (issue #10): wires the runners omip_global/omip_jra55/omip_cubed_sphere init-only templates; GRID_TYPES = cubed_sphere, latlon, mpas, spectral, tripole"
+  script:scripts/run/ocean_long_runs/run_omip2.py:
+    status: delegation
+    note: "OMIP-2 30-yr production lane (Tsujino 2020): _run_omip2 delegation, template global_ocean/omip2_jra55, runners patches 008-010 (latlon bottom drag, P-E freshwater, auto-resume); exact entry overrides the declined ocean_long_runs/ prefix for this driver"
   script:scripts/run/run_omip2_io_smoke.py:
     status: declined
     reason: "IO-smoke infra deck (issue #10 declined list)"

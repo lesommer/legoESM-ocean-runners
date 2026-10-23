@@ -188,21 +188,26 @@ files:
     citation: Hirahara et al. 2014, J. Oceanogr., doi:10.1007/s10872-014-0237-9 (COBE2)
     license: public domain (JMA product; free redistribution)
   jra55_do_ryf:
-    description: JRA55-do Repeat Year Forcing, pre-processed Zarr cache
+    description: JRA55-do v1.4 OMIP-2 forcing cache (1958-2018 interannual, 1-deg noleap, 3-hourly) — the prepare_omip_forcing.py builder store consumed by run_omip2.py --jra55-cache (forcing years 2000-2029 cycle back into the cache window)
     path: jra55_ryf_cache/jra55_do_v14_omip2_1deg_noleap.zarr/
     access: derived
     build_from:
     - jra55_iaf_raw
-    build_script: scripts/prepare_omip_forcing.py
-    build_instructions: '1. Fetch raw JRA55-do IAF data (see jra55_iaf_raw)
+    build_script: ../legoESM/scripts/data/prepare_omip_forcing.py
+    build_instructions: '1. Fetch raw JRA55-do v1.4+ "corrected" data (see
+      jra55_iaf_raw)
 
-      2. Run: python scripts/prepare_omip_forcing.py --input-dir DATA_ROOT/jra55_iaf/ --output DATA_ROOT/jra55_ryf_cache/
+      2. Run from the legoESM checkout: python scripts/data/prepare_omip_forcing.py
+      --source <raw-zarr> --years 1958 2018 --target-resolution-deg 1.0
+      --cache-dir DATA_ROOT/jra55_ryf_cache/
 
-      3. Alternatively, download pre-built RYF cache from institutional storage
+      3. ~30 GB; the store lands as jra55_do_v14_omip2_1deg_noleap.zarr
+      (conservatively regridded to the target grid; the model grid need not
+      match)
 
       '
     sha256: pending
-    size_mb: 5000
+    size_mb: 30000
     format: Zarr
     variables:
     - uas

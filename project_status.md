@@ -21,7 +21,7 @@ Quick answer to "will `run_experiment run` execute my template?": find the templ
 | `ocean_scm` | Working | **Working** | Native run path; see the `ocean_scm` subsection below. |
 | `3d_ocean` | Working | **Working: `dino`, `bench` + matrix-lane cases (11 runners-owned or graduated)** | Three delegation lanes; see the `3d_ocean` subsection below. Other cases: init-only. |
 | `barotropic_ocean` | Working | **Working: `barotropic_double_gyre` (runners-owned), `barotropic_wave` (graduated)** | Matrix delegation like the 3D lanes; see the `barotropic_ocean` subsection below. Other templates: init-only. |
-| `3d_ocean_realistic` | Working | **Working: tripolar grids** | Script delegation to `run_omip_core2.py`; see the `3d_ocean_realistic` subsection below. Other grid types: init-only. |
+| `3d_ocean_realistic` | Working | **Working: tripolar grids + `omip2` (latlon/mpas)** | Tripole: script delegation to `run_omip_core2.py`. OMIP-2 30-yr: script delegation to `ocean_long_runs/run_omip2.py` (Tsujino 2020; patches 008-010). See the `3d_ocean_realistic` subsection below. Other grid types: init-only. |
 | `coupled` | Working | **Implemented, untested** | Constructs `CoupledESMDriver`; no end-to-end run recorded. See the `coupled` subsection below. |
 
 ### Recipe identity validation (ocean.recipe)
@@ -81,6 +81,14 @@ Script delegation: the runner calls legoESM `scripts/run/run_omip_core2.py` (ups
 
 **Caveat — siconc hardcode**: at this pin `--sss-restore` implies loading NEMO siconc from an upstream-hardcoded path (`_SICONC_NC`) that does not exist off upstream's machine; disable via `physics.sss_restoring.enabled: false` until an env-override patch lands. (The sibling hardcoded inputs — runoff, chl, domain_cfg — live in the same upstream repo directory and resolve only where staged.)
 
+### OMIP-2 30-yr production lane (ocean_long_runs/run_omip2.py)
+
+Added 2026-10-23 (issue #10 Tier 2). `_run_omip2` delegates to legoESM `scripts/run/ocean_long_runs/run_omip2.py` (Tsujino et al. 2020 protocol: JRA55-do interannual forcing through L&Y09 bulk fluxes applied in-step, 365-day noleap model years, 30-yr protocol window 2000-2029 cycling back into the 1958-2018 cache). Dispatch: mode `3d_ocean_realistic` + `ocean.case: omip2` + grid `latlon`/`mpas`. The upstream CLI is exactly 9 flags — the runner maps `grid.type`/`grid.resolution`, `time.duration_days` (must be a multiple of 365; the driver runs whole years; `run.smoke: true` maps to `--smoke`, which auto-forwards `--allow-synthetic` since forcing year 0 exists in no cache window), `time.dt_seconds`, `forcing.freshwater: off` → `--freshwater off`, `forcing.jra55_cache` (default: the catalog's `jra55_do_ryf` builder store under the data root), `run.restart_from`, and the verbatim `run.extra_args` passthrough. nlev 15 / H_max 5500 m are hardcoded upstream (documented, not forwarded).
+
+Three runners patches make the lane production-credible (all upstreamable): `008-omip2-latlon-bottom-drag.patch` (the modular latlon setup silently dropped the `bottom_drag_r=1e-3` the driver passes for wind-input balance — the cube/mpas branches and the monolithic runner always forwarded it; `run_bryan_thc` had the same drop), `009-omip2-freshwater.patch` (`--freshwater {on,off}`, default on: `compute_omip2_freshwater_forcing` routes P−E through the in-core `model.step(freshwater=...)` channel from the beginning-of-step state; the shared helper's default stays False so the declined research decks keep their behavior), `010-omip2-auto-resume.patch` (without `--restart-from`, the driver continues from the latest `restart_year_*.npz` in the output dir — year counter, forcing year and summary chain all continue; this is what makes a walltime-chunked 30-yr run possible under scheduler limits).
+
+**Env**: the runner exports `JAX_ENABLE_X64=1` and neutralizes `JAX_PLATFORMS` to `""` unless already set or `run.jax_platforms` is given — the driver's import-time `setdefault("JAX_PLATFORMS", "cpu")` would otherwise pin GPU machines to CPU. **Provenance**: this lane writes no `run_manifest.json` (yearly `restart_year_*.npz` + `summary.json` only); `experiment.tag` (with the per-patch digests) is the provenance record, and AMOC/ACC acceptance gates are offline via `postprocess_climate.py --grid latlon --resolution 180x360` (defaults match the hardcoded nlev/H_max; AMOC 15±3 Sv, ACC 130±15 Sv).
+
 ### coupled
 
 `_run_coupled` constructs `CoupledESMDriver` from the `coupled.preset`, but no end-to-end run has been recorded. All three coupled templates are `structural`.
@@ -121,6 +129,7 @@ vice versa.
 | `global_ocean/` | `omip_global` | structural | — |
 | `global_ocean/` | `omip_cubed_sphere` | structural | — |
 | `global_ocean/` | `omip_tripole` | smoke-tested | 2026-10-07 `macbook_2026-10-07_tripole-repin-5day`: 720 steps, no NaN, 2.85 s/step (M-series CPU, synthetic forcing; delegation verified at pin `c986cb989`). 2026-10-08 `bigfoot_2026-10-08_tripole-gpu-smoke` (V100): exit 0, 1.17 steps/s ≈ 3.3× CPU, diagnostics identical to the CPU run at print precision |
+| `global_ocean/` | `omip2_jra55` | smoke-tested | 2026-10-23 `macbook_2026-10-23_omip2-lane-smoke`, Mac CPU via `_run_omip2` delegation (lane wired 2026-10-23, issue #10 Tier 2): `--smoke` 180x360, 48 steps, 12.1 s wall, finite output, freshwater ON (P−E moves η integral −9.7e10 vs −1.1e6 off), auto-resume unit-pinned; run in the untagged window at runner sha `a17b688` (tag lands with the wiring commit) |
 | `global_ocean/` | `omip_faithful_card` | structural | Init works anywhere; execution requires staged data on the target machine (eORCA1 mesh mask, WOCE ICs, CORE2 forcing — see the NEMO-faithful card section); card flags pass through via `run.extra_args`. No end-to-end run recorded yet |
 | `global_ocean/` | `omip_core2_thin` | smoke-tested | Upstream receipt 2026-08-18 (one RTX 8000): pure-defaults `run_omip_core2.py --years 4 --dt 600`, ~9.5 SYPD (replication campaign documented in ledger `jeanzay_2026-10-09_orca1-thin-year4`). Mac CPU 0.5-day startup smoke 2026-10-09 at pin `c986cb989` (synthetic forcing fallback): grid (332,362), 72 steps finite, 1.90 steps/s. Real `_MOD` forcing resolves on machines with the staged cache (jean-zay). `initial_conditions.type: rest` = no IC flags (documented lane) |
 

@@ -1797,6 +1797,185 @@ class TestBenchLane:
         assert cmd[-2:] == ["--n-lon", "720"]
 
 
+class TestOmip2Lane:
+    """The OMIP-2 30-yr production delegation lane (global_ocean/omip2_jra55
+    -> legoESM scripts/run/ocean_long_runs/run_omip2.py, Tsujino 2020)."""
+
+    def test_omip2_template_resolves_with_lane_markers(self):
+        from runners.run_experiment import load_template
+        cfg = load_template("global_ocean/omip2_jra55")
+        assert cfg["experiment"]["mode"] == "3d_ocean_realistic"
+        assert cfg["ocean"]["case"] == "omip2"
+        # No recipe_map/DINO card names this lane's identity (matrix
+        # factory + L&Y09 bulk fluxes) — declaring one must be impossible.
+        assert "recipe" not in cfg["ocean"]
+        assert cfg["grid"]["type"] == "latlon"
+        assert cfg["grid"]["resolution"] == "180x360"
+        assert cfg["time"]["duration_days"] == 10950   # 30 model years
+        assert cfg["time"]["dt_seconds"] == 1800       # the lane default
+        assert cfg["requires"] == ["jra55_do_ryf"]
+        for stem in ("008-omip2-latlon-bottom-drag.patch",
+                     "009-omip2-freshwater.patch",
+                     "010-omip2-auto-resume.patch"):
+            assert stem in cfg["requires_patches"]
+
+    def test_omip2_command_defaults(self, tmp_path, monkeypatch):
+        from runners.run_experiment import _omip2_command, load_template
+        monkeypatch.setenv("LEGOESM_DATA_DIR", "/data")
+        cfg = load_template("global_ocean/omip2_jra55")
+        cmd = _omip2_command(cfg, "x.py", tmp_path)
+        joined = " ".join(cmd)
+        assert "--grid latlon" in joined
+        assert "--resolution 180x360" in joined
+        assert "--years 30" in joined
+        assert "--dt 1800 " in joined
+        assert "--smoke" not in joined
+        # freshwater on = the driver default (patch 009): not forwarded
+        assert "--freshwater" not in joined
+        assert "--jra55-cache" in joined
+        assert "jra55_do_v14_omip2_1deg_noleap.zarr" in joined
+        assert "--allow-synthetic" not in joined
+        # the output lands inside the experiment directory
+        assert str(tmp_path / "results" / "omip2") in joined
+
+    def test_omip2_smoke_overrides(self, tmp_path):
+        from runners.run_experiment import _omip2_command, load_template
+        cfg = load_template("global_ocean/omip2_jra55")
+        cfg = dict(cfg)
+        cfg["run"] = {**cfg["run"], "smoke": True}
+        cfg["forcing"] = {**cfg["forcing"], "synthetic": True}
+        cmd = _omip2_command(cfg, "x.py", tmp_path)
+        joined = " ".join(cmd)
+        assert "--smoke" in joined
+        # forcing year 0 exists in no cache window: --allow-synthetic is
+        # forwarded automatically and the cache path is not.
+        assert "--allow-synthetic" in joined
+        assert "--years" not in joined
+        assert "--jra55-cache" not in joined
+
+    def test_omip2_duration_gate(self, tmp_path):
+        import pytest
+        from runners.run_experiment import _omip2_command
+        cfg = {"grid": {"type": "latlon"}, "ocean": {"case": "omip2"},
+               "time": {"duration_days": 400}, "run": {}}
+        with pytest.raises(ValueError, match="multiple of 365"):
+            _omip2_command(cfg, "x.py", tmp_path)
+
+    def test_omip2_freshwater_off_forwarded(self, tmp_path):
+        from runners.run_experiment import _omip2_command, load_template
+        cfg = load_template("global_ocean/omip2_jra55")
+        cfg = dict(cfg)
+        cfg["forcing"] = {**cfg["forcing"], "freshwater": "off",
+                          "synthetic": True}
+        cmd = _omip2_command(cfg, "x.py", tmp_path)
+        assert "--freshwater off" in " ".join(cmd)
+
+    def test_omip2_mpas_grid(self, tmp_path, monkeypatch):
+        from runners.run_experiment import _omip2_command, load_template
+        monkeypatch.setenv("LEGOESM_DATA_DIR", "/data")
+        cfg = load_template("global_ocean/omip2_jra55")
+        cfg = dict(cfg)
+        cfg["grid"] = {**cfg["grid"], "type": "mpas", "resolution": "ico6"}
+        cmd = _omip2_command(cfg, "x.py", tmp_path)
+        joined = " ".join(cmd)
+        assert "--grid mpas" in joined
+        assert "--resolution ico6" in joined
+
+    def test_omip2_invalid_grid_raises(self, tmp_path):
+        import pytest
+        from runners.run_experiment import _omip2_command
+        cfg = {"grid": {"type": "tripole"}, "ocean": {"case": "omip2"},
+               "time": {}, "run": {}}
+        with pytest.raises(ValueError, match="latlon/mpas"):
+            _omip2_command(cfg, "x.py", tmp_path)
+
+    def test_omip2_restart_and_extra_args(self, tmp_path, monkeypatch):
+        from runners.run_experiment import _omip2_command, load_template
+        monkeypatch.setenv("LEGOESM_DATA_DIR", "/data")
+        cfg = load_template("global_ocean/omip2_jra55")
+        cfg = dict(cfg)
+        cfg["run"] = {**cfg["run"],
+                      "restart_from": "/scratch/seg1/restart_year_0005.npz",
+                      "extra_args": ["--allow-synthetic"]}
+        cmd = _omip2_command(cfg, "x.py", tmp_path)
+        joined = " ".join(cmd)
+        assert "--restart-from /scratch/seg1/restart_year_0005.npz" in joined
+        assert cmd[-1] == "--allow-synthetic"   # verbatim, last
+
+    def test_omip2_run_env_neutralizes_cpu_setdefault(self, monkeypatch,
+                                                      tmp_path):
+        import subprocess
+        import runners.run_experiment as R
+        seen = {}
+
+        class _FakeResult:
+            returncode = 0
+
+        def fake_run(cmd, env=None):
+            seen["env"] = env
+            return _FakeResult()
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        cfg = {"experiment": {"name": "x", "mode": "3d_ocean_realistic"},
+               "grid": {"type": "latlon"}, "ocean": {"case": "omip2"},
+               "time": {}, "run": {"smoke": True}, "forcing": {}}
+
+        monkeypatch.delenv("JAX_PLATFORMS", raising=False)
+        R._run_omip2(cfg, Path("/legoesm"), tmp_path / "config.yaml")
+        assert seen["env"]["JAX_PLATFORMS"] == ""
+        assert seen["env"]["JAX_ENABLE_X64"] == "1"
+
+        # explicit run.jax_platforms wins over the neutralization
+        cfg["run"]["jax_platforms"] = "cpu"
+        R._run_omip2(cfg, Path("/legoesm"), tmp_path / "config.yaml")
+        assert seen["env"]["JAX_PLATFORMS"] == "cpu"
+
+        # a pre-set environment is preserved untouched
+        cfg["run"].pop("jax_platforms")
+        monkeypatch.setenv("JAX_PLATFORMS", "gpu")
+        R._run_omip2(cfg, Path("/legoesm"), tmp_path / "config.yaml")
+        assert seen["env"]["JAX_PLATFORMS"] == "gpu"
+
+    def test_omip2_dispatch_routes_and_others_do_not(self, monkeypatch,
+                                                      tmp_path):
+        import types
+        import runners.run_experiment as R
+        calls = []
+        monkeypatch.setattr(R, "_run_omip2",
+                            lambda cfg, lp, cp=None: calls.append("omip2"))
+        monkeypatch.setattr(R, "_run_tripolar_omip",
+                            lambda cfg, lp, cp=None: calls.append("tripole"))
+        # stub the legoESM experiments registry (unmatched cases fall
+        # through to it for the informational print)
+        legoesm = types.ModuleType("legoesm")
+        ocean = types.ModuleType("legoesm.ocean")
+        experiments = types.ModuleType("legoesm.ocean.experiments")
+        experiments.AVAILABLE_EXPERIMENTS = {}
+        legoesm.ocean = ocean
+        ocean.experiments = experiments
+        monkeypatch.setitem(sys.modules, "legoesm", legoesm)
+        monkeypatch.setitem(sys.modules, "legoesm.ocean", ocean)
+        monkeypatch.setitem(sys.modules, "legoesm.ocean.experiments",
+                            experiments)
+        base = {"experiment": {"name": "x", "mode": "3d_ocean_realistic"},
+                "grid": {"type": "latlon", "resolution": "180x360"},
+                "time": {"duration_days": 10950, "dt_seconds": 1800}}
+        R._run_ocean({**base, "ocean": {"case": "omip2"}}, Path("/legoesm"),
+                     tmp_path / "config.yaml")
+        assert calls == ["omip2"]
+        # omip_global (no ocean.case) stays init-only:
+        calls.clear()
+        R._run_ocean({**base, "ocean": {}}, Path("/legoesm"),
+                     tmp_path / "config.yaml")
+        assert calls == []
+        # the mpas grid routes to the same lane:
+        calls.clear()
+        R._run_ocean({**base, "ocean": {"case": "omip2"},
+                      "grid": {**base["grid"], "type": "mpas"}},
+                     Path("/legoesm"), tmp_path / "config.yaml")
+        assert calls == ["omip2"]
+
+
 class TestOceanTestMatrix:
     """Test the ocean test matrix builder."""
 

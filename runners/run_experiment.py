@@ -1042,9 +1042,20 @@ def _run_ocean(config: dict, legoesm_path: Path, config_path: Path | None = None
         return
 
     grid_type = config.get("grid", {}).get("type", "latlon")
+    case = config.get("ocean", {}).get("case")
 
     if mode == "3d_ocean_realistic" and grid_type == "tripole":
         _run_tripolar_omip(config, legoesm_path, config_path)
+        return
+
+    # OMIP-2 30-yr production lane (ocean.case: omip2; latlon + mpas grids):
+    # script delegation to legoESM scripts/run/ocean_long_runs/run_omip2.py
+    # (Tsujino 2020 protocol; runners patches 008-010). Other
+    # 3d_ocean_realistic templates (omip_global, omip_cubed_sphere — no
+    # ocean.case) stay init-only.
+    if (mode == "3d_ocean_realistic" and case == "omip2"
+            and grid_type in ("latlon", "mpas")):
+        _run_omip2(config, legoesm_path, config_path)
         return
 
     # 3D idealized case dispatch: case -> handler. Cases without a handler
@@ -1052,7 +1063,6 @@ def _run_ocean(config: dict, legoesm_path: Path, config_path: Path | None = None
     # barotropic_ocean matrix lanes (2d/) route through the same upstream
     # runner — the ocean test matrix executes them with the same 3D model
     # machinery.
-    case = config.get("ocean", {}).get("case")
     if mode == "3d_ocean" and case == "dino" and grid_type == "latlon":
         _run_dino(config, legoesm_path, config_path)
         return
@@ -1269,6 +1279,118 @@ def _run_tripolar_omip(config: dict, legoesm_path: Path, config_path: Path | Non
     result = subprocess.run(cmd, env=run_env, cwd=str(legoesm_path))
     if result.returncode != 0:
         raise RuntimeError(f"run_omip_core2.py exited with code {result.returncode}")
+
+
+def _omip2_command(cfg, script, out_dir):
+    """Build the run_omip2.py command line for the OMIP-2 30-yr lane.
+
+    The upstream CLI is exactly 9 flags (--grid/--resolution/--years/--smoke/
+    --output/--restart-from/--jra55-cache/--allow-synthetic/--dt, plus the
+    runners-patch-009 --freshwater switch); nlev 15, H_max 5500 m and the
+    matrix-factory physics are hardcoded upstream and stay there. The
+    driver runs whole 365-day noleap model years — sub-year durations have
+    no flag (use run.smoke for the 1-day code-path exercise).
+    """
+    grid_cfg = cfg.get("grid", {})
+    time_cfg = cfg.get("time", {})
+    forcing_cfg = cfg.get("forcing", {})
+    output_cfg = cfg.get("output", {})
+    run_cfg = cfg.get("run", {}) or {}
+
+    grid_type = grid_cfg.get("type", "latlon")
+    if grid_type not in ("latlon", "mpas"):
+        raise ValueError(
+            f"The OMIP-2 lane supports grid types latlon/mpas, not "
+            f"{grid_type!r} (run_omip2.py --grid choices)")
+
+    cmd = [
+        sys.executable, str(script),
+        "--grid", grid_type,
+        "--resolution", str(grid_cfg.get("resolution", "180x360")),
+        "--output", str(Path(out_dir) / output_cfg.get("path", "results/omip2")),
+    ]
+
+    smoke = bool(run_cfg.get("smoke", False))
+    if smoke:
+        cmd.append("--smoke")
+    else:
+        duration_days = float(time_cfg.get("duration_days", 10950))
+        years = duration_days / 365.0
+        if not years.is_integer():
+            raise ValueError(
+                "run_omip2 runs whole model years: time.duration_days must "
+                f"be a multiple of 365 (got {duration_days}); use "
+                "run.smoke: true for the 1-day code-path exercise")
+        cmd.extend(["--years", str(int(years))])
+
+    cmd.extend(["--dt", str(time_cfg.get("dt_seconds", 1800.0))])
+
+    # Tsujino 2020 water cycle: the driver default is on (patch 009);
+    # 'off' restores the legacy momentum+heat-only behavior.
+    if str(forcing_cfg.get("freshwater", "on")).lower() == "off":
+        cmd.extend(["--freshwater", "off"])
+
+    # --smoke exercises the code paths on forcing year 0, which exists in
+    # no cache window — upstream's documented usage pairs it with
+    # --allow-synthetic, so the runner forwards it automatically there
+    # (and on an explicit forcing.synthetic: true).
+    if smoke or forcing_cfg.get("synthetic", False):
+        cmd.append("--allow-synthetic")
+
+    # JRA55-do cache: the prepare_omip_forcing.py builder store under the
+    # data root (the catalog's jra55_do_ryf path), or a per-year directory
+    # / direct .zarr via forcing.jra55_cache. Under synthetic forcing the
+    # loader never reads a cache, so the path is not forwarded.
+    cache = forcing_cfg.get("jra55_cache")
+    if cache:
+        cmd.extend(["--jra55-cache", str(Path(cache).expanduser())])
+    elif not smoke and not forcing_cfg.get("synthetic", False):
+        cmd.extend(["--jra55-cache", str(
+            resolve_data_root() / "jra55_ryf_cache"
+            / "jra55_do_v14_omip2_1deg_noleap.zarr")])
+
+    restart_from = run_cfg.get("restart_from")
+    if restart_from:
+        cmd.extend(["--restart-from", str(Path(restart_from).expanduser())])
+
+    # Verbatim passthrough (cards): appended AFTER all mapped args, in
+    # order, with only the {data_root} token substituted — same
+    # convention as the tripole lane.
+    data_root = str(resolve_data_root())
+    for raw in (run_cfg.get("extra_args") or []):
+        cmd.append(str(raw).replace("{data_root}", data_root))
+    return cmd
+
+
+def _run_omip2(config, legoesm_path, config_path=None):
+    """Run the OMIP-2 30-year production lane via script delegation to
+    legoESM scripts/run/ocean_long_runs/run_omip2.py (Tsujino et al. 2020).
+
+    Env: JAX_ENABLE_X64=1 (the driver requires x64) and JAX_PLATFORMS
+    neutralized to "" unless already set or run.jax_platforms is given —
+    the driver does os.environ.setdefault("JAX_PLATFORMS", "cpu") at import
+    time, which would silently pin GPU machines to CPU. The driver writes
+    NO run_manifest.json (yearly restart_year_*.npz + summary.json only);
+    experiment.tag + the runner-tag env recording are the provenance.
+    """
+    script = (Path(legoesm_path) / "scripts" / "run" / "ocean_long_runs"
+              / "run_omip2.py")
+    out_dir = config_path.parent if config_path else Path.cwd()
+    cmd = _omip2_command(config, script, out_dir)
+
+    run_cfg = config.get("run", {}) or {}
+    run_env = {**os.environ, "JAX_ENABLE_X64": "1"}
+    if run_cfg.get("jax_platforms") is not None:
+        run_env["JAX_PLATFORMS"] = str(run_cfg["jax_platforms"])
+    elif "JAX_PLATFORMS" not in os.environ:
+        # Empty string = jax default backend pick (GPU where present);
+        # prevents the driver's cpu setdefault from pinning the fleet.
+        run_env["JAX_PLATFORMS"] = ""
+
+    print(f"Running OMIP-2 via: {' '.join(cmd)}")
+    result = subprocess.run(cmd, env=run_env)
+    if result.returncode != 0:
+        raise RuntimeError(f"run_omip2.py exited with code {result.returncode}")
 
 
 # DINO scheme selections: (template key, upstream flag, valid choices,
