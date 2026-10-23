@@ -194,20 +194,31 @@ files:
     build_from:
     - jra55_iaf_raw
     build_script: ../legoESM/scripts/data/prepare_omip_forcing.py
-    build_instructions: '1. Fetch raw JRA55-do v1.4+ "corrected" data (see
-      jra55_iaf_raw)
+    build_instructions: '1. Fetch raw JRA55-do data (see jra55_iaf_raw; v1.6.0
+      verified compatible — lon centres start at 0.0, handled by the
+      builder''s ghost-column wrap pad).
 
-      2. Run from the legoESM checkout: python scripts/data/prepare_omip_forcing.py
-      --source <raw-zarr> --years 1958 2018 --target-resolution-deg 1.0
-      --cache-dir DATA_ROOT/jra55_ryf_cache/
+      2. NOTE the upstream builder is eager and float64: it holds every
+      variable''s full cache-axis array in RAM, so a single-shot 61-yr
+      1-deg build needs ~920 GB. On ordinary nodes build PER YEAR:
+      python scripts/data/prepare_omip_forcing.py --source <raw_YYYY>.zarr
+      --years YYYY YYYY --ref-year YYYY --target-resolution-deg 1.0
+      --cache-dir <parts>/ --cache-filename yr_YYYY.zarr (~50 GB peak;
+      --ref-year YYYY is REQUIRED for single-year windows — records are
+      indexed absolutely from ref_year), then assemble the per-year blocks
+      into one 1958-based store (reference implementation:
+      my-legoESM-ocean-experiments/staging/build_omip2_cache.py).
 
-      3. ~30 GB; the store lands as jra55_do_v14_omip2_1deg_noleap.zarr
+      3. Size: ~460 GB f64 uncompressed, ~200 GB stored float32 (the
+      loader upcasts to f64; the ESGF source is f32-origin).
+
+      4. The store lands as jra55_do_v14_omip2_1deg_noleap.zarr
       (conservatively regridded to the target grid; the model grid need not
-      match)
+      match).
 
       '
     sha256: pending
-    size_mb: 30000
+    size_mb: 200000
     format: Zarr
     variables:
     - uas
@@ -232,11 +243,12 @@ files:
 
       3. Files will be stored under DATA_ROOT/jra55_iaf/atmos/ and DATA_ROOT/jra55_iaf/land/
 
-      4. Run scripts/prepare_omip_forcing.py to build the Zarr cache (see jra55_do_ryf)
+      4. Run scripts/prepare_omip_forcing.py to build the Zarr cache (see
+      jra55_do_ryf — build per year on ordinary nodes)
 
       '
     sha256: pending
-    size_mb: 50000
+    size_mb: 670000
     format: NetCDF4
     variables:
     - uas
