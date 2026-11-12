@@ -498,12 +498,13 @@ class TestConsistencyGate:
         # drift surfaces via validate_template on the real template file
         # (guards the rel-name lookup itself — a silent no-op here means
         # the gate matches nothing). inertia_gravity_wave: a remaining
-        # runners-owned template with an upstream counterpart
-        # (stommel_gyre_tracer graduated 2026-10-22 and left the map).
+        # runners-owned template with an upstream counterpart (the global
+        # case — upstream #2114 split it out of the retargeted channel
+        # stem; stommel_gyre_tracer graduated 2026-10-22 and left the map).
         import validate_templates as vt
         drifted = self._upstream_checkout(
             tmp_path / "drifted",
-            {"inertia_gravity_wave": self._counterpart_text(
+            {"inertia_gravity_wave_global": self._counterpart_text(
                 name="inertia_gravity_wave", grid="latlon_cgrid")})
         path = TEMPLATES_DIR / "2d" / "inertia_gravity_wave.yaml"
         errors = vt.validate_template(
@@ -512,7 +513,7 @@ class TestConsistencyGate:
 
         healthy = self._upstream_checkout(
             tmp_path / "healthy",
-            {"inertia_gravity_wave": self._counterpart_text(
+            {"inertia_gravity_wave_global": self._counterpart_text(
                 name="inertia_gravity_wave", grid="latlon")})
         errors = vt.validate_template(
             path, consistency_sources=self._sources(healthy))
@@ -782,6 +783,36 @@ TEST_MATRIX = _build_test_matrix()
             tmp_path, extra_scripts=("scripts/run/subdir/new_research.py",))
         errors, _ = self._coverage(checkout, self._healthy_lanes())
         assert errors == [], errors
+
+    def test_patch_created_script_needs_disposition(self, tmp_path):
+        # Planted: the patch chain CREATES an ocean driver script (e.g.
+        # 003-omip-core2-mpi.patch) — the reproducible surface is pin +
+        # patches, so a patch-added script is a lane the gate must see:
+        # un-dispositioned -> fail; dispositioned -> clean (and the entry
+        # is never stale on a clean checkout at pin-bump time). The gate
+        # derives patches/ from the dispositions file's repo root — the
+        # planted dispositions live under tmp_path, so the planted patch
+        # chain is tmp_path/patches/ (absent for the other planted tests,
+        # which isolates them from the real chain).
+        checkout = self._fixture_checkout(tmp_path)
+        patches_dir = tmp_path / "patches"
+        patches_dir.mkdir()
+        (patches_dir / "003-planted-mpi.patch").write_text(
+            "diff --git a/scripts/run/run_planted_mpi.py "
+            "b/scripts/run/run_planted_mpi.py\n"
+            "--- /dev/null\n"
+            "+++ b/scripts/run/run_planted_mpi.py\n")
+        errors, counts = self._coverage(checkout, self._healthy_lanes())
+        assert any(
+            "un-dispositioned ocean lane: "
+            "script:scripts/run/run_planted_mpi.py" in e
+            for e in errors), errors
+        lanes = dict(self._healthy_lanes())
+        lanes["script:scripts/run/run_planted_mpi.py"] = {
+            "status": "onboarded", "note": "patch-added at this pin"}
+        errors, counts = self._coverage(checkout, lanes)
+        assert errors == [], errors
+        assert counts["script"] == 5, counts
 
     def test_new_matrix_case_fails(self, tmp_path):
         # Planted violation: upstream adds a dispatch case (+ TestCase arm)
@@ -1301,9 +1332,11 @@ class TestOrchestratorProvenance:
     def test_env_vars_reach_pinned_legoesm_manifest(self, monkeypatch):
         """End-to-end channel proof against the pinned legoESM: the env vars
         run.sh exports land in [reproducibility] of build_run_manifest().
-        Skips where the pinned legoESM does not read them (patch 006 / PR
-        climate-federation/legoESM#2100) — e.g. CI Tier-2's unpatched pin
-        until the Phase 2B patch-gate fix applies the chain."""
+        Native upstream since the 2026-11 pin bump (former patch 006 / PR
+        climate-federation/legoESM#2100): LEGOESM_RUNNER_TAG is recorded as
+        [reproducibility].orchestrator_tag, and runner_tag is NEVER
+        overridden (replay specs and the one-run-per-directory check key
+        on it). Skips where the pinned legoESM predates the field."""
         pytest.importorskip("legoesm")
         from legoesm.driver.config import DycoreConfig, ExperimentConfig, GridConfig
         from legoesm.driver.restart import build_run_manifest
@@ -1319,18 +1352,21 @@ class TestOrchestratorProvenance:
         )
         monkeypatch.setenv(
             "LEGOESM_RUNNER_PATCHES",
-            "001-libm-lazy-load.patch, , 006-manifest-runner-tag.patch",
+            "004-runoff-file-override.patch, , 005-bt-slow-depth-eval-decision90.patch",
         )
         m = build_run_manifest(cfg, runner_tag="run_omip_core2")
-        got = m["reproducibility"]["runner_tag"]
-        if got == "run_omip_core2":
+        repro = m["reproducibility"]
+        if "orchestrator_tag" not in repro:
             pytest.skip(
                 "pinned legoESM does not read LEGOESM_RUNNER_TAG "
-                "(patch 006 not applied / PR climate-federation/legoESM#2100 not merged)"
+                "(predates the upstream merge of PR climate-federation/legoESM#2100)"
             )
-        assert got == "legoesm-294495454a29-20261021 template=3d_idealized/baroclinic_gyre"
-        assert m["reproducibility"]["patches"] == [
-            "001-libm-lazy-load.patch", "006-manifest-runner-tag.patch",
+        assert repro["runner_tag"] == "run_omip_core2"
+        assert repro["orchestrator_tag"] == (
+            "legoesm-294495454a29-20261021 template=3d_idealized/baroclinic_gyre"
+        )
+        assert repro["patches"] == [
+            "004-runoff-file-override.patch", "005-bt-slow-depth-eval-decision90.patch",
         ]
 
 

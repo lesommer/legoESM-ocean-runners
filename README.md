@@ -180,7 +180,7 @@ python scripts/init_experiment.py global_ocean/omip_jra55 \
 
 ## Reproduce an experiment
 
-Every run produces an `experiment.tag` (INI format) recording the full software environment, and every run-time `run_manifest.json` (written by legoESM) additionally carries the runners-layer identity (`[reproducibility] runner_tag` / `patches`, stamped via `LEGOESM_RUNNER_TAG` / `LEGOESM_RUNNER_PATCHES` from the generated `run.sh` — the manifest is the run-time superset of the tag):
+Every run produces an `experiment.tag` (INI format) recording the full software environment, and every run-time `run_manifest.json` (written by legoESM) additionally carries the runners-layer identity (`[reproducibility] orchestrator_tag` / `patches`, stamped via `LEGOESM_RUNNER_TAG` / `LEGOESM_RUNNER_PATCHES` from the generated `run.sh` — the manifest is the run-time superset of the tag):
 
 ```ini
 [legoESM]

@@ -57,18 +57,34 @@ elif [ "$1" = "--reverse" ]; then
     REVERSE=1
 elif [ "$1" = "--check" ]; then
     PATCHES=$(ls "$PATCHES_DIR"/*.patch 2>/dev/null | sort)
-    echo "Dry-run: checking patches apply cleanly..."
+    echo "Dry-run: checking the patch chain applies cleanly (in order)..."
+    # Patches stack (a later patch's context can be an earlier patch's
+    # output — e.g. 010 on 009), so a per-patch --check against the
+    # pristine tree false-positives on stacking. Probe the chain on a
+    # detached worktree at the checkout's current commit; the real
+    # checkout is untouched.
+    CHECK_WT=$(mktemp -d "${TMPDIR:-/tmp}/legoesm-patchcheck.XXXXXX")
+    if ! git -C "$LEGOESM_DIR" worktree add --detach "$CHECK_WT" HEAD >/dev/null 2>&1; then
+        rm -rf "$CHECK_WT"
+        echo "ERROR: could not create probe worktree in $LEGOESM_DIR"
+        exit 1
+    fi
+    FAILED=0
     for p in $PATCHES; do
         echo -n "  $(basename "$p"): "
-        if (cd "$LEGOESM_DIR" && git apply --check "$p" 2>/dev/null); then
+        if git -C "$CHECK_WT" apply "$p" >/dev/null 2>&1; then
             echo "OK"
         else
             echo "FAILED (would conflict)"
-            exit 1
+            FAILED=1
+            break
         fi
     done
-    echo "All patches apply cleanly."
-    exit 0
+    git -C "$LEGOESM_DIR" worktree remove --force "$CHECK_WT" >/dev/null 2>&1
+    if [ "$FAILED" = "0" ]; then
+        echo "All patches apply cleanly."
+    fi
+    exit $FAILED
 else
     PATCHES="$@"
     REVERSE=0

@@ -293,9 +293,14 @@ if git -C "$LEGOESM_DIR" worktree add --detach "$PATCH_WT" "$NEW_COMMIT" >/dev/n
     PATCH_FAILURES=0
     for patch_file in "$PATCHES_DIR"/*.patch; do
         [ -e "$patch_file" ] || continue
-        if ! git -C "$PATCH_WT" apply --check "$patch_file" 2>/dev/null; then
-            echo "  PATCH CONFLICT: $(basename "$patch_file") does not apply to $SHORT_COMMIT"
+        # Apply FOR REAL, in chain order: patches stack (a later patch's
+        # context can be an earlier patch's output — e.g. 010 on 009), and a
+        # per-patch --check against the pristine tree false-positives on
+        # stacking. The probe worktree is discarded below either way.
+        if ! git -C "$PATCH_WT" apply "$patch_file" >/dev/null 2>&1; then
+            echo "  PATCH CONFLICT: $(basename "$patch_file") does not apply to $SHORT_COMMIT (in chain order)"
             PATCH_FAILURES=$((PATCH_FAILURES + 1))
+            break
         fi
     done
     git -C "$LEGOESM_DIR" worktree remove --force "$PATCH_WT" >/dev/null 2>&1

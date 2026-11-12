@@ -79,7 +79,11 @@ TRIPOLE_OMIP_LANE_RECIPE = "omip_nemo_match_tripole_v1"
 # out of this map — drift becomes impossible once the upstream file is the
 # single source of truth.
 UPSTREAM_COUNTERPARTS = {
-    "2d/inertia_gravity_wave": "ocean/inertia_gravity_wave",
+    # Upstream #2114 retargeted ocean/inertia_gravity_wave to the f-plane
+    # CHANNEL case and moved the global case our 2d template describes to
+    # ocean/inertia_gravity_wave_global — the counterpart follows the case,
+    # not the stem.
+    "2d/inertia_gravity_wave": "ocean/inertia_gravity_wave_global",
     "global_ocean/bench": "ocean/bench",
 }
 
@@ -610,7 +614,40 @@ def _enumerate_upstream_templates(legoesm_path):
                   for p in tdir.rglob("*.yaml"))
 
 
-def enumerate_ocean_surface(legoesm_path):
+def _patch_surface_scripts(patches_dir=None):
+    """scripts/run/**.py paths touched by the runners patch chain.
+
+    The reproducible surface is pin + patches: a patch can CREATE an ocean
+    driver script (e.g. 003-omip-core2-mpi.patch) that a clean checkout does
+    not carry. Those scripts are lanes this repo consciously runs — they
+    join the script surface so their dispositions are REQUIRED at pin-bump
+    time (validation runs against the clean, fast-forwarded checkout) and
+    never go stale there.
+
+    ``patches_dir`` defaults to this repo's patches/; the lane gate derives
+    it from the dispositions file's repo root (the patch chain and the
+    dispositions belong to the same repo), so a dispositions file planted
+    in a test tmpdir isolates the surface from the real chain. A missing
+    patches dir enumerates nothing.
+    """
+    patches_dir = (Path(patches_dir) if patches_dir is not None
+                   else ROOT_DIR / "patches")
+    if not patches_dir.is_dir():
+        return []
+    found = []
+    for patch in sorted(patches_dir.glob("*.patch")):
+        for line in patch.read_text(errors="replace").splitlines():
+            if not line.startswith("diff --git a/"):
+                continue
+            for tok in line.split():
+                if tok.startswith(("a/", "b/")):
+                    rel = tok[2:]
+                    if rel.startswith("scripts/run/") and rel.endswith(".py"):
+                        found.append(rel)
+    return sorted(set(found))
+
+
+def enumerate_ocean_surface(legoesm_path, patches_dir=None):
     """Enumerate the pinned legoESM ocean lane surface (import-free).
 
     Returns {"matrix": {case: [grids...]}, "recipe": [...],
@@ -621,7 +658,9 @@ def enumerate_ocean_surface(legoesm_path):
     legoesm_path = Path(legoesm_path)
     surface = {"matrix": _enumerate_matrix_cases(legoesm_path)}
     surface.update(_enumerate_recipe_keys(legoesm_path))
-    surface["script"] = _enumerate_ocean_scripts(legoesm_path)
+    surface["script"] = sorted(
+        set(_enumerate_ocean_scripts(legoesm_path))
+        | set(_patch_surface_scripts(patches_dir)))
     surface["template"] = _enumerate_upstream_templates(legoesm_path)
     return surface
 
@@ -721,7 +760,14 @@ def check_ocean_lane_coverage(legoesm_path, dispositions_path=None,
 
     Returns (errors, counts); counts maps namespace -> enumerated size.
     """
-    surface = enumerate_ocean_surface(legoesm_path)
+    surface = enumerate_ocean_surface(
+        legoesm_path,
+        # The patch chain and the dispositions belong to the same repo:
+        # derive patches/ from the dispositions file's repo root (a
+        # planted dispositions file in a test tmpdir isolates the surface
+        # from the real chain; the real run gets the real chain).
+        patches_dir=(Path(dispositions_path) if dispositions_path is not None
+                     else DISPOSITIONS_FILE).parent.parent / "patches")
     lanes = load_lane_dispositions(dispositions_path)
     missing, drifted, stale = _lane_coverage_diffs(surface, lanes)
     errors = []

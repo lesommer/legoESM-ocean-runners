@@ -161,7 +161,9 @@ with canonical names `ocean/<stem>`. A legacy alias map
   curated (counterpart-gated): `bench` (the `run.preset/steps/warmup_steps`
   lanes have no upstream `setup:` equivalent — terminal state; upstream
   dialect-extension proposal: climate-federation/legoESM#2113),
-  `inertia_gravity_wave` (upstream gate defect). Upstream-only cases
+  `inertia_gravity_wave` (the global case — drift-gated against
+  `ocean/inertia_gravity_wave_global` since upstream #2114 retargeted the
+  channel stem; channel graduation is backlog). Upstream-only cases
   (`ocean/eady_uniform`, `ocean/held_larichev`, `ocean/munk_gyre`,
   `ocean/global_barotropic_wind`) resolve the same way without ever
   having had a runners YAML — receipts are upstream's business.
@@ -291,12 +293,12 @@ These tag files are intended to be archived alongside experiment output in a sep
 
 ### Manifest stamping (run-time layer identity)
 
-The run-time `run_manifest.json` (written by legoESM, a superset of `experiment.tag`) records the runners layer via the env-var channel (patch `006-manifest-runner-tag.patch` / upstream PR climate-federation/legoESM#2100): every generated `run.sh` computes and exports, at **run time**,
+The run-time `run_manifest.json` (written by legoESM, a superset of `experiment.tag`) records the runners layer via the env-var channel (native upstream since the 2026-11 pin bump — former patch `006-manifest-runner-tag.patch`, merged as upstream PR climate-federation/legoESM#2100): every generated `run.sh` computes and exports, at **run time**,
 
 - `LEGOESM_RUNNER_TAG` — `<legoesm-* tag | untagged@sha> template=<name>` (repo state at launch, not init: if the repo moved between init and launch, the manifest reports what actually ran)
 - `LEGOESM_RUNNER_PATCHES` — comma list of `patches/*.patch` names present at launch
 
-which `build_run_manifest()` lands in `[reproducibility].runner_tag` / `.patches`. Division of truth: `experiment.tag` = init-time snapshot; `run_manifest.json` = run-time truth. `tests/test_templates.py::TestOrchestratorProvenance` pins the whole channel, including a bash-execution probe of the generated snippet and an end-to-end env→manifest check against the pinned legoESM.
+which `build_run_manifest()` lands in `[reproducibility].orchestrator_tag` (upstream keeps `runner_tag` = the entry script's tag — replay specs and the one-run-per-directory check key on it) and appends to `[reproducibility].patches` (caller first, duplicates and blanks dropped). Division of truth: `experiment.tag` = init-time snapshot; `run_manifest.json` = run-time truth. `tests/test_templates.py::TestOrchestratorProvenance` pins the whole channel, including a bash-execution probe of the generated snippet and an end-to-end env→manifest check against the pinned legoESM.
 
 ### Status documentation sync
 

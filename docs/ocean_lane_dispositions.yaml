@@ -158,6 +158,9 @@ lanes:
     status: onboarded
     grids: [latlon, mpas]
     note: "graduated 3B-4 (2026-10-22); matrix lane via _MATRIX_CASES"
+  recipe:default_wright_implicit_cn_v1:
+    status: backlog
+    note: "recipe of matrix:inertia_gravity_wave_channel (backlog): default_wright_v1 + implicit_cn barotropic solver (upstream #2114)"
   recipe:default_wright_mpas_v1:
     status: backlog
     note: "Tier 2 (issue #10): global MPAS arms; findings in #12"
@@ -233,6 +236,9 @@ lanes:
   experiment_recipe:inertia_gravity_wave:
     status: declined
     reason: "recipe_map tag of matrix case 'inertia_gravity_wave': upstream global-case gate defect (climate-federation/legoESM#2114); the channel variant is the verified lane"
+  experiment_recipe:inertia_gravity_wave_channel:
+    status: backlog
+    note: "recipe_map tag of matrix case 'inertia_gravity_wave_channel' (default_wright_implicit_cn_v1): the verified IGW f-plane channel lane — mirrors matrix:inertia_gravity_wave_channel"
   experiment_recipe:isomip_plus:
     status: onboarded
     note: "recipe_map tag of matrix case 'isomip_plus': wired 2026-10-23 (issue #10 Tier 1), see matrix:isomip_plus"
@@ -423,8 +429,11 @@ lanes:
     status: upstream_only
     note: "init via ocean/held_larichev; Tier 1 wiring flips to onboarded"
   template:ocean/inertia_gravity_wave:
+    status: backlog
+    note: "the verified f-plane channel lane (upstream #2114 retargeted this stem, run_tested); graduation candidate — onboarding deferred with matrix:inertia_gravity_wave_channel"
+  template:ocean/inertia_gravity_wave_global:
     status: declined
-    reason: "upstream gate defect (climate-federation/legoESM#2114); runners 2d/ counterpart stays drift-gated, excluded from onboarding"
+    reason: "global case: no wave-speed gate constructible on the sphere (upstream #2114, init_only); the runners 2d/inertia_gravity_wave counterpart tracks this template via the drift gate (UPSTREAM_COUNTERPARTS)"
   template:ocean/lock_exchange:
     status: graduated
     note: "canonical ocean/lock_exchange"

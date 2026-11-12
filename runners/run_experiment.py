@@ -81,6 +81,9 @@ _UPSTREAM_TEMPLATE_MODES = {
     # barotropic (2d-style) lanes
     "ocean/barotropic_wave": "barotropic_ocean",
     "ocean/inertia_gravity_wave": "barotropic_ocean",
+    # global IGW case (upstream #2114 split it out of the channel stem;
+    # init_only upstream — no wave-speed gate is constructible on the sphere)
+    "ocean/inertia_gravity_wave_global": "barotropic_ocean",
     "ocean/stommel_gyre_tracer": "barotropic_ocean",
     "ocean/global_barotropic_wind": "barotropic_ocean",
     # 3d lanes
